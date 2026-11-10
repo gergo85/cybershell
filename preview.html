@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CyberHub előnézet</title>
+<style>
+  :root { --l: 86px; --r: 86px; --t: 10px; --b: 10px; }
+  html, body { margin: 0; height: 100%; background: #111; overflow: hidden; }
+  #stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; background: #000; }
+  iframe { position: absolute; border: 0; display: block; }
+  #left { left: 0; top: 0; width: var(--l); height: 1080px; }
+  #right { left: calc(1920px - var(--r)); top: 0; width: var(--r); height: 1080px; }
+  #top { left: var(--l); top: 0; width: calc(1920px - var(--l) - var(--r)); height: var(--t); }
+  #bottom { left: var(--l); top: calc(1080px - var(--b)); width: calc(1920px - var(--l) - var(--r)); height: var(--b); }
+  #work {
+    position: absolute; left: var(--l); top: var(--t); width: calc(1920px - var(--l) - var(--r)); height: calc(1080px - var(--t) - var(--b));
+    background: #1e1e1e; font: 13px "Segoe UI", sans-serif; color: #c8c8d0; display: flex; flex-direction: column;
+  }
+  .bar { height: 32px; display: flex; align-items: center; padding: 0 12px; background: #2a2a2a; color: #ddd; gap: 10px; }
+  .bar span:last-child { margin-left: auto; letter-spacing: 14px; color: #999; }
+  .code { padding: 18px 24px; font: 13px/1.8 Consolas, monospace; color: #9cdcfe; white-space: pre; }
+  .code i { color: #6a9955; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="work">
+    <div class="bar"><span>●</span><span>Egy program teljes méretben – CyberHub előnézet</span><span>–□×</span></div>
+    <div class="code"><i>/* a programok ide, középre nyílnak */</i></div>
+  </div>
+  <iframe id="left" src="ui/hub.html?part=left&l=86&t=10&r=86&b=10"></iframe>
+  <iframe id="right" src="ui/hub.html?part=right&l=86&t=10&r=86&b=10"></iframe>
+  <iframe id="top" src="ui/hub.html?part=top&l=86&t=10&r=86&b=10"></iframe>
+  <iframe id="bottom" src="ui/hub.html?part=bottom&l=86&t=10&r=86&b=10"></iframe>
+</div>
+<script>
+  // ?z=3&x=1700&y=0 – nagyítás egy részletre (ellenőrzéshez)
+  const p = new URLSearchParams(location.search);
+  const fit = () => {
+    const stage = document.getElementById('stage');
+    if (p.get('z')) {
+      stage.style.transform = `scale(${p.get('z')}) translate(${-(p.get('x') || 0)}px, ${-(p.get('y') || 0)}px)`;
+      return;
+    }
+    const s = Math.min(innerWidth / 1920, innerHeight / 1080);
+    stage.style.transform = `scale(${s})`;
+  };
+  addEventListener('resize', fit); fit();
+</script>
+</body>
+</html>
