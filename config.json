@@ -1,26 +1,143 @@
 {
+  "language": "hu",
+  "startWithWindows": true,
   "hideTaskbar": true,
   "leftWidth": 86,
   "rightWidth": 86,
-  "frame": { "top": 10, "bottom": 10 },
-  "activity": { "minutes": 20, "autoStart": true, "sound": true },
+  "swapSides": false,
+  "frame": {
+    "top": 10,
+    "bottom": 10
+  },
+  "activity": {
+    "minutes": 20,
+    "autoStart": false,
+    "sound": true
+  },
   "claudeUsage": true,
-  "weather": { "enabled": true, "city": "Budapest" },
-  "theme": { "main": "#f3e600", "alt": "#00e1ff", "hot": "#ff2a6d", "bg": "#06070b" },
+  "weather": {
+    "enabled": true,
+    "city": "Budapest"
+  },
+  "sections": {
+    "claude": true,
+    "activity": true,
+    "clock": true,
+    "date": true,
+    "order": [
+      "claude",
+      "activity",
+      "clock",
+      "date"
+    ]
+  },
+  "theme": {
+    "main": "#f3e600",
+    "alt": "#00e1ff",
+    "hot": "#ff2a6d",
+    "bg": "#06070b"
+  },
+  "wallpaper": "C:\\Users\\szg00\\OneDrive\\Dokumentumok\\GitHub\\cyberhub\\wallpapers\\02-tech-plates.jpg",
   "apps": [
-    { "name": "Firefox", "path": "C:\\Program Files\\Mozilla Firefox\\firefox.exe", "icon": "globe", "color": "#ff7139" },
-    { "name": "Chrome", "path": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe", "icon": "browser", "color": "#ea4335" },
-    { "name": "Total Cmd", "path": "C:\\Program Files\\Total Commander\\TOTALCMD64.EXE", "icon": "panels", "color": "#5b8def" },
-    { "name": "Claude", "path": "shell:AppsFolder\\Claude_pzs8sxrjxfjjc!Claude", "match": ["claude.exe"], "icon": "spark", "color": "#d97757" },
-    { "name": "VS Code", "path": "C:\\Program Files\\Microsoft VS Code\\Code.exe", "icon": "code", "color": "#22a6f2" },
-    { "name": "Word", "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\WINWORD.EXE", "icon": "doc", "color": "#2b7cd3" },
-    { "name": "Excel", "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\EXCEL.EXE", "icon": "sheet", "color": "#21a366" },
-    { "name": "Lightroom", "path": "C:\\Program Files\\Adobe\\Adobe Lightroom Classic\\Lightroom.exe", "icon": "photo", "color": "#6fc3ff" },
-    { "name": "Photoshop", "path": "C:\\Program Files\\Adobe\\Adobe Photoshop 2026\\Photoshop.exe", "icon": "design", "color": "#2f80ff" },
-    { "name": "Topaz AI", "path": "C:\\Program Files\\Topaz Labs LLC\\Topaz Photo AI\\Topaz Photo AI.exe", "icon": "enhance", "color": "#8b6cff" },
-    { "name": "ColorCop", "path": "C:\\Program Files (x86)\\ColorCop\\ColorCop.exe", "icon": "picker", "maximize": false, "color": "#ff4fa3" },
-    { "name": "ArtCraft", "path": "%LOCALAPPDATA%\\Programs\\ArtCraft\\Launcher\\artcraft-launcher.exe", "match": ["artcraft-launcher.exe", "artcraft.exe"], "icon": "rocket", "color": "#b26bff" },
-    { "name": "Spotify", "path": "shell:AppsFolder\\SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify", "match": ["spotify.exe"], "icon": "music", "color": "#1ed760" },
-    { "name": "Cyberpunk", "path": "steam://rungameid/1091500", "match": ["cyberpunk2077.exe"], "icon": "game", "maximize": false, "color": "#ff3b5c", "place": "right" }
+    {
+      "name": "Firefox",
+      "path": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+      "icon": "globe",
+      "color": "#ff7139"
+    },
+    {
+      "name": "Chrome",
+      "path": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+      "icon": "browser",
+      "color": "#ea4335"
+    },
+    {
+      "name": "Total Cmd",
+      "path": "C:\\Program Files\\Total Commander\\TOTALCMD64.EXE",
+      "icon": "panels",
+      "color": "#5b8def"
+    },
+    {
+      "name": "Claude",
+      "path": "shell:AppsFolder\\Claude_pzs8sxrjxfjjc!Claude",
+      "icon": "spark",
+      "match": [
+        "claude.exe"
+      ],
+      "color": "#d97757"
+    },
+    {
+      "name": "VS Code",
+      "path": "C:\\Program Files\\Microsoft VS Code\\Code.exe",
+      "icon": "code",
+      "color": "#22a6f2"
+    },
+    {
+      "name": "Word",
+      "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\WINWORD.EXE",
+      "icon": "doc",
+      "color": "#2b7cd3"
+    },
+    {
+      "name": "Excel",
+      "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\EXCEL.EXE",
+      "icon": "sheet",
+      "color": "#21a366"
+    },
+    {
+      "name": "Lightroom",
+      "path": "C:\\Program Files\\Adobe\\Adobe Lightroom Classic\\Lightroom.exe",
+      "icon": "photo",
+      "color": "#6fc3ff"
+    },
+    {
+      "name": "Photoshop",
+      "path": "C:\\Program Files\\Adobe\\Adobe Photoshop 2026\\Photoshop.exe",
+      "icon": "design",
+      "color": "#2f80ff"
+    },
+    {
+      "name": "Topaz AI",
+      "path": "C:\\Program Files\\Topaz Labs LLC\\Topaz Photo AI\\Topaz Photo AI.exe",
+      "icon": "enhance",
+      "color": "#8b6cff"
+    },
+    {
+      "name": "ColorCop",
+      "path": "C:\\Program Files (x86)\\ColorCop\\ColorCop.exe",
+      "icon": "picker",
+      "maximize": false,
+      "color": "#ff4fa3"
+    },
+    {
+      "name": "ArtCraft",
+      "path": "%LOCALAPPDATA%\\Programs\\ArtCraft\\Launcher\\artcraft-launcher.exe",
+      "icon": "rocket",
+      "match": [
+        "artcraft-launcher.exe",
+        "artcraft.exe"
+      ],
+      "color": "#b26bff"
+    },
+    {
+      "name": "Spotify",
+      "path": "shell:AppsFolder\\SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify",
+      "icon": "music",
+      "match": [
+        "spotify.exe"
+      ],
+      "color": "#1ed760"
+    },
+    {
+      "name": "Cyberpunk",
+      "path": "steam://rungameid/1091500",
+      "icon": "game",
+      "match": [
+        "cyberpunk2077.exe"
+      ],
+      "maximize": false,
+      "color": "#ff3b5c",
+      "place": "right"
+    }
   ]
 }

@@ -3,6 +3,8 @@
 mod appbar;
 mod autostart;
 mod config;
+mod peek;
+mod sys;
 mod usage;
 mod wintrack;
 
@@ -10,7 +12,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::mpsc::Sender;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -31,10 +33,11 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{RegisterHotKey, UnregisterHotK
 use windows::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass, ABN_FULLSCREENAPP, ABN_POSCHANGED};
 use windows::Win32::UI::WindowsAndMessaging::{
     FindWindowW, GetForegroundWindow, PostMessageW, RegisterWindowMessageW, SetWindowLongPtrW, SetWindowPos,
-    ShowWindow, SystemParametersInfoW, MB_ICONEXCLAMATION,
+    ShowWindow, SystemParametersInfoW, MB_ICONEXCLAMATION, SW_HIDE, WM_CLOSE,
     GWL_EXSTYLE, GWL_STYLE, HWND_BOTTOM, HWND_NOTOPMOST, HWND_TOPMOST, SPI_GETWORKAREA,
     SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_FRAMECHANGED, SW_SHOWNOACTIVATE, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
-    WM_DISPLAYCHANGE, WM_HOTKEY, WS_CLIPCHILDREN, WS_CLIPSIBLINGS, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
+    WM_DISPLAYCHANGE, WM_ENDSESSION, WM_HOTKEY, WS_CLIPCHILDREN, WS_CLIPSIBLINGS, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
+    WS_POPUP,
 };
 use windows::core::w;
 use std::borrow::Cow;
@@ -52,6 +55,7 @@ const HOTKEY_RELOAD: i32 = 2;
 /// A sávok sorrendje: a két teljes magasságú oldalpanel, aztán a felső és alsó keret.
 const EDGES: [Edge; 4] = [Edge::Left, Edge::Right, Edge::Top, Edge::Bottom];
 const APP_NAME: &str = "CyberHub";
+const WEBSITE_URL: &str = "https://szabogergo.hu/";
 
 #[derive(Debug, Clone)]
 enum UserEvent {
@@ -67,6 +71,73 @@ enum UserEvent {
     ClaudeWeb(String),
     /// A claude.ai ablakban betöltődött egy oldal.
     ClaudeLoaded(String),
+    /// A teljes képernyős beállítások üzenete.
+    SettingsIpc(String),
+    /// Az ablakelőnézet üzenete.
+    PeekIpc(String),
+}
+
+/// A teljes képernyős beállítások ablaka.
+struct SettingsWin {
+    window: Window,
+    webview: WebView,
+    hwnd: HWND,
+    visible: bool,
+}
+
+/// Az ablakelőnézet: ha egy programnak több ablaka van, az ikonja mellett
+/// egymás mellett mutatja az ablakok élő kisképét.
+struct PeekWin {
+    window: Window,
+    webview: WebView,
+    hwnd: HWND,
+    visible: bool,
+    /// A bejegyzett élő kisképek: (DWM-azonosító, forrásablak).
+    thumbs: Vec<(isize, HWND)>,
+    /// A felület visszajelzésére váró kisképek: (forrásablak, cél, forrásterület).
+    pending: Vec<(HWND, RECT, RECT)>,
+    /// A látható ablakok (csak ezekre fogadunk el parancsot).
+    hwnds: Vec<isize>,
+    /// Minden új elrendezés új sorszámot kap; a felület ezzel jelez vissza.
+    seq: u64,
+    /// Melyik app ablakai látszanak (újrarendezéshez, ha egy ablak bezárul).
+    target: serde_json::Value,
+    hovered: bool,
+    hide_at: Option<Instant>,
+    refresh_at: Option<Instant>,
+}
+
+/// Fel vannak-e cserélve a panelek (az ikonsáv jobbra kerül). A húzáskezelő is olvassa.
+static ICONS_RIGHT: AtomicBool = AtomicBool::new(false);
+
+/// Melyik felület töltődik be az adott szélre: az ikonsáv ("left") vagy az információs panel ("right").
+fn part_for(edge: Edge, swap: bool) -> &'static str {
+    match (edge, swap) {
+        (Edge::Left, false) | (Edge::Right, true) => "left",
+        (Edge::Right, false) | (Edge::Left, true) => "right",
+        (Edge::Top, _) => "top",
+        (Edge::Bottom, _) => "bottom",
+    }
+}
+
+fn bar_url(part: &str, edge: Edge, cfg: &Config) -> String {
+    format!(
+        "cyberhub://localhost/hub.html?part={part}&side={}&l={}&t={}&r={}&b={}&lang={}",
+        edge.name(),
+        cfg.left_width,
+        cfg.frame.top,
+        cfg.right_width,
+        cfg.frame.bottom,
+        cfg.language
+    )
+}
+
+fn settings_url(cfg: &Config) -> String {
+    format!("cyberhub://localhost/hub.html?part=settings&lang={}", cfg.language)
+}
+
+fn peek_url(cfg: &Config) -> String {
+    format!("cyberhub://localhost/hub.html?part=peek&lang={}", cfg.language)
 }
 
 /// A claude.ai ablak üresjárati oldala: könnyű, de a claude.ai-hoz tartozik,
@@ -105,6 +176,29 @@ struct ClaudeWeb {
     next_fetch: Instant,
     /// A legutóbbi sikeres lekérés ideje és eredménye.
     ok: Option<(Instant, String)>,
+    /// A belépés sütijeit ebben a futásban már tartóssá tettük-e.
+    persisted: bool,
+}
+
+/// A claude.ai munkamenet-sütijeit (amelyek a program bezárásakor elvesznének)
+/// 30 napig érvényesre állítja, hogy újraindítás után se kelljen újra belépni.
+/// A sütik a CyberHub saját böngészőprofiljában maradnak; értéküket nem írjuk ki.
+fn persist_claude_cookies(webview: &WebView) -> usize {
+    let Ok(cookies) = webview.cookies_for_url("https://claude.ai") else {
+        return 0;
+    };
+    let mut n = 0;
+    for mut c in cookies {
+        let session = matches!(c.expires(), None | Some(wry::cookie::Expiration::Session));
+        // a Cloudflare rövid életű sütijeit nem bántjuk
+        if session && !c.name().starts_with("__cf") && !c.name().starts_with("cf_") {
+            c.set_max_age(wry::cookie::time::Duration::days(30));
+            if webview.set_cookie(&c).is_ok() {
+                n += 1;
+            }
+        }
+    }
+    n
 }
 
 static PROXY: OnceLock<Mutex<EventLoopProxy<UserEvent>>> = OnceLock::new();
@@ -204,7 +298,7 @@ fn serve(ui_dir: &Path, req: &Request<Vec<u8>>) -> Response<Cow<'static, [u8]>> 
     let file = if let Some(abs) = path.strip_prefix("/__file/") {
         let p = PathBuf::from(abs);
         let ext = p.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
-        if !["png", "jpg", "jpeg", "svg", "ico", "webp", "gif"].contains(&ext.as_str()) {
+        if !["png", "jpg", "jpeg", "svg", "ico", "webp", "gif", "bmp"].contains(&ext.as_str()) {
             return not_found();
         }
         p
@@ -226,6 +320,7 @@ fn serve(ui_dir: &Path, req: &Request<Vec<u8>>) -> Response<Cow<'static, [u8]>> 
         Some("ico") => "image/x-icon",
         Some("webp") => "image/webp",
         Some("gif") => "image/gif",
+        Some("bmp") => "image/bmp",
         Some("woff2") => "font/woff2",
         Some("ttf") => "font/ttf",
         _ => "application/octet-stream",
@@ -275,11 +370,21 @@ unsafe extern "system" fn subclass_proc(
     if msg == WM_DISPLAYCHANGE {
         send(UserEvent::Reposition);
     }
+    // Kijelentkezés, leállítás: a Windows nem várja meg a szokásos kilépést, ezért
+    // itt azonnal visszaadjuk a tálcát és felszabadítjuk a képernyő szélét.
+    if msg == WM_ENDSESSION && wp.0 != 0 {
+        emergency_cleanup();
+        let _ = std::fs::remove_file(state_path());
+        log("munkamenet vége: visszaállítás kész");
+        return LRESULT(0);
+    }
     unsafe { DefSubclassProc(hwnd, msg, wp, lp) }
 }
 
 struct Bar {
     edge: Edge,
+    /// A betöltött felület: "left" (ikonsáv), "right" (információs panel), "top", "bottom".
+    part: &'static str,
     window: Window,
     webview: WebView,
     hwnd: HWND,
@@ -322,6 +427,21 @@ struct Hub {
     claude: Option<ClaudeWeb>,
     /// A háttérszál (állapotsor, közvetlen lekérés) legutóbbi eredménye.
     thread_usage: Option<serde_json::Value>,
+    settings: Option<SettingsWin>,
+    /// Az appok telepítettsége (a config sorrendjében), indításkor és újratöltéskor ellenőrizve.
+    available: Vec<bool>,
+    /// A program indulásának ideje: a felület ebből tudja, hogy új munkamenet kezdődött-e.
+    session: u64,
+    /// Az előző processzoridő-mérés és a következő terhelésküldés ideje (a beállításokhoz).
+    cpu_prev: Option<(u64, u64)>,
+    next_sys: Instant,
+    /// Bejelentkezéskor indítandó programok (sorszám) és a következő indítás ideje.
+    launch_queue: std::collections::VecDeque<usize>,
+    next_launch: Instant,
+    peek: Option<PeekWin>,
+    /// Az ablakok első észlelésének sorrendje (az előnézet ebben a sorrendben mutatja őket).
+    seen: HashMap<isize, u64>,
+    seen_seq: u64,
 }
 
 /// Ezek a rendszerfolyamatok ablakai ne jelenjenek meg a futó programok között.
@@ -396,6 +516,30 @@ impl Hub {
 
     fn bar(&self, edge: Edge) -> Option<&Bar> {
         self.bars.iter().find(|b| b.edge == edge)
+    }
+
+    /// A felület nyelvének megfelelő szöveg.
+    fn tr(&self, hu: &str, en: &str) -> String {
+        if self.cfg.language == "en" { en.to_string() } else { hu.to_string() }
+    }
+
+    /// Az ikonsáv széle (felcserélt paneleknél jobbra van).
+    fn icons_edge(&self) -> Edge {
+        if self.cfg.swap_sides { Edge::Right } else { Edge::Left }
+    }
+
+    /// Az információs panel széle.
+    fn info_edge(&self) -> Edge {
+        if self.cfg.swap_sides { Edge::Left } else { Edge::Right }
+    }
+
+    fn check_available(&mut self) {
+        self.available = self.cfg.apps.iter().map(sys::app_available).collect();
+        for (a, ok) in self.cfg.apps.iter().zip(&self.available) {
+            if !ok {
+                log(format!("nincs telepítve, elrejtve: {} ({})", a.name, a.path));
+            }
+        }
     }
 
     /// Kiszámolja és lefoglalja a négy sáv helyét. `force` nélkül csak akkor nyúl
@@ -506,6 +650,9 @@ impl Hub {
 
     fn set_fullscreen(&mut self, on: bool) {
         self.fullscreen = on;
+        if on {
+            self.peek_hide();
+        }
         for b in &self.bars {
             unsafe {
                 if on {
@@ -533,8 +680,11 @@ impl Hub {
         }
     }
 
-    /// Beépített ikon neve, vagy képfájl esetén a betöltési címe.
-    fn icon_for(&self, icon: &str) -> (String, String) {
+    /// Beépített ikon neve, vagy képfájl esetén a betöltési címe. Az "exe" a program saját ikonja.
+    fn icon_for(&self, icon: &str, app_path: &str) -> (String, String) {
+        if icon == "exe" {
+            return (String::new(), format!("/__icon/{}", percent_encode(&app_path.replace('\\', "/"))));
+        }
         let looks_like_file = icon.contains('.') || icon.contains('/') || icon.contains('\\');
         if !looks_like_file {
             return (icon.to_string(), String::new());
@@ -548,27 +698,31 @@ impl Hub {
         }
     }
 
+    /// Az appok a felületnek: sorszám (a config szerint), név, ikon, szín.
+    fn app_json(&self, i: usize, a: &config::AppEntry) -> serde_json::Value {
+        let (icon, img) = self.icon_for(&a.icon, &a.resolved_path());
+        json!({
+            "id": i,
+            "name": a.name,
+            "icon": icon,
+            "img": img,
+            "color": a.color,
+            "hint": format!("{} {}", a.resolved_path(), a.match_exe.join(" ")).to_lowercase(),
+        })
+    }
+
     fn send_init(&mut self, idx: usize) {
         let edge = self.bars[idx].edge;
+        let part = self.bars[idx].part;
         let c = &self.cfg;
-        // A bal sáv a "left" helyű appokat kapja, a jobb panel a "right" helyűeket
-        // (ezek az Indítás gomb alá kerülnek). A sorszám mindig a config szerinti marad.
-        let apps: Vec<serde_json::Value> = if edge == Edge::Left || edge == Edge::Right {
+        // Az ikonsáv a "left" helyű appokat kapja, az információs panel a "right" helyűeket
+        // (ezek az Indítás gomb alá kerülnek). A nem telepített appok kimaradnak.
+        let apps: Vec<serde_json::Value> = if part == "left" || part == "right" {
             c.apps
                 .iter()
                 .enumerate()
-                .filter(|(_, a)| (a.place.eq_ignore_ascii_case("right")) == (edge == Edge::Right))
-                .map(|(i, a)| {
-                    let (icon, img) = self.icon_for(&a.icon);
-                    json!({
-                        "id": i,
-                        "name": a.name,
-                        "icon": icon,
-                        "img": img,
-                        "color": a.color,
-                        "hint": format!("{} {}", a.resolved_path(), a.match_exe.join(" ")).to_lowercase(),
-                    })
-                })
+                .filter(|(i, a)| a.on_right() == (part == "right") && self.available.get(*i).copied().unwrap_or(true))
+                .map(|(i, a)| self.app_json(i, a))
                 .collect()
         } else {
             Vec::new()
@@ -592,17 +746,19 @@ impl Hub {
             "apps": apps,
             "activity": c.activity,
             "claudeUsage": c.claude_usage,
+            "sections": c.sections,
+            "session": self.session,
             "autostart": autostart::is_enabled(),
             "weather": c.weather,
         });
         self.eval(edge, &payload);
-        if edge == Edge::Left {
+        if part == "left" {
             self.last_state.clear();
             self.poll();
         }
-        if edge == Edge::Right {
+        if part == "right" {
             if let Some(u) = &self.last_usage {
-                if let Some(b) = self.bar(Edge::Right) {
+                if let Some(b) = self.bar(edge) {
                     let _ = b.webview.evaluate_script(&format!("window.hub&&window.hub.receive({u})"));
                 }
             }
@@ -612,11 +768,15 @@ impl Hub {
     /// A háttérszál eredménye (állapotsor vagy közvetlen lekérés).
     fn on_usage(&mut self, payload: String) {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&payload) {
-            log(format!(
-                "Claude-használat (háttér): {} {}",
-                v["status"].as_str().unwrap_or("?"),
-                v["message"].as_str().unwrap_or("")
-            ));
+            // csak állapotváltozáskor naplózunk, hogy ne teljen meg a napló
+            let changed = self.thread_usage.as_ref().map(|t| t["status"] != v["status"] || t["message"] != v["message"]).unwrap_or(true);
+            if changed {
+                log(format!(
+                    "Claude-használat (háttér): {} {}",
+                    v["status"].as_str().unwrap_or("?"),
+                    v["message"].as_str().unwrap_or("")
+                ));
+            }
             self.thread_usage = Some(v);
         }
         self.publish_usage();
@@ -639,7 +799,7 @@ impl Hub {
             json!({ "type": "usage", "status": "login", "plan": "" }).to_string()
         };
         if self.last_usage.as_deref() != Some(payload.as_str()) {
-            if let Some(b) = self.bar(Edge::Right) {
+            if let Some(b) = self.bar(self.info_edge()) {
                 let _ = b.webview.evaluate_script(&format!("window.hub&&window.hub.receive({payload})"));
             }
             self.last_usage = Some(payload);
@@ -701,6 +861,11 @@ impl Hub {
                 if let Some(c) = self.claude.as_mut() {
                     if payload["status"] == "ok" {
                         c.ok = Some((Instant::now(), payload.to_string()));
+                        if !c.persisted {
+                            c.persisted = true;
+                            let n = persist_claude_cookies(&c.webview);
+                            log(format!("claude.ai belépés megjegyezve ({n} süti)"));
+                        }
                     }
                 }
                 if self.claude.as_ref().is_some_and(|c| c.visible) {
@@ -720,7 +885,7 @@ impl Hub {
     /// Az aktivitásjelző lejárt (vagy nyugtázták): a többi sáv is jelezzen.
     fn on_alert(&mut self, on: bool) {
         log(format!("aktivitás-figyelmeztetés: {}", if on { "be" } else { "ki" }));
-        for e in [Edge::Left, Edge::Top, Edge::Bottom] {
+        for e in [self.icons_edge(), Edge::Top, Edge::Bottom] {
             self.eval(e, &json!({ "type": "alert", "on": on }));
         }
         if on && self.cfg.activity.sound {
@@ -732,18 +897,685 @@ impl Hub {
 
     /// Rövid értesítés a jobb panel alján (a menü fölött).
     fn toast(&self, text: &str) {
-        self.eval(Edge::Right, &json!({ "type": "toast", "text": text }));
+        self.eval(self.info_edge(), &json!({ "type": "toast", "text": text }));
+        self.settings_eval(&json!({ "type": "toast", "text": text }));
     }
 
-    fn set_autostart(&self, on: bool) {
+    fn set_autostart(&mut self, on: bool) {
         match autostart::set(on) {
-            Ok(()) => log(format!("indítás a Windowszal: {}", if on { "be" } else { "ki" })),
+            Ok(()) => {
+                log(format!("indítás a Windowszal: {}", if on { "be" } else { "ki" }));
+                // a konfigurációs fájlban is látszódjon
+                self.cfg.start_with_windows = Some(on);
+                self.save_config();
+            }
             Err(e) => {
                 log(format!("indítás a Windowszal – hiba: {e}"));
                 self.toast(&e);
             }
         }
-        self.eval(Edge::Right, &json!({ "type": "autostart", "on": autostart::is_enabled() }));
+        self.eval(self.info_edge(), &json!({ "type": "autostart", "on": autostart::is_enabled() }));
+        self.send_settings();
+    }
+
+    // ---- Teljes képernyős beállítások ----
+
+    fn settings_eval(&self, payload: &serde_json::Value) {
+        if let Some(s) = &self.settings {
+            let _ = s.webview.evaluate_script(&format!("window.hub&&window.hub.receive({payload})"));
+        }
+    }
+
+    /// A beállításokhoz szükséges összes adat: kapcsolók, appok (telepítettséggel), futó programok.
+    fn send_settings(&mut self) {
+        if self.settings.is_none() {
+            return;
+        }
+        let apps: Vec<serde_json::Value> = self
+            .cfg
+            .apps
+            .iter()
+            .enumerate()
+            .map(|(i, a)| {
+                let mut j = self.app_json(i, a);
+                j["path"] = json!(a.path);
+                j["args"] = json!(a.args);
+                j["rawIcon"] = json!(a.icon);
+                j["place"] = json!(if a.on_right() { "right" } else { "left" });
+                j["match"] = json!(a.match_exe);
+                j["available"] = json!(self.available.get(i).copied().unwrap_or(true));
+                j["canExeIcon"] = json!(a.resolved_path().to_lowercase().ends_with(".exe"));
+                j["autostart"] = json!(a.autostart);
+                j
+            })
+            .collect();
+        // futó, de nem kitűzött programok – ezekből egy kattintással lehet ikont csinálni
+        let own = self.own_hwnds();
+        let wins = self.tracker.snapshot(&own);
+        let mut running: Vec<serde_json::Value> = Vec::new();
+        for w in &wins {
+            if w.path.is_empty() || self.matchers.iter().any(|m| m.matches(w)) || extra_key(w).is_none() || w.exe == "applicationframehost.exe" {
+                continue;
+            }
+            if running.iter().any(|r| r["path"] == json!(w.path)) {
+                continue;
+            }
+            let name = self.extra_names.entry(w.path.to_lowercase()).or_insert_with(|| wintrack::display_name(&w.path)).clone();
+            running.push(json!({
+                "name": name,
+                "path": w.path,
+                "img": format!("/__icon/{}", percent_encode(&w.path.replace('\\', "/"))),
+            }));
+        }
+        let current_wallpaper = match sys::current_wallpaper() {
+            cur if cur.is_empty() => self.cfg.wallpaper.clone(),
+            cur => cur,
+        };
+        let payload = json!({
+            "type": "settings",
+            "autostart": autostart::is_enabled(),
+            "swap": self.cfg.swap_sides,
+            "sections": self.cfg.sections,
+            "language": self.cfg.language,
+            "apps": apps,
+            "running": running,
+            "theme": self.cfg.theme,
+            "wallpapers": self.wallpaper_list(),
+            "wallpaper": current_wallpaper,
+        });
+        self.settings_eval(&payload);
+    }
+
+    fn settings_show(&mut self) {
+        self.peek_hide();
+        // csak a középső munkaterületet takarja, az oldalsó panelek és a keretek látszanak
+        let mon = appbar::work_area();
+        if let Some(s) = self.settings.as_mut() {
+            unsafe {
+                let _ = SetWindowPos(
+                    s.hwnd,
+                    Some(HWND_TOPMOST),
+                    mon.left,
+                    mon.top,
+                    mon.right - mon.left,
+                    mon.bottom - mon.top,
+                    windows::Win32::UI::WindowsAndMessaging::SWP_SHOWWINDOW,
+                );
+                let _ = windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow(s.hwnd);
+            }
+            let was_visible = s.visible;
+            s.visible = true;
+            if !was_visible {
+                log("beállítások megnyitva");
+            }
+        }
+        self.send_settings();
+        // a felület beúszó animációval jelenik meg
+        self.settings_eval(&json!({ "type": "show" }));
+        self.eval(self.info_edge(), &json!({ "type": "settings-open", "on": true }));
+    }
+
+    /// Processzor- és memóriaterhelés a beállítások kijelzőjének.
+    fn send_sys(&mut self) {
+        let now = sys::cpu_times();
+        let cpu = match (self.cpu_prev, now) {
+            (Some((pi, pt)), Some((ni, nt))) if nt > pt => {
+                let total = (nt - pt) as f64;
+                let idle = ni.saturating_sub(pi) as f64;
+                Some(((1.0 - idle / total) * 100.0).clamp(0.0, 100.0))
+            }
+            _ => None,
+        };
+        self.cpu_prev = now;
+        let (used, total) = sys::memory().unwrap_or((0, 0));
+        let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(0);
+        self.settings_eval(&json!({
+            "type": "sys",
+            "cpu": cpu.map(|c| (c * 10.0).round() / 10.0),
+            "memUsed": used,
+            "memTotal": total,
+            "cores": cores,
+        }));
+    }
+
+    /// A beállítások mindig felül lévő ablaka eltakarná az onnan megnyitott
+    /// programot (Intéző, böngésző, jegyzettömb), ezért ilyenkor hátrébb engedjük.
+    /// A következő megnyitáskor újra felülre kerül.
+    fn settings_lower(&self) {
+        if let Some(s) = &self.settings {
+            unsafe {
+                let _ = SetWindowPos(s.hwnd, Some(HWND_NOTOPMOST), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            }
+        }
+    }
+
+    fn settings_hide(&mut self) {
+        if let Some(s) = self.settings.as_mut() {
+            unsafe {
+                let _ = ShowWindow(s.hwnd, SW_HIDE);
+            }
+            s.visible = false;
+        }
+        self.eval(self.info_edge(), &json!({ "type": "settings-open", "on": false }));
+    }
+
+    fn save_config(&mut self) -> bool {
+        match config::save(&self.cfg_path, &self.cfg) {
+            Ok(()) => true,
+            Err(e) => {
+                log(&e);
+                self.toast(&e);
+                false
+            }
+        }
+    }
+
+    /// A felülettől kapott app-listából Config-bejegyzések (a meglévő, nem szerkeszthető
+    /// mezőket – pl. args, match – megtartjuk).
+    fn apps_from_settings(&self, list: &serde_json::Value) -> Vec<config::AppEntry> {
+        let mut out = Vec::new();
+        for item in list.as_array().into_iter().flatten() {
+            let mut a: config::AppEntry = item["id"]
+                .as_u64()
+                .and_then(|i| self.cfg.apps.get(i as usize).cloned())
+                .unwrap_or_default();
+            if let Some(s) = item["name"].as_str() {
+                a.name = s.trim().to_string();
+            }
+            if let Some(s) = item["path"].as_str() {
+                if a.path != s {
+                    a.path = s.to_string();
+                    a.match_exe.clear();
+                }
+            }
+            if let Some(s) = item["args"].as_str() {
+                a.args = s.to_string();
+            }
+            if let Some(s) = item["icon"].as_str() {
+                a.icon = s.to_string();
+            }
+            if let Some(s) = item["color"].as_str() {
+                a.color = s.to_string();
+            }
+            a.place = if item["place"] == "right" { "right".into() } else { String::new() };
+            a.autostart = item["autostart"].as_bool().unwrap_or(false);
+            if !a.name.is_empty() && !a.path.is_empty() {
+                out.push(a);
+            }
+        }
+        out
+    }
+
+    fn on_settings_ipc(&mut self, raw: &str) {
+        let Ok(msg) = serde_json::from_str::<serde_json::Value>(raw) else { return };
+        let kind = msg["type"].as_str().unwrap_or("");
+        if kind != "log" {
+            log(format!("beállítások: {kind} {}", msg["name"].as_str().unwrap_or("")));
+        }
+        match kind {
+            "ready" => {
+                self.send_settings();
+                // nyelvváltás után a már látható felület animáció nélkül jelenik meg újra
+                if self.settings.as_ref().is_some_and(|s| s.visible) {
+                    self.settings_eval(&json!({ "type": "show", "instant": true }));
+                }
+            }
+            // a felület a kiúszó animáció végén kéri az elrejtést
+            "close" => self.settings_hide(),
+            "language" => {
+                let lang = if msg["lang"] == "en" { "en" } else { "hu" };
+                if self.cfg.language != lang {
+                    self.cfg.language = lang.to_string();
+                    log(format!("nyelv: {lang}"));
+                    if self.save_config() {
+                        self.reload();
+                        if let Some(s) = &self.settings {
+                            let _ = s.webview.load_url(&settings_url(&self.cfg));
+                        }
+                    }
+                }
+            }
+            "cmd" => match msg["name"].as_str().unwrap_or("") {
+                "reload" => {
+                    self.settings_hide();
+                    self.reload();
+                }
+                "config" => {
+                    self.settings_lower();
+                    self.open_config();
+                }
+                "website" => {
+                    self.settings_lower();
+                    wintrack::shell_open(WEBSITE_URL, "", "", false);
+                }
+                "exit" => self.exit_requested = true,
+                "autostart" => self.set_autostart(msg["on"].as_bool().unwrap_or(false)),
+                _ => {}
+            },
+            "swap" => {
+                self.cfg.swap_sides = msg["on"].as_bool().unwrap_or(false);
+                if self.save_config() {
+                    self.reload();
+                }
+                self.send_settings();
+            }
+            "sections" => {
+                if let Ok(mut s) = serde_json::from_value::<config::Sections>(msg["sections"].clone()) {
+                    s.normalize();
+                    self.cfg.sections = s;
+                    if self.save_config() {
+                        self.eval(self.info_edge(), &json!({ "type": "sections", "sections": self.cfg.sections }));
+                    }
+                }
+            }
+            "save-apps" => {
+                let apps = self.apps_from_settings(&msg["apps"]);
+                log(format!("ikonok mentve: {} db", apps.len()));
+                self.cfg.apps = apps;
+                if self.save_config() {
+                    self.reload();
+                    let t = self.tr("Az ikonok elmentve.", "Icons saved.");
+                    self.toast(&t);
+                }
+                self.send_settings();
+            }
+            "browse" => {
+                let owner = self.settings.as_ref().map(|s| s.hwnd).unwrap_or_default();
+                if let Some(p) = sys::pick_program(owner) {
+                    let is_exe = p.path.to_lowercase().ends_with(".exe");
+                    self.settings_eval(&json!({
+                        "type": "picked",
+                        "app": {
+                            "name": p.name,
+                            "path": p.path,
+                            "args": p.args,
+                            "icon": if is_exe { "exe" } else { "" },
+                            "img": if is_exe { format!("/__icon/{}", percent_encode(&p.path.replace('\\', "/"))) } else { String::new() },
+                            "canExeIcon": is_exe,
+                        }
+                    }));
+                }
+            }
+            "wall-set" => {
+                let p = msg["path"].as_str().unwrap_or("").to_string();
+                self.apply_wallpaper(&p);
+            }
+            "wall-add" => {
+                let owner = self.settings.as_ref().map(|s| s.hwnd).unwrap_or_default();
+                if let Some(file) = sys::pick_image(owner) {
+                    match self.import_wallpaper(&file) {
+                        Ok(p) => self.apply_wallpaper(&p),
+                        Err(e) => {
+                            log(format!("háttérkép másolása sikertelen: {e}"));
+                            self.toast(&e);
+                        }
+                    }
+                }
+            }
+            "wall-folder" => {
+                let d = self.wallpaper_dir();
+                let _ = std::fs::create_dir_all(&d);
+                self.settings_lower();
+                wintrack::shell_open(&d.to_string_lossy(), "", "", false);
+            }
+            "log" => log(format!("[beállítások] {}", msg["text"].as_str().unwrap_or(""))),
+            _ => {}
+        }
+    }
+
+    // ---- Ablakelőnézet (több ablakos programoknál) ----
+
+    fn peek_eval(&self, payload: &serde_json::Value) {
+        if let Some(p) = &self.peek {
+            let _ = p.webview.evaluate_script(&format!("window.hub&&window.hub.receive({payload})"));
+        }
+    }
+
+    /// Az ikonsáv egy több ablakos program fölött időzik: elrendezzük a kisképeket,
+    /// és elküldjük a felületnek. Megjelenni akkor fog, amikor a felület kirajzolta.
+    fn peek_open(&mut self, msg: &serde_json::Value) {
+        if self.peek.is_none() {
+            return;
+        }
+        if self.fullscreen || self.settings.as_ref().is_some_and(|s| s.visible) {
+            self.peek_hide();
+            return;
+        }
+        let (mut mine, _) = self.target_windows(msg);
+        mine.sort_by_key(|w| self.seen.get(&(w.hwnd.0 as isize)).copied().unwrap_or(u64::MAX));
+        if mine.len() < 2 {
+            self.peek_hide();
+            return;
+        }
+        let Some(bar_rect) = self.bar(self.icons_edge()).map(|b| b.rect) else { return };
+        let icons_left = self.icons_edge() == Edge::Left;
+        let scale = self.scale.max(0.5);
+        let work = appbar::work_area();
+
+        // hány kártya fér el egymás mellett, illetve egymás alatt
+        let card_h = peek::TITLE_H + peek::THUMB_H;
+        let avail_w = (work.right - work.left) as f64 / scale - 24.0;
+        let avail_h = (work.bottom - work.top) as f64 / scale - 16.0;
+        let max_cols = (((avail_w - 2.0 * peek::PAD + peek::GAP) / (peek::CARD_W + peek::GAP)).floor() as usize).max(1);
+        let max_rows = (((avail_h - 2.0 * peek::PAD - peek::HEADER + peek::GAP) / (card_h + peek::GAP)).floor() as usize).max(1);
+        let cols = mine.len().min(max_cols);
+        mine.truncate(cols * max_rows);
+        let rows = mine.len().div_ceil(cols);
+        let w_css = 2.0 * peek::PAD + cols as f64 * peek::CARD_W + (cols - 1) as f64 * peek::GAP;
+        let h_css = 2.0 * peek::PAD + peek::HEADER + rows as f64 * card_h + (rows - 1) as f64 * peek::GAP;
+        let (w, h) = ((w_css * scale).round() as i32, (h_css * scale).round() as i32);
+
+        // az ikon magasságában, a munkaterületen belül
+        let icon_y = msg["y"].as_f64().unwrap_or(0.0);
+        let cy = bar_rect.top + (icon_y * scale).round() as i32;
+        let top = (cy - h / 2).clamp(work.top + 6, (work.bottom - h - 6).max(work.top));
+        let left = if icons_left { bar_rect.right } else { bar_rect.left - w };
+
+        let fg = self.last_fg;
+        let mut items = Vec::new();
+        let mut pending = Vec::new();
+        for (i, win) in mine.iter().enumerate() {
+            let (col, row) = (i % cols, i / cols);
+            let card = peek::Rectf {
+                x: peek::PAD + col as f64 * (peek::CARD_W + peek::GAP),
+                y: peek::PAD + peek::HEADER + row as f64 * (card_h + peek::GAP),
+                w: peek::CARD_W,
+                h: card_h,
+            };
+            let boxr = peek::Rectf {
+                x: card.x + peek::INSET,
+                y: card.y + peek::TITLE_H,
+                w: peek::CARD_W - 2.0 * peek::INSET,
+                h: peek::THUMB_H - peek::INSET,
+            };
+            // kis méretre tett ablakról a Windows nem ad élő képet: ott az ikon látszik
+            let src = if win.iconic { None } else { peek::visible_source(win.hwnd) };
+            let thumb = src.map(|s| peek::fit(boxr, &s));
+            if let (Some(s), Some(t)) = (src, thumb) {
+                pending.push((win.hwnd, t.to_phys(scale), s));
+            }
+            let icon = if win.path.is_empty() {
+                String::new()
+            } else {
+                format!("/__icon/{}", percent_encode(&win.path.replace('\\', "/")))
+            };
+            items.push(json!({
+                "hwnd": win.hwnd.0 as isize,
+                "title": if win.title_raw.trim().is_empty() { wintrack::display_name(&win.path) } else { win.title_raw.clone() },
+                "icon": icon,
+                "iconic": win.iconic,
+                "active": Some(win.hwnd) == fg && !win.iconic,
+                "card": card.json(),
+                "box": boxr.json(),
+                "thumb": thumb.map(|t| t.json()),
+            }));
+        }
+        let name = if let Some(id) = msg["id"].as_u64() {
+            self.cfg.apps.get(id as usize).map(|a| a.name.clone()).unwrap_or_default()
+        } else {
+            let key = msg["key"].as_str().unwrap_or("").to_string();
+            match self.extra_names.get(&key) {
+                Some(n) => n.clone(),
+                None => mine.first().map(|w| wintrack::display_name(&w.path)).unwrap_or_default(),
+            }
+        };
+        let hwnds: Vec<isize> = mine.iter().map(|w| w.hwnd.0 as isize).collect();
+        let mut target = json!({ "y": icon_y });
+        if !msg["id"].is_null() {
+            target["id"] = msg["id"].clone();
+        }
+        if !msg["key"].is_null() {
+            target["key"] = msg["key"].clone();
+        }
+
+        let Some(pk) = self.peek.as_mut() else { return };
+        for (id, _) in pk.thumbs.drain(..) {
+            peek::drop_thumb(id);
+        }
+        pk.seq += 1;
+        pk.pending = pending;
+        pk.hwnds = hwnds;
+        pk.target = target;
+        pk.hide_at = None;
+        pk.refresh_at = None;
+        let seq = pk.seq;
+        unsafe {
+            let _ = SetWindowPos(pk.hwnd, Some(HWND_TOPMOST), left, top, w, h, SWP_NOACTIVATE);
+        }
+        let payload = json!({
+            "type": "peek",
+            "seq": seq,
+            "name": name,
+            "count": items.len(),
+            "items": items,
+            "theme": self.cfg.theme,
+        });
+        self.peek_eval(&payload);
+    }
+
+    /// A felület kirajzolta az előnézetet: bejegyezzük a kisképeket és megjelenítjük.
+    fn peek_ready(&mut self, seq: u64) {
+        let Some(pk) = self.peek.as_mut() else { return };
+        if seq != pk.seq {
+            return;
+        }
+        for (src, rect, source) in pk.pending.drain(..) {
+            if let Some(id) = peek::show_thumb(pk.hwnd, src, rect, source) {
+                pk.thumbs.push((id, src));
+            }
+        }
+        if !pk.visible {
+            pk.visible = true;
+            unsafe {
+                let _ = ShowWindow(pk.hwnd, SW_SHOWNOACTIVATE);
+                let _ = SetWindowPos(pk.hwnd, Some(HWND_TOPMOST), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            }
+            self.eval(self.icons_edge(), &json!({ "type": "peek-state", "open": true }));
+        }
+    }
+
+    fn peek_hide(&mut self) {
+        let Some(pk) = self.peek.as_mut() else { return };
+        pk.seq += 1;
+        pk.pending.clear();
+        pk.hwnds.clear();
+        pk.hide_at = None;
+        pk.refresh_at = None;
+        pk.hovered = false;
+        for (id, _) in pk.thumbs.drain(..) {
+            peek::drop_thumb(id);
+        }
+        let was_visible = pk.visible;
+        pk.visible = false;
+        if was_visible {
+            unsafe {
+                let _ = ShowWindow(pk.hwnd, SW_HIDE);
+            }
+            self.eval(self.icons_edge(), &json!({ "type": "peek-state", "open": false }));
+        }
+        self.peek_eval(&json!({ "type": "peek-clear" }));
+    }
+
+    /// Az egér elhagyta az ikont vagy az előnézetet: kis késleltetéssel bezárjuk
+    /// (közben átérhet az ikonról az előnézetre és vissza).
+    fn peek_leave(&mut self, from_icon: bool) {
+        let Some(pk) = self.peek.as_mut() else { return };
+        if from_icon && pk.hovered {
+            return;
+        }
+        if !from_icon {
+            pk.hovered = false;
+        }
+        if pk.visible {
+            pk.hide_at = Some(Instant::now() + Duration::from_millis(if from_icon { 320 } else { 260 }));
+        } else {
+            // még meg sem jelent: a folyamatban lévő elrendezést eldobjuk
+            pk.seq += 1;
+            pk.pending.clear();
+        }
+    }
+
+    fn on_peek_ipc(&mut self, raw: &str) {
+        let Ok(msg) = serde_json::from_str::<serde_json::Value>(raw) else { return };
+        let hwnd = msg["hwnd"].as_i64().map(|h| h as isize);
+        let known = |pk: &PeekWin, h: Option<isize>| {
+            h.filter(|h| pk.hwnds.contains(h)).map(|h| HWND(h as *mut core::ffi::c_void))
+        };
+        match msg["type"].as_str().unwrap_or("") {
+            "peek-ready" => self.peek_ready(msg["seq"].as_u64().unwrap_or(0)),
+            "peek-enter" => {
+                if let Some(pk) = self.peek.as_mut() {
+                    pk.hovered = true;
+                    pk.hide_at = None;
+                }
+            }
+            "peek-leave" => self.peek_leave(false),
+            "peek-activate" => {
+                let Some(h) = self.peek.as_ref().and_then(|pk| known(pk, hwnd)) else { return };
+                self.peek_hide();
+                wintrack::activate(h);
+                self.last_fg = Some(h);
+                self.last_state.clear();
+                self.poll();
+            }
+            "peek-close" => {
+                let Some(pk) = self.peek.as_mut() else { return };
+                let Some(h) = known(pk, hwnd) else { return };
+                log("előnézet: ablak bezárása");
+                if let Some(pos) = pk.thumbs.iter().position(|(_, src)| *src == h) {
+                    let (id, _) = pk.thumbs.remove(pos);
+                    peek::drop_thumb(id);
+                }
+                pk.hwnds.retain(|x| *x != h.0 as isize);
+                pk.refresh_at = Some(Instant::now() + Duration::from_millis(450));
+                unsafe {
+                    let _ = PostMessageW(Some(h), WM_CLOSE, WPARAM(0), LPARAM(0));
+                }
+            }
+            "log" => log(format!("[előnézet] {}", msg["text"].as_str().unwrap_or(""))),
+            _ => {}
+        }
+    }
+
+    /// Időzített teendők a fő ciklusban (az előnézet bezárása, újrarendezése).
+    fn tick(&mut self) {
+        let now = Instant::now();
+        let Some(pk) = self.peek.as_ref() else { return };
+        if pk.hide_at.is_some_and(|t| now >= t) {
+            self.peek_hide();
+        } else if pk.refresh_at.is_some_and(|t| now >= t) {
+            let target = pk.target.clone();
+            if let Some(pk) = self.peek.as_mut() {
+                pk.refresh_at = None;
+            }
+            self.peek_open(&target);
+        }
+    }
+
+    /// A legközelebbi időzített teendő (ennyit várhat a fő ciklus).
+    fn next_deadline(&self) -> Option<Instant> {
+        let pk = self.peek.as_ref()?;
+        match (pk.hide_at, pk.refresh_at) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        }
+    }
+
+    // ---- Háttérkép ----
+
+    fn wallpaper_dir(&self) -> PathBuf {
+        self.cfg_path.parent().map(|p| p.join("wallpapers")).unwrap_or_else(|| PathBuf::from("wallpapers"))
+    }
+
+    fn is_wallpaper_file(p: &Path) -> bool {
+        p.is_file()
+            && p.extension()
+                .map(|e| e.to_string_lossy().to_lowercase())
+                .is_some_and(|e| sys::WALLPAPER_EXTS.contains(&e.as_str()))
+    }
+
+    /// A háttérképmappa képei, név szerint rendezve.
+    fn wallpaper_list(&self) -> Vec<serde_json::Value> {
+        let mut files: Vec<PathBuf> = std::fs::read_dir(self.wallpaper_dir())
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| Self::is_wallpaper_file(p))
+            .collect();
+        files.sort();
+        files
+            .iter()
+            .map(|p| {
+                let s = p.to_string_lossy().to_string();
+                json!({ "path": s, "url": format!("/__file/{}", percent_encode(&s.replace('\\', "/"))) })
+            })
+            .collect()
+    }
+
+    /// Egy tetszőleges helyről választott képet bemásol a háttérképmappába.
+    fn import_wallpaper(&self, file: &str) -> Result<String, String> {
+        let src = PathBuf::from(file);
+        let dir = self.wallpaper_dir();
+        if src.parent().is_some_and(|p| p.eq(&dir)) {
+            return Ok(file.to_string());
+        }
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let stem = src.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "kep".into());
+        let ext = src.extension().map(|s| s.to_string_lossy().to_lowercase()).unwrap_or_else(|| "jpg".into());
+        let mut dest = dir.join(format!("{stem}.{ext}"));
+        let mut n = 2;
+        while dest.exists() {
+            dest = dir.join(format!("{stem}-{n}.{ext}"));
+            n += 1;
+        }
+        std::fs::copy(&src, &dest).map_err(|e| e.to_string())?;
+        Ok(dest.to_string_lossy().to_string())
+    }
+
+    fn apply_wallpaper(&mut self, path: &str) {
+        if !Self::is_wallpaper_file(Path::new(path)) {
+            let t = self.tr("A kép nem található.", "Image not found.");
+            self.toast(&t);
+            return;
+        }
+        match sys::set_wallpaper(path) {
+            Ok(()) => {
+                log(format!("háttérkép: {path}"));
+                if self.cfg.wallpaper != path {
+                    self.cfg.wallpaper = path.to_string();
+                    self.save_config();
+                }
+                let t = self.tr("Háttérkép beállítva.", "Wallpaper set.");
+                self.toast(&t);
+            }
+            Err(e) => {
+                log(format!("háttérkép hiba: {e}"));
+                let t = self.tr("A háttérkép nem állítható be", "Couldn't set the wallpaper");
+                self.toast(&format!("{t}: {e}"));
+            }
+        }
+        self.send_settings();
+    }
+
+    /// Főkapcsoló: zárolás, alvás, leállítás, újraindítás.
+    fn power(&mut self, action: &str) {
+        log(format!("főkapcsoló: {action}"));
+        if action == "shutdown" || action == "restart" {
+            // a munkamenet véget ér: előbb mindent visszaállítunk
+            self.shutdown();
+        }
+        match sys::power(action) {
+            Ok(()) => {
+                if action == "shutdown" || action == "restart" {
+                    self.exit_requested = true;
+                }
+            }
+            Err(e) => {
+                log(format!("főkapcsoló hiba: {e}"));
+                self.toast(&e);
+            }
+        }
     }
 
     fn on_ipc(&mut self, idx: usize, raw: &str) {
@@ -751,7 +1583,7 @@ impl Hub {
             return;
         };
         let kind = msg["type"].as_str().unwrap_or("");
-        if kind != "ready" && kind != "log" {
+        if !matches!(kind, "ready" | "log" | "peek" | "peek-leave") {
             let detail = msg["name"]
                 .as_str()
                 .map(str::to_string)
@@ -776,12 +1608,26 @@ impl Hub {
                 "exit" => self.exit_requested = true,
                 "autostart" => self.set_autostart(msg["on"].as_bool().unwrap_or(false)),
                 "claude-login" => self.claude_show(),
+                // a MENÜ gomb nyitja és zárja a beállításokat (záráskor a felület animál)
+                "settings" => {
+                    if self.settings.as_ref().is_some_and(|s| s.visible) {
+                        self.settings_eval(&json!({ "type": "hide" }));
+                    } else {
+                        self.settings_show();
+                    }
+                }
+                "power" => {
+                    let action = msg["action"].as_str().unwrap_or("").to_string();
+                    self.power(&action);
+                }
                 // a Windows saját Start menüje és keresője (Win, illetve Win+S)
                 "start" => wintrack::press_keys(&[wintrack::VK_WIN]),
                 "search" => wintrack::press_keys(&[wintrack::VK_WIN, b'S']),
                 _ => {}
             },
             "launch-extra" => self.launch_extra(&msg),
+            "peek" => self.peek_open(&msg),
+            "peek-leave" => self.peek_leave(true),
             "drag-hover" => self.drag_hover(&msg),
             "drop-open" => self.drop_open(&msg),
             "alert" => self.on_alert(msg["on"].as_bool().unwrap_or(false)),
@@ -841,6 +1687,7 @@ impl Hub {
     }
 
     fn launch_extra(&mut self, msg: &serde_json::Value) {
+        self.peek_hide();
         let new_instance = msg["newInstance"].as_bool().unwrap_or(false);
         let (mine, exe) = self.target_windows(msg);
         if new_instance {
@@ -854,10 +1701,13 @@ impl Hub {
 
     /// Fájlhúzás a bal sáv fölött: továbbítjuk a felületnek, az dönti el, melyik ikon fölött van.
     fn on_drag(&mut self, phase: &str, x: i32, y: i32, paths: Vec<String>) {
+        if self.peek.as_ref().is_some_and(|p| p.visible) {
+            self.peek_hide();
+        }
         if !paths.is_empty() {
             self.drag_paths = paths;
         }
-        self.eval(Edge::Left, &json!({ "type": "drag", "phase": phase, "x": x, "y": y }));
+        self.eval(self.icons_edge(), &json!({ "type": "drag", "phase": phase, "x": x, "y": y }));
     }
 
     /// Húzás közben egy ikon fölött időzött a kurzor: az ablakát a többi fölé hozzuk.
@@ -878,7 +1728,10 @@ impl Hub {
                 let ok = wintrack::open_with(&exe, &paths);
                 log(format!("ejtés: {} fájl megnyitása – {exe} -> {}", paths.len(), if ok { "ok" } else { "HIBA" }));
             }
-            _ => self.toast("Ezzel a programmal nem nyitható meg."),
+            _ => {
+                let t = self.tr("Ezzel a programmal nem nyitható meg.", "This program can't open it.");
+                self.toast(&t);
+            }
         }
     }
 
@@ -886,6 +1739,7 @@ impl Hub {
         let Some(app) = self.cfg.apps.get(id).cloned() else {
             return;
         };
+        self.peek_hide();
         let own = self.own_hwnds();
         let wins = self.tracker.snapshot(&own);
         let m = &self.matchers[id];
@@ -908,7 +1762,8 @@ impl Hub {
                 });
             }
         } else {
-            self.toast(&format!("Nem indítható: {}", app.name));
+            let t = self.tr("Nem indítható", "Cannot start");
+            self.toast(&format!("{t}: {}", app.name));
         }
     }
 
@@ -922,6 +1777,17 @@ impl Hub {
             self.last_fg = Some(wintrack::root_owner(fg));
         }
         let wins = self.tracker.snapshot(&own);
+        for w in &wins {
+            let k = w.hwnd.0 as isize;
+            if !self.seen.contains_key(&k) {
+                self.seen_seq += 1;
+                self.seen.insert(k, self.seen_seq);
+            }
+        }
+        if self.seen.len() > 400 {
+            let live: HashSet<isize> = wins.iter().map(|w| w.hwnd.0 as isize).collect();
+            self.seen.retain(|k, _| live.contains(k));
+        }
 
         if let Some(p) = &self.pending {
             if Instant::now() > p.deadline {
@@ -939,6 +1805,14 @@ impl Hub {
             .iter()
             .enumerate()
             .filter(|(_, m)| wins.iter().any(|w| m.matches(w)))
+            .map(|(i, _)| i)
+            .collect();
+        // több ablakos programok: ezek fölött az ikon előnézetet mutat
+        let multi: Vec<usize> = self
+            .matchers
+            .iter()
+            .enumerate()
+            .filter(|(_, m)| wins.iter().filter(|w| m.matches(w)).count() >= 2)
             .map(|(i, _)| i)
             .collect();
         let fg_win = self.last_fg.and_then(|h| wins.iter().find(|w| w.hwnd == h)).filter(|w| !w.iconic);
@@ -971,7 +1845,8 @@ impl Hub {
                 let name = self.extra_names.entry(k.clone()).or_insert_with(|| wintrack::display_name(&w.path)).clone();
                 (name, format!("/__icon/{}", percent_encode(&w.path.replace('\\', "/"))))
             };
-            extras.push(json!({ "key": k, "name": name, "icon": icon }));
+            let n = wins.iter().filter(|x| extra_key(x).as_deref() == Some(k.as_str())).count();
+            extras.push(json!({ "key": k, "name": name, "icon": icon, "n": n }));
         }
         let active_extra = fg_win.filter(|_| active.is_none()).and_then(extra_key);
 
@@ -982,6 +1857,24 @@ impl Hub {
             if cls != "Windows.UI.Core.CoreWindow" && cls != "Shell_TrayWnd" && cls != "XamlExplorerHostIslandWindow" {
                 appbar::rehide_taskbar();
             }
+        }
+
+        // bejelentkezéskor a „géppel induló” programok egyenként, kis szünetekkel indulnak
+        if !self.launch_queue.is_empty() && Instant::now() >= self.next_launch {
+            if let Some(id) = self.launch_queue.pop_front() {
+                let running = self.matchers.get(id).is_some_and(|m| wins.iter().any(|w| m.matches(w)));
+                if !running {
+                    log(format!("automatikus programindítás: {}", self.cfg.apps.get(id).map(|a| a.name.as_str()).unwrap_or("?")));
+                    self.launch(id, false);
+                }
+            }
+            self.next_launch = Instant::now() + Duration::from_millis(1500);
+        }
+
+        // nyitott beállításoknál másodpercenként processzor- és memóriaterhelés
+        if self.settings.as_ref().is_some_and(|s| s.visible) && Instant::now() >= self.next_sys {
+            self.next_sys = Instant::now() + Duration::from_secs(1);
+            self.send_sys();
         }
 
         // a claude.ai használati adatok ötpercenkénti frissítése (belépés közben nem)
@@ -997,6 +1890,7 @@ impl Hub {
         let state = json!({
             "type": "state",
             "running": running,
+            "multi": multi,
             "active": active,
             "extras": extras,
             "activeExtra": active_extra,
@@ -1014,6 +1908,8 @@ impl Hub {
     }
 
     fn reload(&mut self) {
+        self.peek_hide();
+        let old_wallpaper = self.cfg.wallpaper.clone();
         match config::load(&self.cfg_path) {
             Ok(c) => {
                 self.cfg = c;
@@ -1026,9 +1922,32 @@ impl Hub {
                 return;
             }
         }
+        self.check_available();
+        ICONS_RIGHT.store(self.cfg.swap_sides, Ordering::Relaxed);
         self.layout(true);
-        for b in &self.bars {
-            let _ = b.webview.reload();
+        // ha a panelek helye változott, a két oldalsó ablak a másik felületet tölti be
+        let swap = self.cfg.swap_sides;
+        // a címben a nyelv és a panel helye is benne van, ezért mindig újratöltjük a címet
+        for b in &mut self.bars {
+            b.part = part_for(b.edge, swap);
+            let _ = b.webview.load_url(&bar_url(b.part, b.edge, &self.cfg));
+        }
+        if let Some(p) = &self.peek {
+            let _ = p.webview.load_url(&peek_url(&self.cfg));
+        }
+        // ha a háttérképet a fájlban írták át, beállítjuk
+        if self.cfg.wallpaper != old_wallpaper && !self.cfg.wallpaper.is_empty() {
+            let w = self.cfg.wallpaper.clone();
+            match sys::set_wallpaper(&w) {
+                Ok(()) => log(format!("háttérkép a konfigurációból: {w}")),
+                Err(e) => log(format!("háttérkép hiba: {e}")),
+            }
+        }
+        self.last_usage = None;
+        self.last_state.clear();
+        // nyitott beállításoknál (pl. panelcsere után) a munkaterület változhatott
+        if self.settings.as_ref().is_some_and(|s| s.visible) {
+            self.settings_show();
         }
     }
 
@@ -1249,8 +2168,28 @@ fn main() {
         std::mem::forget(_m);
     }
 
-    if let Ok(f) = std::fs::File::create(data_dir().join("cyberhub.log")) {
+    // Az előző futás naplóját megtartjuk (cyberhub.prev.log), hogy egy sikertelen
+    // indítás nyoma ne vesszen el.
+    let log_path = data_dir().join("cyberhub.log");
+    let _ = std::fs::rename(&log_path, data_dir().join("cyberhub.prev.log"));
+    if let Ok(f) = std::fs::File::create(&log_path) {
         *LOG.lock().unwrap() = Some(f);
+    }
+    let started_at = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    log(format!("indulás (unix idő: {started_at}), paraméterek: {:?}", &args[1..]));
+
+    // Bejelentkezéskori indulás: megvárjuk, amíg az Intéző és a tálca elkészül,
+    // különben a képernyősávok lefoglalása és a tálca elrejtése nem sikerülne.
+    if flag("--autostart") {
+        let t0 = Instant::now();
+        while t0.elapsed() < Duration::from_secs(90) {
+            if appbar::taskbar_hwnd().is_some() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(500));
+        }
+        std::thread::sleep(Duration::from_secs(4));
+        log(format!("automatikus indítás: az Intéző kész ({} mp után)", t0.elapsed().as_secs()));
     }
 
     // Őrfolyamat: ha ez a példány bármi módon leáll, visszaadja a tálcát.
@@ -1272,10 +2211,12 @@ fn main() {
     let base_dir = find_base_dir();
     let ui_dir = base_dir.join("ui");
     let cfg_path = value("--config").map(PathBuf::from).unwrap_or_else(|| base_dir.join("config.json"));
-    let cfg = match config::load(&cfg_path) {
+    let mut loaded_ok = true;
+    let mut cfg = match config::load(&cfg_path) {
         Ok(c) => c,
         Err(e) => {
             log(&e);
+            loaded_ok = false;
             let c = default_config();
             if !cfg_path.exists() {
                 let _ = std::fs::write(&cfg_path, serde_json::to_string_pretty(&c).unwrap());
@@ -1283,6 +2224,27 @@ fn main() {
             c
         }
     };
+    // „Indulás a géppel”: a konfigurációs fájl az irányadó. Ha még nincs benne,
+    // a Windows jelenlegi beállítását vesszük át. Bekapcsolt állapotban a bejegyzést
+    // mindig frissítjük (aktuális exe-útvonal, az Intézőre váró indítás).
+    let registered = autostart::is_enabled();
+    match cfg.start_with_windows {
+        None => cfg.start_with_windows = Some(registered),
+        Some(want) => {
+            if want || registered {
+                if let Err(e) = autostart::set(want) {
+                    log(format!("indítás a Windowszal – hiba: {e}"));
+                }
+            }
+        }
+    }
+    // A fájlba minden opció kerüljön bele (a hiányzókat alapértékkel kiegészítjük).
+    if loaded_ok && config::needs_rewrite(&cfg_path, &cfg) {
+        match config::save(&cfg_path, &cfg) {
+            Ok(()) => log("konfigurációs fájl kiegészítve az összes opcióval"),
+            Err(e) => log(e),
+        }
+    }
     let hide_taskbar = cfg.hide_taskbar && !flag("--keep-taskbar");
     let exit_after = value("--exit-after").and_then(|s| s.parse::<u64>().ok()).map(Duration::from_secs);
     log(format!("mappa: {}", base_dir.display()));
@@ -1337,22 +2299,17 @@ fn main() {
             let _ = SetWindowSubclass(hwnd, Some(subclass_proc), 0x4E48, 0);
         }
 
-        let url = format!(
-            "cyberhub://localhost/hub.html?part={}&l={}&t={}&r={}&b={}",
-            edge.name(),
-            cfg.left_width,
-            cfg.frame.top,
-            cfg.right_width,
-            cfg.frame.bottom
-        );
+        let part = part_for(*edge, cfg.swap_sides);
+        let url = bar_url(part, *edge, &cfg);
         let bg = (6u8, 7u8, 11u8, 255u8);
         let dir = ui_dir.clone();
         let page_edge = edge.name();
-        let is_left = *edge == Edge::Left;
-        // Fájlhúzás: a bal sávon az ikonokhoz kötjük, a többi sávon csak elnyeljük,
-        // különben a ráejtett fájl a sáv helyén nyílna meg.
+        let this_edge = *edge;
+        // Fájlhúzás: az ikonsávon az ikonokhoz kötjük, a többi sávon csak elnyeljük,
+        // különben a ráejtett fájl a sáv helyén nyílna meg. (A panelek felcserélhetők.)
         let drag_handler = move |ev: wry::DragDropEvent| -> bool {
-            if is_left {
+            let icons_here = part_for(this_edge, ICONS_RIGHT.load(Ordering::Relaxed)) == "left";
+            if icons_here {
                 let to_strings = |p: Vec<PathBuf>| p.into_iter().map(|x| x.to_string_lossy().to_string()).collect();
                 match ev {
                     wry::DragDropEvent::Enter { paths, position } => {
@@ -1387,15 +2344,115 @@ fn main() {
             .build(&window)
             .expect("WebView2 létrehozása");
 
-        bars.push(Bar { edge: *edge, window, webview, hwnd, rect: RECT::default(), registered: false });
+        bars.push(Bar { edge: *edge, part, window, webview, hwnd, rect: RECT::default(), registered: false });
     }
+
+    // Teljes képernyős beállítások: rejtve indul, a MENÜ gombra jelenik meg.
+    let settings = {
+        let window = WindowBuilder::new()
+            .with_title("CyberHub – beállítások")
+            .with_decorations(false)
+            .with_visible(false)
+            .with_always_on_top(true)
+            .with_skip_taskbar(true)
+            .with_undecorated_shadow(false)
+            .with_drag_and_drop(false)
+            .with_inner_size(PhysicalSize::new(800u32, 600u32))
+            .build(&event_loop)
+            .ok();
+        window.and_then(|window| {
+            let hwnd = hwnd_of(&window);
+            unsafe {
+                SetWindowLongPtrW(hwnd, GWL_STYLE, (WS_POPUP | WS_CLIPCHILDREN | WS_CLIPSIBLINGS).0 as isize);
+                SetWindowLongPtrW(hwnd, GWL_EXSTYLE, (WS_EX_TOOLWINDOW | WS_EX_TOPMOST).0 as isize);
+                let pref = DWMWCP_DONOTROUND;
+                let _ = DwmSetWindowAttribute(
+                    hwnd,
+                    DWMWA_WINDOW_CORNER_PREFERENCE,
+                    &pref as *const _ as *const _,
+                    std::mem::size_of_val(&pref) as u32,
+                );
+            }
+            let dir = ui_dir.clone();
+            let webview = WebViewBuilder::new_with_web_context(&mut web_context)
+                .with_custom_protocol("cyberhub".into(), move |_id, req| serve(&dir, &req))
+                .with_url(settings_url(&cfg))
+                .with_background_color((6, 7, 11, 255))
+                .with_devtools(cfg!(debug_assertions))
+                .with_default_context_menus(false)
+                .with_browser_accelerator_keys(false)
+                .with_ipc_handler(|req: Request<String>| send(UserEvent::SettingsIpc(req.body().clone())))
+                .with_drag_drop_handler(|_| true)
+                .build(&window)
+                .map_err(|e| log(format!("beállítások ablak nem hozható létre: {e}")))
+                .ok()?;
+            Some(SettingsWin { window, webview, hwnd, visible: false })
+        })
+    };
+    // Ablakelőnézet: rejtve indul, a több ablakos programok ikonja fölött jelenik meg.
+    let peek_win = {
+        let window = WindowBuilder::new()
+            .with_title("CyberHub – ablakelőnézet")
+            .with_decorations(false)
+            .with_visible(false)
+            .with_focused(false)
+            .with_always_on_top(true)
+            .with_skip_taskbar(true)
+            .with_undecorated_shadow(false)
+            .with_drag_and_drop(false)
+            .with_inner_size(PhysicalSize::new(480u32, 240u32))
+            .build(&event_loop)
+            .ok();
+        window.and_then(|window| {
+            let hwnd = hwnd_of(&window);
+            unsafe {
+                SetWindowLongPtrW(hwnd, GWL_STYLE, (WS_POPUP | WS_CLIPCHILDREN | WS_CLIPSIBLINGS).0 as isize);
+                SetWindowLongPtrW(hwnd, GWL_EXSTYLE, (WS_EX_TOOLWINDOW | WS_EX_TOPMOST).0 as isize);
+                let pref = DWMWCP_DONOTROUND;
+                let _ = DwmSetWindowAttribute(
+                    hwnd,
+                    DWMWA_WINDOW_CORNER_PREFERENCE,
+                    &pref as *const _ as *const _,
+                    std::mem::size_of_val(&pref) as u32,
+                );
+            }
+            let dir = ui_dir.clone();
+            let webview = WebViewBuilder::new_with_web_context(&mut web_context)
+                .with_custom_protocol("cyberhub".into(), move |_id, req| serve(&dir, &req))
+                .with_url(peek_url(&cfg))
+                .with_background_color((6, 7, 11, 255))
+                .with_devtools(cfg!(debug_assertions))
+                .with_default_context_menus(false)
+                .with_browser_accelerator_keys(false)
+                .with_ipc_handler(|req: Request<String>| send(UserEvent::PeekIpc(req.body().clone())))
+                .with_drag_drop_handler(|_| true)
+                .build(&window)
+                .map_err(|e| log(format!("előnézet ablak nem hozható létre: {e}")))
+                .ok()?;
+            Some(PeekWin {
+                window,
+                webview,
+                hwnd,
+                visible: false,
+                thumbs: Vec::new(),
+                pending: Vec::new(),
+                hwnds: Vec::new(),
+                seq: 0,
+                target: serde_json::Value::Null,
+                hovered: false,
+                hide_at: None,
+                refresh_at: None,
+            })
+        })
+    };
+    ICONS_RIGHT.store(cfg.swap_sides, Ordering::Relaxed);
 
     // claude.ai ablak: rejtve indul, csak belépéskor jelenik meg. A sütik a CyberHub saját
     // böngészőprofiljában maradnak, az asztali Claude apphoz nem nyúlunk.
     let claude = if cfg.claude_usage {
         let (mon, _) = appbar::primary_monitor();
         let window = WindowBuilder::new()
-            .with_title("CyberHub – belépés a claude.ai-ra")
+            .with_title(if cfg.language == "en" { "CyberHub – sign in to claude.ai" } else { "CyberHub – belépés a claude.ai-ra" })
             .with_visible(false)
             .with_inner_size(tao::dpi::LogicalSize::new(480.0, 760.0))
             .with_position(PhysicalPosition::new((mon.left + mon.right) / 2 - 300, (mon.top + mon.bottom) / 2 - 470))
@@ -1420,7 +2477,14 @@ fn main() {
                 .build(&window)
                 .map_err(|e| log(format!("claude.ai ablak nem hozható létre: {e}")))
                 .ok()?;
-            Some(ClaudeWeb { window, webview, visible: false, next_fetch: Instant::now() + Duration::from_secs(300), ok: None })
+            Some(ClaudeWeb {
+                window,
+                webview,
+                visible: false,
+                next_fetch: Instant::now() + Duration::from_secs(300),
+                ok: None,
+                persisted: false,
+            })
         })
     } else {
         None
@@ -1468,7 +2532,33 @@ fn main() {
         extra_names: HashMap::new(),
         claude,
         thread_usage: None,
+        settings,
+        available: Vec::new(),
+        session: started_at,
+        cpu_prev: None,
+        next_sys: Instant::now(),
+        launch_queue: std::collections::VecDeque::new(),
+        next_launch: Instant::now(),
+        peek: peek_win,
+        seen: HashMap::new(),
+        seen_seq: 0,
     };
+    hub.check_available();
+    // Bejelentkezéskori indulásnál a „géppel induló” programokat is elindítjuk.
+    if flag("--autostart") {
+        hub.launch_queue = hub
+            .cfg
+            .apps
+            .iter()
+            .enumerate()
+            .filter(|(i, a)| a.autostart && hub.available.get(*i).copied().unwrap_or(true))
+            .map(|(i, _)| i)
+            .collect();
+        hub.next_launch = Instant::now() + Duration::from_secs(5);
+        if !hub.launch_queue.is_empty() {
+            log(format!("bejelentkezéskor indítandó programok: {}", hub.launch_queue.len()));
+        }
+    }
     hub.save_state();
     hub.layout(true);
     for b in &hub.bars {
@@ -1506,6 +2596,8 @@ fn main() {
                 UserEvent::Drag(phase, x, y, paths) => hub.on_drag(phase, x, y, paths),
                 UserEvent::ClaudeWeb(raw) => hub.on_claude_web(&raw),
                 UserEvent::ClaudeLoaded(url) => hub.on_claude_loaded(&url),
+                UserEvent::SettingsIpc(raw) => hub.on_settings_ipc(&raw),
+                UserEvent::PeekIpc(raw) => hub.on_peek_ipc(&raw),
             },
             // a claude.ai ablak bezárása csak elrejti
             Event::WindowEvent { window_id, event: WindowEvent::CloseRequested, .. }
@@ -1522,6 +2614,9 @@ fn main() {
             }
             _ => {}
         }
+        let _keep_settings = hub.settings.as_ref().map(|s| &s.window);
+        let _keep_peek = hub.peek.as_ref().map(|p| &p.window);
+        hub.tick();
 
         let now = Instant::now();
         if now >= next_poll {
@@ -1533,6 +2628,7 @@ fn main() {
             *control_flow = ControlFlow::Exit;
             return;
         }
-        *control_flow = ControlFlow::WaitUntil(next_poll);
+        let wake = hub.next_deadline().map_or(next_poll, |d| d.min(next_poll));
+        *control_flow = ControlFlow::WaitUntil(wake);
     });
 }

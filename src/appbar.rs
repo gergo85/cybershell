@@ -99,18 +99,45 @@ pub fn set(hwnd: HWND, edge: Edge, rc: RECT) -> RECT {
     d.rc = rc;
     unsafe {
         SHAppBarMessage(ABM_SETPOS, &mut d);
-        let r = d.rc;
-        let _ = SetWindowPos(
-            hwnd,
-            Some(HWND_TOPMOST),
-            r.left,
-            r.top,
-            r.right - r.left,
-            r.bottom - r.top,
-            SWP_NOACTIVATE,
-        );
     }
-    d.rc
+    {
+        // A rendszer a már bejegyzett merőleges sávokhoz (felső/alsó keret) is igazítaná
+        // a hosszát – újratöltéskor így rövidülne meg az oldalsó panel. A sávval párhuzamos
+        // kiterjedést ezért a kért értéken tartjuk, csak a szél felőli helyet vesszük át.
+        let mut r = d.rc;
+        match edge {
+            Edge::Left | Edge::Right => {
+                r.top = rc.top;
+                r.bottom = rc.bottom;
+            }
+            Edge::Top | Edge::Bottom => {
+                r.left = rc.left;
+                r.right = rc.right;
+            }
+        }
+        unsafe {
+            let _ = SetWindowPos(
+                hwnd,
+                Some(HWND_TOPMOST),
+                r.left,
+                r.top,
+                r.right - r.left,
+                r.bottom - r.top,
+                SWP_NOACTIVATE,
+            );
+        }
+        r
+    }
+}
+
+/// Az asztal munkaterülete: a képernyő a lefoglalt sávok (és a tálca) nélkül.
+pub fn work_area() -> RECT {
+    use windows::Win32::UI::WindowsAndMessaging::{SystemParametersInfoW, SPI_GETWORKAREA, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS};
+    let mut r = RECT::default();
+    unsafe {
+        let _ = SystemParametersInfoW(SPI_GETWORKAREA, 0, Some(&mut r as *mut RECT as *mut _), SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0));
+    }
+    r
 }
 
 pub fn primary_monitor() -> (RECT, RECT) {

@@ -38,7 +38,8 @@ pub fn set(enabled: bool) -> Result<(), String> {
         }
         let result = if enabled {
             let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-            let value = format!("\"{}\"", exe.display());
+            // a --autostart jelzi, hogy bejelentkezéskor indultunk: ilyenkor megvárjuk az Intézőt
+            let value = format!("\"{}\" --autostart", exe.display());
             let wide: Vec<u16> = value.encode_utf16().chain(std::iter::once(0)).collect();
             let bytes = std::slice::from_raw_parts(wide.as_ptr() as *const u8, wide.len() * 2);
             RegSetValueExW(key, w!("CyberHub"), Some(0), REG_SZ, Some(bytes))
