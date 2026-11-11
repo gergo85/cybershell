@@ -4,8 +4,13 @@ use std::path::Path;
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Config {
-    /// A felület nyelve: "hu" vagy "en".
+    /// A felület nyelve: "hu", "en" vagy "auto" (alapérték: a Windows nyelve szerint – magyar
+    /// Windowson magyar, minden másnál angol). A beállításokban választott nyelv felülírja.
     pub language: String,
+    /// Igaz, ha a fájlban "auto" áll: ilyenkor a `language` a Windows nyelvéből számolt érték,
+    /// mentéskor viszont "auto" kerül vissza a fájlba.
+    #[serde(skip)]
+    pub language_auto: bool,
     /// Induljon-e a CyberHub a Windowsba való bejelentkezéskor. Ha hiányzik a fájlból,
     /// a Windows aktuális beállítását vesszük át.
     pub start_with_windows: Option<bool>,
@@ -17,11 +22,15 @@ pub struct Config {
     pub right_width: u32,
     /// Felcserélt panelek: az ikonsáv jobbra, az információs panel balra kerül.
     pub swap_sides: bool,
+    /// Minden képernyőn megjelenjen-e a hub (különben csak az elsődlegesen).
+    pub all_monitors: bool,
     pub frame: Frame,
     pub activity: Activity,
     /// Mutassa-e a Claude 5 órás és heti használatát.
     pub claude_usage: bool,
     pub weather: Weather,
+    /// A dátumra kattintva megnyíló naptárban mutatott naptárak (iCal-címek).
+    pub calendar: Calendar,
     /// A jobb panel szekcióinak láthatósága.
     pub sections: Sections,
     pub theme: Theme,
@@ -45,6 +54,8 @@ pub struct Sections {
     pub activity: bool,
     pub clock: bool,
     pub date: bool,
+    /// A hangerő szekció (helye rögzített: a főkapcsoló fölött).
+    pub volume: bool,
     /// A négy szekció sorrendje a jobb panelen.
     pub order: Vec<String>,
 }
@@ -58,7 +69,9 @@ impl Default for Sections {
             activity: true,
             clock: true,
             date: true,
-            order: SECTION_KEYS.iter().map(|s| s.to_string()).collect(),
+            volume: true,
+            // alapból az idő a dátum alatt van
+            order: ["claude", "activity", "date", "clock"].iter().map(|s| s.to_string()).collect(),
         }
     }
 }
@@ -98,6 +111,21 @@ impl Default for Weather {
     fn default() -> Self {
         Weather { enabled: true, city: "Budapest".into(), latitude: None, longitude: None }
     }
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Calendar {
+    pub feeds: Vec<CalendarFeed>,
+}
+
+/// Egy csatolt naptár, pl. a Google Naptár „Titkos cím iCal formátumban” címe.
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct CalendarFeed {
+    pub name: String,
+    pub url: String,
+    pub color: String,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -160,16 +188,19 @@ fn is_false(b: &bool) -> bool {
 impl Default for Config {
     fn default() -> Self {
         Config {
-            language: "hu".into(),
+            language: "auto".into(),
+            language_auto: false,
             start_with_windows: None,
             hide_taskbar: true,
             left_width: 86,
             right_width: 86,
             swap_sides: false,
+            all_monitors: true,
             frame: Frame::default(),
             activity: Activity::default(),
             claude_usage: true,
             weather: Weather::default(),
+            calendar: Calendar::default(),
             sections: Sections::default(),
             theme: Theme::default(),
             wallpaper: String::new(),
@@ -264,10 +295,30 @@ pub fn load(path: &Path) -> Result<Config, String> {
     let text = text.trim_start_matches('\u{feff}');
     let mut cfg: Config = serde_json::from_str(text).map_err(|e| format!("Hibás config.json: {e}"))?;
     cfg.sections.normalize();
-    if cfg.language != "en" {
-        cfg.language = "hu".into();
-    }
+    cfg.resolve_language();
     Ok(cfg)
+}
+
+impl Config {
+    /// Az "auto" (vagy ismeretlen) nyelv feloldása a Windows felületének nyelvére.
+    pub fn resolve_language(&mut self) {
+        match self.language.as_str() {
+            "hu" | "en" => self.language_auto = false,
+            _ => {
+                self.language_auto = true;
+                self.language = crate::sys::system_language().to_string();
+            }
+        }
+    }
+}
+
+/// A fájlba írt alak: automatikus nyelvnél "auto" kerül bele.
+fn to_json(cfg: &Config) -> serde_json::Result<serde_json::Value> {
+    let mut v = serde_json::to_value(cfg)?;
+    if cfg.language_auto {
+        v["language"] = serde_json::Value::from("auto");
+    }
+    Ok(v)
 }
 
 /// Igaz, ha a fájl nem tartalmaz minden opciót (vagy eltér a rendezett formától):
@@ -277,12 +328,20 @@ pub fn needs_rewrite(path: &Path, cfg: &Config) -> bool {
     let Ok(on_disk) = serde_json::from_str::<serde_json::Value>(text.trim_start_matches('\u{feff}')) else {
         return false;
     };
-    serde_json::to_value(cfg).map(|v| v != on_disk).unwrap_or(false)
+    if to_json(cfg).map(|v| v != on_disk).unwrap_or(false) {
+        return true;
+    }
+    // ugyanaz a tartalom, de más sorrendben vagy formában (pl. kézi szerkesztés után)
+    let normalize = |t: &str| t.trim_start_matches('\u{feff}').replace("\r\n", "\n").trim().to_string();
+    to_json(cfg)
+        .and_then(|v| serde_json::to_string_pretty(&v))
+        .map(|pretty| normalize(&pretty) != normalize(&text))
+        .unwrap_or(false)
 }
 
 /// Mentés: előbb ideiglenes fájlba, aztán átnevezés, hogy félbeszakadt írás ne rontsa el.
 pub fn save(path: &Path, cfg: &Config) -> Result<(), String> {
-    let text = serde_json::to_string_pretty(cfg).map_err(|e| e.to_string())?;
+    let text = to_json(cfg).and_then(|v| serde_json::to_string_pretty(&v)).map_err(|e| e.to_string())?;
     let tmp = path.with_extension("json.tmp");
     std::fs::write(&tmp, text).map_err(|e| format!("Nem menthető: {e}"))?;
     std::fs::rename(&tmp, path).map_err(|e| format!("Nem menthető: {e}"))

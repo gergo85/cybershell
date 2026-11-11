@@ -2,14 +2,14 @@
 
 Cyberpunk stílusú felület Windowsra. Bal oldalt ikonsáv, jobb oldalt információs panel, felül és alul vékony neonkeret. A programok középen nyílnak meg, és teljes méretben kitöltik a maradék helyet.
 
-A sávok ugyanúgy foglalják le a képernyő szélét, mint a Windows tálcája, ezért a teljes méretre nyitott ablakok nem lógnak rájuk. Amíg a CyberHub fut, a gyári tálca rejtve marad. Kilépéskor minden visszaáll.
+Több képernyőnél mindegyiken megjelenik a teljes hub (ikonsáv, információs panel, keretek); képernyő csatlakoztatásakor vagy leválasztásakor magától igazodik. A sávok ugyanúgy foglalják le a képernyő szélét, mint a Windows tálcája, ezért a teljes méretre nyitott ablakok nem lógnak rájuk. Amíg a CyberHub fut, a gyári tálca rejtve marad. Kilépéskor minden visszaáll.
 
 ## Indítás és kilépés
 
 - **Indítás:** `CyberHub.exe`. A `config.json` és az `ui` mappa legyen mellette.
 - **Kilépés:** jobb alul **// MENÜ** → **Kilépés a CyberHubból**, vagy `Ctrl+Alt+Q`, vagy parancssorból `CyberHub.exe --quit`.
 - **Újratöltés:** `Ctrl+Alt+R`, vagy MENÜ → **Újratöltés**. Ilyenkor a program újraolvassa a `config.json`-t és a felület fájljait.
-- **Indulás a géppel:** MENÜ → **Indulás a géppel** kapcsoló. Bekapcsolva a CyberHub bejelentkezéskor magától elindul: megvárja, amíg az Intéző elkészül, és csak utána foglalja le a képernyő szélét. Minden indításkor frissíti a bejegyzést, így a mappa áthelyezése után is jó helyről indul.
+- **Indulás a géppel:** MENÜ → **Indulás a géppel** kapcsoló. Bekapcsolva a CyberHub bejelentkezéskor magától elindul: megvárja, amíg az Intéző elkészül, és csak utána foglalja le a képernyő szélét. Minden indításkor frissíti a bejegyzést, így a mappa áthelyezése után is jó helyről indul. A Windows *Indítási alkalmazások* listájában (Feladatkezelő, Beállítások) is engedélyezi – az újabb Windows 11-ek enélkül nem indítják el. Ha ott letiltod, a CyberHub is kikapcsoltnak veszi.
 
 ## Beállítások (MENÜ)
 
@@ -17,8 +17,8 @@ A **// MENÜ** gomb a teljes munkaterületet kitöltő beállítási felületet 
 
 - **Rendszerterhelés:** a processzor és a memória kihasználtsága, az utolsó egy perc görbéjével. 60% fölött narancs, 85% fölött rózsaszín.
 
-- **Rendszer:** újratöltés, a konfigurációs fájl megnyitása, indulás a géppel, **panelek felcserélése** (az ikonsáv jobbra, az információs panel balra kerül), **nyelv** (magyar vagy angol), kilépés.
-- **Látható szekciók:** a jobb panel Claude, Aktivitás, Idő és Dátum része külön-külön ki- és bekapcsolható. A sorrendjük a sor elején lévő jellel húzva állítható.
+- **Rendszer:** újratöltés (a `config.json` újraolvasása kézi szerkesztés után, és az összes felület újratöltése – ugyanaz, mint a Ctrl+Alt+R), a konfigurációs fájl megnyitása, indulás a géppel, **panelek felcserélése** (az ikonsáv jobbra, az információs panel balra kerül), **nyelv** (magyar vagy angol; első induláskor a Windows nyelvéhez igazodik), kilépés. Ha nyitott beállítások mellett egy programikonra, a naptárra vagy az időjárásra kattintasz, a beállítások bezárulnak.
+- **Látható szekciók:** a jobb panel Claude, Aktivitás, Idő és Dátum része külön-külön ki- és bekapcsolható. A sorrendjük a sor elején lévő jellel húzva állítható. Alapból a Dátum van felül, alatta az Idő.
 - **Ikonok:** a bal sáv és a jobb panel programjai. Sorrend a ▲▼ gombokkal, átnevezés a névmezőben, ikon és szín választható, a **Bal/Jobb** kapcsoló dönti el, melyik panelen jelenjen meg, az **Auto** oszlop bekapcsolásával a program bejelentkezéskor magától elindul (ha a CyberHub is a géppel indul), a kuka ikon törli. Új programot a **Program hozzáadása…** gombbal (exe vagy parancsikon), vagy egy futó program nevére kattintva adhatsz hozzá. A változások a **Mentés** gombbal lépnek életbe.
 - **Háttérkép:** a `wallpapers` mappa képei kis képként. Kattintásra a CyberHub beállítja a Windows háttérképének (kitöltő elrendezéssel, minden monitoron); az éppen használt kép sárga keretet és „AKTÍV” címkét kap. A **Kép hozzáadása…** gombbal tetszőleges képet (jpg, png, bmp) választhatsz: a program bemásolja a mappába, és rögtön be is állítja. A **Mappa megnyitása** gomb az Intézőben mutatja a mappát; az oda tett képek a következő megnyitáskor megjelennek.
 
@@ -44,21 +44,24 @@ A cián jelzés az ikon mellett azt mutatja, hogy a program fut. Az aktív progr
 
 ## Jobb oldali panel
 
-A panel fentről lefelé: Keresés és Indítás, Claude, Aktivitás, majd alul az idő és a dátum, az időjárás és a menü.
+A panel fentről lefelé: Keresés és Indítás, Claude, Aktivitás, majd alul a dátum és az idő, laptopon a Laptop szekció, az időjárás és a menü.
 
 - **Keresés és Indítás:** a panel tetején. A Keresés a Windows keresőjét nyitja meg (mint a `Win+S`), az Indítás a gyári Start menüt (mint a `Win` billentyű).
 - **Idő:** az óra és a perc egy sorban, alattuk a másodpercek 12 szakaszos sávja.
-- **Dátum:** külön szekcióban, számokkal: az év, alatta a hónap és a nap, alattuk a hét sorszáma (ISO-hét, pl. „46. HÉT”).
+- **Dátum:** külön szekcióban, számokkal: az év, alatta a hónap és a nap, alattuk a hét sorszáma (ISO-hét, pl. „46. HÉT”). Rákattintva a panel mellett kinyílik a **naptár**: havi nézet a hetek sorszámával, a napokon eseményenként egy színes pötty, alatta a kiválasztott nap eseményei. A hónapok a nyilakkal vagy görgetéssel lapozhatók, a **MA** gomb visszaugrik a mai napra.
+- **Google Naptár:** a naptár alján csatolható. A Google Naptár beállításaiban válaszd ki a naptárad, a *Naptár integrálása* résznél másold ki a **Titkos cím iCal formátumban** címet, és illeszd be. Több naptár is csatolható (+ gomb), mindegyik saját színt kap; eltávolítani a név melletti ×-re kétszer kattintva lehet. A CyberHub tízpercenként, illetve a frissítés gombra tölti le őket; az ismétlődő események is látszanak. A **névnapok** (évente ismétlődő, egész napos bejegyzés, aminek a címe csak keresztnév, pl. „Rózsa” vagy „Konrád, Zelmira”) nem kapnak pöttyöt, a nap listájában külön sorban látszanak. A címet a `config.json` `calendar` része tárolja – titkos, ne oszd meg. A naptárat csak olvassa, módosítani nem tud.
+- **Hangerő:** a Windows alapértelmezett hangeszközének hangereje. A szekció fölött görgetve 2%-onként állítható, a csúszka kattintható és húzható, a hangszóró ikon némít. A százalékra kattintva megnyílik a Windows hangerőkeverője. Ha máshol (pl. a billentyűzettel) állítod, a panel is követi.
 - **Főkapcsoló:** Zárolás, Alvó állapot, Leállítás, Újraindítás. A leállítás és az újraindítás megerősítést kér; előtte a CyberHub mindent visszaállít.
 - **Claude:** az 5 órás és a heti használati korlát százalékban, valamint az, hogy mennyi idő múlva áll vissza (↻). 60% fölött cián, 85% fölött rózsaszín a sáv. Ötpercenként frissül, a frissítés idejére kattintva azonnal.
 - **Aktivitás:** visszaszámláló, alapból 20 perces. A program indulásakor nem indul magától (a ▶ gombbal indítod); ha mégis így szeretnéd, a `config.json`-ban állítsd az `activity.autoStart` értékét `true`-ra. Ha lejár, a panel és a keretek rózsaszínre váltanak és villognak, a gép pedig hangot ad. **✓:** új kör indul. **+5:** halasztás öt perccel. A három kis gomb: szünet/folytatás, újraindítás és beállítás. A beállításnál tetszőleges hosszt beírhatsz percben (1–240), ezt a program megjegyzi.
-- **Időjárás:** a panel alján, az Open-Meteo ingyenes szolgáltatásából, negyedóránként frissül. Rákattintva azonnal frissül. A várost a `config.json` `weather` részében állíthatod be.
+- **Laptop:** csak akkumulátoros gépen jelenik meg, az időjárás fölött. A **Wi-Fi** gomb a Windows saját hálózatlistáját nyitja meg, az akkumulátor gomb (töltöttség, töltés jelzése) a Windows Energiagazdálkodás és akkumulátor beállításait. 20% alatt rózsaszínre vált.
+- **Időjárás:** a panel alján, az Open-Meteo ingyenes szolgáltatásából, negyedóránként frissül. Az ikon, a hőmérséklet, a leírás és a szél (iránnyal) látszik. Rákattintva a panel mellett kinyílik a részletes előrejelzés: a következő 24 óra háromóránként (hőmérséklet-görbe, csapadék esélye), hőérzet, páratartalom, szél és széllökés, a mai csapadék, UV-index, napkelte és napnyugta, valamint a következő három nap. Bezárul, ha máshova kattintasz, az `Esc`-re vagy újabb kattintásra. A várost a `config.json` `weather` részében állíthatod be.
 
 ### A Claude-használat forrása
 
 Három forrásból dolgozik, ebben a sorrendben:
 
-1. **A claude.ai-fiókod (ajánlott, az asztali Claude-hoz is jó).** A panelen a **Belépés** gombbal megnyílik egy kis ablak, ahol bejelentkezel a claude.ai-ra. Belépés után az ablak magától bezárul, és a CyberHub ötpercenként lekéri ugyanazokat a korlátokat, amelyeket a claude.ai is mutat. A bejelentkezés a CyberHub saját böngészőprofiljában marad (`%LOCALAPPDATA%\CyberHub\WebView2`), az asztali Claude apphoz nem nyúl. A belépést 30 napig megjegyzi, így újraindítás után sem kell újra belépni (hacsak a claude.ai maga ki nem léptet). Ha valaha kijelentkeznél, töröld ezt a mappát, amíg a CyberHub nem fut. A lekérdezés nem hivatalos, egy későbbi claude.ai-változás után előfordulhat, hogy nem működik.
+1. **A claude.ai-fiókod (ajánlott, az asztali Claude-hoz is jó).** A panelen a **Belépés** gombbal megnyílik egy kis ablak, ahol bejelentkezel a claude.ai-ra. Belépés után az ablak magától bezárul, és a CyberHub ötpercenként lekéri ugyanazokat a korlátokat, amelyeket a claude.ai is mutat. A bejelentkezés a CyberHub saját böngészőprofiljában marad (`%LOCALAPPDATA%\CyberHub\WebView2`), az asztali Claude apphoz nem nyúl. A belépést 30 napig megjegyzi, így újraindítás után sem kell újra belépni (hacsak a claude.ai maga ki nem léptet). Ha induláskor a claude.ai még nem érhető el (pl. nincs még hálózat), a panel „Kapcsolódás…” állapotot mutat, és fél percen belül újrapróbálja – belépést csak akkor kér, ha a claude.ai valóban kijelentkezett állapotot jelez. Ha valaha kijelentkeznél, töröld ezt a mappát, amíg a CyberHub nem fut. A lekérdezés nem hivatalos, egy későbbi claude.ai-változás után előfordulhat, hogy nem működik.
 
 2. **A Claude Code állapotsora.** A Claude Code minden válasz után átadja az állapotsornak az 5 órás és a heti korlátot. Ha a CyberHub az állapotsor, ezeket elmenti, és a panel kiírja. Beállítás a `%USERPROFILE%\.claude\settings.json` fájlban:
 
@@ -101,9 +104,11 @@ Mentés után nyomd meg a `Ctrl+Alt+R`-t.
 
 | Mező | Jelentés |
 |---|---|
-| `language` | A felület nyelve: `"hu"` vagy `"en"`. A szövegek az `ui\i18n.js` fájlban vannak, új nyelv is felvehető. |
+| `language` | A felület nyelve: `"auto"` (alapérték: magyar Windowson magyar, minden másnál angol), `"hu"` vagy `"en"`. A beállításokban választott nyelv felülírja az automatikusat. A szövegek az `ui\i18n.js` fájlban vannak, új nyelv is felvehető. |
 | `startWithWindows` | Induljon-e a CyberHub bejelentkezéskor. A fájl az irányadó: indításkor ehhez igazítja a Windows beállítását. |
 | `swapSides` | `true` esetén az ikonsáv jobbra, az információs panel balra kerül. |
+| `allMonitors` | `false` esetén a hub csak az elsődleges képernyőn jelenik meg (alapból mindegyiken). |
+| `calendar.feeds` | A csatolt naptárak (név, iCal-cím, szín). A naptárban is felvehetők és törölhetők. |
 | `sections` | A jobb panel szekcióinak láthatósága (`claude`, `activity`, `clock`, `date`) és sorrendje (`order`). |
 | `leftWidth`, `rightWidth` | A bal sáv és a jobb panel szélessége pixelben. |
 | `frame.top`, `frame.bottom` | A felső és alsó keret vastagsága. A `0` kikapcsolja. |

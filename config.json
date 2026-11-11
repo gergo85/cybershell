@@ -1,10 +1,11 @@
 {
-  "language": "hu",
+  "language": "auto",
   "startWithWindows": true,
   "hideTaskbar": true,
   "leftWidth": 86,
   "rightWidth": 86,
   "swapSides": false,
+  "allMonitors": true,
   "frame": {
     "top": 10,
     "bottom": 10
@@ -19,11 +20,15 @@
     "enabled": true,
     "city": "Budapest"
   },
+  "calendar": {
+    "feeds": []
+  },
   "sections": {
     "claude": true,
-    "activity": true,
+    "activity": false,
     "clock": true,
     "date": true,
+    "volume": true,
     "order": [
       "claude",
       "activity",
@@ -37,7 +42,7 @@
     "hot": "#ff2a6d",
     "bg": "#06070b"
   },
-  "wallpaper": "C:\\Users\\szg00\\OneDrive\\Dokumentumok\\GitHub\\cyberhub\\wallpapers\\02-tech-plates.jpg",
+  "wallpaper": "C:\\Users\\szg00\\OneDrive\\Dokumentumok\\GitHub\\cyberhub\\wallpapers\\06-red-moon.jpg",
   "apps": [
     {
       "name": "Firefox",
@@ -55,7 +60,8 @@
       "name": "Total Cmd",
       "path": "C:\\Program Files\\Total Commander\\TOTALCMD64.EXE",
       "icon": "panels",
-      "color": "#5b8def"
+      "color": "#5b8def",
+      "autostart": true
     },
     {
       "name": "Claude",
@@ -64,7 +70,8 @@
       "match": [
         "claude.exe"
       ],
-      "color": "#d97757"
+      "color": "#d97757",
+      "autostart": true
     },
     {
       "name": "VS Code",
@@ -110,6 +117,11 @@
       "color": "#ff4fa3"
     },
     {
+      "name": "Fotós Eszköztár",
+      "path": "D:\\_resize\\Fotós Eszköztár.exe",
+      "icon": "exe"
+    },
+    {
       "name": "ArtCraft",
       "path": "%LOCALAPPDATA%\\Programs\\ArtCraft\\Launcher\\artcraft-launcher.exe",
       "icon": "rocket",
@@ -126,7 +138,8 @@
       "match": [
         "spotify.exe"
       ],
-      "color": "#1ed760"
+      "color": "#1ed760",
+      "autostart": true
     },
     {
       "name": "Cyberpunk",

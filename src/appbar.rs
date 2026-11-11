@@ -140,6 +140,53 @@ pub fn work_area() -> RECT {
     r
 }
 
+/// Egy képernyő: teljes terület, munkaterület, elsődleges-e, DPI.
+#[derive(Clone, Copy, Debug)]
+pub struct Monitor {
+    pub rect: RECT,
+    pub primary: bool,
+    pub dpi: u32,
+}
+
+unsafe extern "system" fn enum_monitor(
+    mon: windows::Win32::Graphics::Gdi::HMONITOR,
+    _hdc: windows::Win32::Graphics::Gdi::HDC,
+    _rc: *mut RECT,
+    data: LPARAM,
+) -> windows::core::BOOL {
+    use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
+    let list = unsafe { &mut *(data.0 as *mut Vec<Monitor>) };
+    let mut mi = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
+    if unsafe { GetMonitorInfoW(mon, &mut mi) }.as_bool() {
+        let (mut dx, mut dy) = (96u32, 96u32);
+        let _ = unsafe { GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &mut dx, &mut dy) };
+        list.push(Monitor { rect: mi.rcMonitor, primary: mi.dwFlags & 1 != 0, dpi: dx.max(96) });
+    }
+    true.into()
+}
+
+/// A képernyők: elöl az elsődleges, utána balról jobbra, fentről lefelé.
+pub fn monitors() -> Vec<Monitor> {
+    use windows::Win32::Graphics::Gdi::EnumDisplayMonitors;
+    let mut list: Vec<Monitor> = Vec::new();
+    unsafe {
+        let _ = EnumDisplayMonitors(None, None, Some(enum_monitor), LPARAM(&mut list as *mut Vec<Monitor> as isize));
+    }
+    list.sort_by_key(|m| (!m.primary, m.rect.left, m.rect.top));
+    list
+}
+
+/// Annak a képernyőnek a munkaterülete, amelyiken a megadott terület (pl. egy sáv) van.
+pub fn work_area_of(rc: RECT) -> RECT {
+    use windows::Win32::Graphics::Gdi::{MonitorFromRect, MONITOR_DEFAULTTONEAREST};
+    unsafe {
+        let mon = MonitorFromRect(&rc, MONITOR_DEFAULTTONEAREST);
+        let mut mi = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
+        let _ = GetMonitorInfoW(mon, &mut mi);
+        mi.rcWork
+    }
+}
+
 pub fn primary_monitor() -> (RECT, RECT) {
     unsafe {
         let mon = MonitorFromPoint(POINT { x: 0, y: 0 }, MONITOR_DEFAULTTOPRIMARY);
@@ -153,6 +200,60 @@ pub fn primary_monitor() -> (RECT, RECT) {
 
 pub fn taskbar_hwnd() -> Option<HWND> {
     unsafe { FindWindowW(w!("Shell_TrayWnd"), None).ok().filter(|h| !h.is_invalid()) }
+}
+
+/// A további képernyők tálcái (ha a Windows minden képernyőn mutatja a tálcát).
+pub fn secondary_taskbars() -> Vec<HWND> {
+    use windows::Win32::UI::WindowsAndMessaging::FindWindowExW;
+    let mut out = Vec::new();
+    let mut prev: Option<HWND> = None;
+    while let Ok(h) = unsafe { FindWindowExW(None, prev, w!("Shell_SecondaryTrayWnd"), None) } {
+        if h.is_invalid() || out.contains(&h) {
+            break;
+        }
+        out.push(h);
+        prev = Some(h);
+        if out.len() > 16 {
+            break;
+        }
+    }
+    out
+}
+
+fn all_taskbars() -> Vec<HWND> {
+    let mut v: Vec<HWND> = taskbar_hwnd().into_iter().collect();
+    v.extend(secondary_taskbars());
+    v
+}
+
+/// Egy további képernyő tálcájának helye és éle, ha látható és nem automatikusan rejtett.
+pub fn secondary_taskbar_on(mon: RECT) -> Option<(Edge, RECT)> {
+    use windows::Win32::UI::WindowsAndMessaging::GetWindowRect;
+    if taskbar_state() & ABS_AUTOHIDE != 0 {
+        return None;
+    }
+    for h in secondary_taskbars() {
+        if !unsafe { IsWindowVisible(h) }.as_bool() {
+            continue;
+        }
+        let mut r = RECT::default();
+        if unsafe { GetWindowRect(h, &mut r) }.is_err() {
+            continue;
+        }
+        let (cx, cy) = ((r.left + r.right) / 2, (r.top + r.bottom) / 2);
+        if cx < mon.left || cx >= mon.right || cy < mon.top || cy >= mon.bottom {
+            continue;
+        }
+        let edge = if r.right - r.left >= r.bottom - r.top {
+            if r.top <= mon.top { Edge::Top } else { Edge::Bottom }
+        } else if r.left <= mon.left {
+            Edge::Left
+        } else {
+            Edge::Right
+        };
+        return Some((edge, r));
+    }
+    None
 }
 
 pub fn taskbar_state() -> u32 {
@@ -192,7 +293,7 @@ pub fn taskbar_reserved() -> Option<(Edge, RECT)> {
 
 pub fn hide_taskbar() {
     set_taskbar_state(taskbar_state() | ABS_AUTOHIDE);
-    if let Some(tb) = taskbar_hwnd() {
+    for tb in all_taskbars() {
         unsafe {
             let _ = ShowWindow(tb, SW_HIDE);
         }
@@ -200,11 +301,11 @@ pub fn hide_taskbar() {
 }
 
 pub fn taskbar_visible() -> bool {
-    taskbar_hwnd().map(|tb| unsafe { IsWindowVisible(tb) }.as_bool()).unwrap_or(false)
+    all_taskbars().iter().any(|tb| unsafe { IsWindowVisible(*tb) }.as_bool())
 }
 
 pub fn show_taskbar() {
-    if let Some(tb) = taskbar_hwnd() {
+    for tb in all_taskbars() {
         unsafe {
             let _ = ShowWindow(tb, SW_SHOW);
         }
@@ -212,7 +313,7 @@ pub fn show_taskbar() {
 }
 
 pub fn rehide_taskbar() {
-    if let Some(tb) = taskbar_hwnd() {
+    for tb in all_taskbars() {
         unsafe {
             let _ = ShowWindow(tb, SW_HIDE);
         }
@@ -224,6 +325,12 @@ pub fn rehide_taskbar() {
 /// A megjelenítést ellenőrizzük, és szükség esetén megismételjük.
 pub fn restore_taskbar(original_state: u32) {
     set_taskbar_state(original_state);
+    // a további képernyők tálcái
+    for tb in secondary_taskbars() {
+        unsafe {
+            let _ = ShowWindow(tb, SW_SHOW);
+        }
+    }
     let Some(tb) = taskbar_hwnd() else {
         return;
     };

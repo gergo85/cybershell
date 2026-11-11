@@ -49,6 +49,21 @@ pub fn memory() -> Option<(u64, u64)> {
     Some((m.ullTotalPhys.saturating_sub(m.ullAvailPhys), m.ullTotalPhys))
 }
 
+/// Akkumulátor: None, ha a gépben nincs (asztali gép). Egyébként (töltöttség %, tölt-e).
+pub fn battery() -> Option<(Option<u8>, bool)> {
+    use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
+    let mut s = SYSTEM_POWER_STATUS::default();
+    unsafe { GetSystemPowerStatus(&mut s).ok()? };
+    // 128: nincs akkumulátor, 255: ismeretlen állapot
+    if s.BatteryFlag == 255 || s.BatteryFlag & 128 != 0 {
+        return None;
+    }
+    let pct = (s.BatteryLifePercent <= 100).then_some(s.BatteryLifePercent);
+    // 8: töltés folyamatban; hálózaton, teli akkumulátornál is „töltőn” jelezzük
+    let charging = s.BatteryFlag & 8 != 0 || s.ACLineStatus == 1;
+    Some((pct, charging))
+}
+
 /// Főkapcsoló-műveletek.
 pub fn power(action: &str) -> Result<(), String> {
     match action {
@@ -216,4 +231,51 @@ fn resolve_lnk(file: &str) -> Option<(String, String)> {
         let args = String::from_utf16_lossy(&args).trim_end_matches('\0').to_string();
         Some((target, args))
     }
+}
+
+// ---- Hangerő (a Windows alapértelmezett lejátszóeszköze) ----
+
+/// Az alapértelmezett lejátszóeszköz hangerő-vezérlője (Core Audio).
+pub struct Volume(windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume);
+
+impl Volume {
+    /// A mostani alapértelmezett eszköz. Ha az eszköz közben megváltozik (pl. fejhallgató),
+    /// a hívó egy idő után újat kér.
+    pub fn open() -> Option<Volume> {
+        use windows::Win32::Media::Audio::{eConsole, eRender, IMMDeviceEnumerator, MMDeviceEnumerator};
+        use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_ALL};
+        unsafe {
+            let en: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).ok()?;
+            let dev = en.GetDefaultAudioEndpoint(eRender, eConsole).ok()?;
+            dev.Activate(CLSCTX_ALL, None).ok().map(Volume)
+        }
+    }
+
+    /// Hangerő százalékban és a némítás.
+    pub fn get(&self) -> Option<(u8, bool)> {
+        unsafe {
+            let v = self.0.GetMasterVolumeLevelScalar().ok()?;
+            let m = self.0.GetMute().ok()?.as_bool();
+            Some(((v * 100.0).round().clamp(0.0, 100.0) as u8, m))
+        }
+    }
+
+    pub fn set(&self, pct: u8) -> bool {
+        unsafe {
+            // hangerő állításakor a némítást is feloldjuk (ahogy a Windows saját csúszkája)
+            let _ = self.0.SetMute(false, std::ptr::null());
+            self.0.SetMasterVolumeLevelScalar(pct.min(100) as f32 / 100.0, std::ptr::null()).is_ok()
+        }
+    }
+
+    pub fn set_mute(&self, on: bool) -> bool {
+        unsafe { self.0.SetMute(on, std::ptr::null()).is_ok() }
+    }
+}
+
+/// A Windows felületének nyelve: magyar esetén "hu", minden más esetben "en".
+pub fn system_language() -> &'static str {
+    let id = unsafe { windows::Win32::Globalization::GetUserDefaultUILanguage() };
+    // az elsődleges nyelv az alsó 10 bit; a magyar: LANG_HUNGARIAN = 0x0E
+    if id & 0x3ff == 0x0e { "hu" } else { "en" }
 }

@@ -28,7 +28,6 @@ use windows::Win32::System::Diagnostics::Debug::MessageBeep;
 use windows::Win32::System::Ole::OleInitialize;
 use windows::Win32::Foundation::CloseHandle;
 use windows::Win32::System::Threading::{CreateMutexW, OpenProcess, WaitForSingleObject, INFINITE, PROCESS_SYNCHRONIZE};
-use windows::Win32::UI::HiDpi::GetDpiForWindow;
 use windows::Win32::UI::Input::KeyboardAndMouse::{RegisterHotKey, UnregisterHotKey, MOD_ALT, MOD_CONTROL, MOD_NOREPEAT};
 use windows::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass, ABN_FULLSCREENAPP, ABN_POSCHANGED};
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -62,11 +61,12 @@ enum UserEvent {
     Ipc(usize, String),
     Reposition,
     ShellRestarted,
-    Fullscreen(bool),
+    /// Teljes képernyős program nyílt vagy zárult azon a képernyőn, ahol a sáv (hwnd) van.
+    Fullscreen(isize, bool),
     Hotkey(i32),
     Usage(String),
-    /// Fájlhúzás a bal sáv fölött: fázis ("over", "drop", "leave"), pozíció, fájlok.
-    Drag(&'static str, i32, i32, Vec<String>),
+    /// Fájlhúzás az ikonsáv fölött: sáv, fázis ("over", "drop", "leave"), pozíció, fájlok.
+    Drag(usize, &'static str, i32, i32, Vec<String>),
     /// A claude.ai ablak üzenete (használati adat vagy belépés szükséges).
     ClaudeWeb(String),
     /// A claude.ai ablakban betöltődött egy oldal.
@@ -75,7 +75,30 @@ enum UserEvent {
     SettingsIpc(String),
     /// Az ablakelőnézet üzenete.
     PeekIpc(String),
+    /// A részletes időjárás oldalpaneljének üzenete.
+    FlyIpc(String),
+    /// A naptárak letöltésének eredménye (háttérszálról).
+    CalendarData(String),
 }
+
+/// Részletes időjárás: az információs panel mellett kinyíló oldalpanel.
+struct FlyWin {
+    window: Window,
+    webview: WebView,
+    hwnd: HWND,
+    visible: bool,
+    /// Mikor nyílt meg (a fókuszvesztést csak egy kis idő után figyeljük).
+    shown_at: Instant,
+    /// Mikor zárult be fókuszvesztés miatt (az időjárásra kattintás ne nyissa újra rögtön).
+    hidden_at: Option<Instant>,
+    /// Mit mutat: "weather" vagy "calendar", és melyik sáv mellett nyílt meg.
+    kind: &'static str,
+    bar: usize,
+}
+
+/// Az oldalpanel mérete CSS-pixelben.
+const FLY_W: f64 = 380.0;
+const FLY_H: f64 = 640.0;
 
 /// A teljes képernyős beállítások ablaka.
 struct SettingsWin {
@@ -140,10 +163,33 @@ fn peek_url(cfg: &Config) -> String {
     format!("cyberhub://localhost/hub.html?part=peek&lang={}", cfg.language)
 }
 
+fn fly_url(cfg: &Config) -> String {
+    format!("cyberhub://localhost/hub.html?part=fly&lang={}", cfg.language)
+}
+
+/// Egy már futó felület újratöltéséhez: a wry csak az első betöltésnél (`with_url`) írja át
+/// a saját protokollt a WebView2 által ismert alakra, a `load_url`-nél nem. A cyberhub://
+/// címre navigálás így csendben elmaradna (ezért nem működött pl. a panelcsere).
+fn nav_url(url: &str) -> String {
+    match url.strip_prefix("cyberhub://localhost/") {
+        Some(rest) => format!("http://cyberhub.localhost/{rest}"),
+        None => url.to_string(),
+    }
+}
+
+/// A program verziója a beállítások számára („1.2.0” → „v1.2”).
+fn version_label() -> String {
+    let v = env!("CARGO_PKG_VERSION");
+    format!("v{}", v.strip_suffix(".0").unwrap_or(v))
+}
+
 /// A claude.ai ablak üresjárati oldala: könnyű, de a claude.ai-hoz tartozik,
 /// így innen elérhetők a saját fiókod adatai (a sütik a CyberHub saját böngészőprofiljában vannak).
 const CLAUDE_IDLE_URL: &str = "https://claude.ai/robots.txt";
 const CLAUDE_LOGIN_URL: &str = "https://claude.ai/login";
+/// A teljes claude.ai alkalmazás: ha a munkamenet „kötése” (lásd `ClaudeWeb::revived`)
+/// hosszabb kikapcsolás alatt lejárt, ennek betöltése megújítja.
+const CLAUDE_APP_URL: &str = "https://claude.ai/new";
 
 /// A claude.ai oldalon futó lekérdezés: a bejelentkezett fiók szervezete, majd annak
 /// használati adatai. Ugyanazt az adatot kéri le, amit a claude.ai beállításai is mutatnak.
@@ -178,6 +224,16 @@ struct ClaudeWeb {
     ok: Option<(Instant, String)>,
     /// A belépés sütijeit ebben a futásban már tartóssá tettük-e.
     persisted: bool,
+    /// A claude.ai a belépést az eszközhöz köti (`__Host-sessionBinding`, néhány percig
+    /// érvényes, futás közben folyamatosan megújul). Ha a program hosszabb ideig nem futott,
+    /// a kötés lejár, és a puszta lekérdezés „nincs belépve” választ kap, pedig a belépés
+    /// (sessionKey) még érvényes. Ilyenkor egyszer betöltjük a teljes claude.ai oldalt,
+    /// ami megújítja a kötést, és csak ha ezután sem megy, kérünk újra belépést.
+    revived: bool,
+    /// Mit mondott legutóbb a claude.ai: "pending" (még nem válaszolt), "ok", "login"
+    /// (valóban nincs belépve) vagy "error" (nem érhető el, pl. induláskor még nincs hálózat).
+    /// Belépést csak "login" esetén kérünk.
+    state: &'static str,
 }
 
 /// A claude.ai munkamenet-sütijeit (amelyek a program bezárásakor elvesznének)
@@ -354,7 +410,7 @@ unsafe extern "system" fn subclass_proc(
     if msg == appbar::CALLBACK_MSG {
         match wp.0 as u32 {
             ABN_POSCHANGED => send(UserEvent::Reposition),
-            ABN_FULLSCREENAPP => send(UserEvent::Fullscreen(lp.0 != 0)),
+            ABN_FULLSCREENAPP => send(UserEvent::Fullscreen(hwnd.0 as isize, lp.0 != 0)),
             _ => {}
         }
         return LRESULT(0);
@@ -383,6 +439,10 @@ unsafe extern "system" fn subclass_proc(
 
 struct Bar {
     edge: Edge,
+    /// Melyik képernyőn van (0 = elsődleges); képernyőnként négy sáv.
+    mon: usize,
+    /// A képernyő DPI-szorzója (CSS-pixel → fizikai pixel).
+    scale: f64,
     /// A betöltött felület: "left" (ikonsáv), "right" (információs panel), "top", "bottom".
     part: &'static str,
     window: Window,
@@ -407,10 +467,13 @@ struct Hub {
     last_fg: Option<HWND>,
     last_state: String,
     pending: Option<Pending>,
+    /// Hány képernyőn kellene sávcsoport (ha eltér a meglévőtől, a fő ciklus újraépíti).
+    want_groups: usize,
     /// Ha mi rejtettük el a tálcát: az eredeti állapota.
     orig_taskbar: Option<u32>,
     want_hidden_taskbar: bool,
-    fullscreen: bool,
+    /// Azok a képernyők, ahol épp teljes képernyős program fut.
+    fullscreen: HashSet<usize>,
     scale: f64,
     suppress_until: Instant,
     relayout_pending: bool,
@@ -442,6 +505,18 @@ struct Hub {
     /// Az ablakok első észlelésének sorrendje (az előnézet ebben a sorrendben mutatja őket).
     seen: HashMap<isize, u64>,
     seen_seq: u64,
+    fly: Option<FlyWin>,
+    /// Az akkumulátor legutóbb elküldött állapota és a következő ellenőrzés ideje.
+    last_power: String,
+    next_power: Instant,
+    /// A hangerő-vezérlő (percenként újranyitjuk, ha közben másik eszköz lett az alapértelmezett),
+    /// és a felületnek legutóbb küldött állapot.
+    volume: Option<(Instant, sys::Volume)>,
+    last_volume: String,
+    next_volume: Instant,
+    /// A naptárak legutóbbi letöltése (ideje és tartalma), illetve folyamatban van-e.
+    cal_cache: Option<(Instant, String)>,
+    cal_busy: bool,
 }
 
 /// Ezek a rendszerfolyamatok ablakai ne jelenjenek meg a futó programok között.
@@ -514,8 +589,21 @@ impl Hub {
         }
     }
 
+    /// Az elsődleges képernyő adott szélén lévő sáv.
     fn bar(&self, edge: Edge) -> Option<&Bar> {
-        self.bars.iter().find(|b| b.edge == edge)
+        self.bars.iter().find(|b| b.edge == edge && b.mon == 0)
+    }
+
+    /// Ugyanazon a képernyőn lévő, adott szélű sáv.
+    fn bar_on(&self, mon: usize, edge: Edge) -> Option<&Bar> {
+        self.bars.iter().find(|b| b.edge == edge && b.mon == mon)
+    }
+
+    /// Üzenet egyetlen sáv felületének.
+    fn eval_bar(&self, idx: usize, payload: &str) {
+        if let Some(b) = self.bars.get(idx) {
+            let _ = b.webview.evaluate_script(&format!("window.hub&&window.hub.receive({payload})"));
+        }
     }
 
     /// A felület nyelvének megfelelő szöveg.
@@ -548,46 +636,68 @@ impl Hub {
         if self.bars.is_empty() {
             return;
         }
-        let (mon, _) = appbar::primary_monitor();
-        let mut base = mon;
-        if !self.want_hidden_taskbar {
-            if let Some((edge, rc)) = appbar::taskbar_reserved() {
-                match edge {
-                    Edge::Bottom => base.bottom = rc.top,
-                    Edge::Top => base.top = rc.bottom,
-                    Edge::Left => base.left = rc.right,
-                    Edge::Right => base.right = rc.left,
-                }
-            }
+        let mons = appbar::monitors();
+        let want = if self.cfg.all_monitors { mons.len().max(1) } else { 1 };
+        if want != self.want_groups {
+            log(format!("képernyők: {} (sávcsoport kell: {want})", mons.len()));
+            self.want_groups = want;
         }
-        let dpi = unsafe { GetDpiForWindow(self.bars[0].hwnd) }.max(96);
-        let scale = dpi as f64 / 96.0;
-        self.scale = scale;
-        let px = |v: u32| ((v as f64) * scale).round() as i32;
-
-        // A bal és a jobb panel teljes magasságú, a felső és alsó keret a kettő között fut.
+        let groups = self.bars.len() / EDGES.len();
         let mut plan: Vec<(usize, RECT, i32)> = Vec::new();
-        let mut left_rc = RECT { left: base.left, top: base.top, right: base.left, bottom: base.bottom };
-        let mut right_rc = RECT { left: base.right, top: base.top, right: base.right, bottom: base.bottom };
-
-        for (i, edge) in EDGES.iter().enumerate() {
-            let thick = px(self.thickness(*edge));
-            let hwnd = self.bars[i].hwnd;
-            let want = match edge {
-                Edge::Left => RECT { left: base.left, top: base.top, right: base.left + thick, bottom: base.bottom },
-                Edge::Right => RECT { left: base.right - thick, top: base.top, right: base.right, bottom: base.bottom },
-                Edge::Top => RECT { left: left_rc.right, top: base.top, right: right_rc.left, bottom: base.top + thick },
-                Edge::Bottom => {
-                    RECT { left: left_rc.right, top: base.bottom - thick, right: right_rc.left, bottom: base.bottom }
+        for g in 0..groups {
+            // a már nem létező képernyő sávjai a következő újraépítésig rejtve maradnak
+            let m = match mons.get(g) {
+                Some(m) => *m,
+                None if g == 0 => appbar::Monitor { rect: appbar::primary_monitor().0, primary: true, dpi: 96 },
+                None => {
+                    for i in g * EDGES.len()..(g + 1) * EDGES.len() {
+                        plan.push((i, RECT::default(), 0));
+                    }
+                    continue;
                 }
             };
-            let rc = if thick > 0 && self.bars[i].registered { appbar::query(hwnd, *edge, want, thick) } else { want };
-            match edge {
-                Edge::Left => left_rc = rc,
-                Edge::Right => right_rc = rc,
-                _ => {}
+            let mut base = m.rect;
+            if !self.want_hidden_taskbar {
+                let tb = if m.primary { appbar::taskbar_reserved() } else { appbar::secondary_taskbar_on(m.rect) };
+                if let Some((edge, rc)) = tb {
+                    match edge {
+                        Edge::Bottom => base.bottom = rc.top,
+                        Edge::Top => base.top = rc.bottom,
+                        Edge::Left => base.left = rc.right,
+                        Edge::Right => base.right = rc.left,
+                    }
+                }
             }
-            plan.push((i, rc, thick));
+            let scale = m.dpi as f64 / 96.0;
+            if g == 0 {
+                self.scale = scale;
+            }
+            let px = |v: u32| ((v as f64) * scale).round() as i32;
+
+            // A bal és a jobb panel teljes magasságú, a felső és alsó keret a kettő között fut.
+            let mut left_rc = RECT { left: base.left, top: base.top, right: base.left, bottom: base.bottom };
+            let mut right_rc = RECT { left: base.right, top: base.top, right: base.right, bottom: base.bottom };
+            for (k, edge) in EDGES.iter().enumerate() {
+                let i = g * EDGES.len() + k;
+                self.bars[i].scale = scale;
+                let thick = px(self.thickness(*edge));
+                let hwnd = self.bars[i].hwnd;
+                let want = match edge {
+                    Edge::Left => RECT { left: base.left, top: base.top, right: base.left + thick, bottom: base.bottom },
+                    Edge::Right => RECT { left: base.right - thick, top: base.top, right: base.right, bottom: base.bottom },
+                    Edge::Top => RECT { left: left_rc.right, top: base.top, right: right_rc.left, bottom: base.top + thick },
+                    Edge::Bottom => {
+                        RECT { left: left_rc.right, top: base.bottom - thick, right: right_rc.left, bottom: base.bottom }
+                    }
+                };
+                let rc = if thick > 0 && self.bars[i].registered { appbar::query(hwnd, *edge, want, thick) } else { want };
+                match edge {
+                    Edge::Left => left_rc = rc,
+                    Edge::Right => right_rc = rc,
+                    _ => {}
+                }
+                plan.push((i, rc, thick));
+            }
         }
 
         let changed = plan.iter().any(|(i, rc, _)| self.bars[*i].rect != *rc);
@@ -612,16 +722,17 @@ impl Hub {
             }
             bar.rect = appbar::set(bar.hwnd, bar.edge, rc);
             log(format!(
-                "sáv {}: {},{} – {},{}",
+                "sáv {} #{}: {},{} – {},{}",
                 bar.edge.name(),
+                bar.mon,
                 bar.rect.left,
                 bar.rect.top,
                 bar.rect.right,
                 bar.rect.bottom
             ));
         }
-        if self.fullscreen {
-            self.set_fullscreen(true);
+        for m in self.fullscreen.clone() {
+            self.apply_fullscreen(m, true);
         }
         let mut work = RECT::default();
         unsafe {
@@ -633,11 +744,53 @@ impl Hub {
             );
         }
         log(format!(
-            "munkaterület: {},{} – {},{} (DPI {dpi})",
-            work.left, work.top, work.right, work.bottom
+            "munkaterület: {},{} – {},{} (DPI-szorzó {:.2})",
+            work.left, work.top, work.right, work.bottom, self.scale
         ));
         self.suppress_until = Instant::now() + Duration::from_millis(400);
         self.save_state();
+    }
+
+    /// Kell-e a sávcsoportokat újraépíteni (képernyő került be vagy ki).
+    fn needs_rebuild(&self) -> bool {
+        !self.bars.is_empty() && self.want_groups != self.bars.len() / EDGES.len()
+    }
+
+    /// A sávcsoportok számát a képernyőkhöz igazítja (a fő ciklusból, ahol ablak hozható létre).
+    fn rebuild_bars(&mut self, target: &tao::event_loop::EventLoopWindowTarget<UserEvent>, web_context: &mut WebContext, ui_dir: &Path) {
+        let want = self.want_groups.max(1);
+        let have = self.bars.len() / EDGES.len();
+        log(format!("sávcsoportok: {have} → {want}"));
+        self.peek_hide();
+        self.fly_hide(false);
+        if want < have {
+            for b in self.bars.drain(want * EDGES.len()..) {
+                if b.registered {
+                    appbar::unregister(b.hwnd);
+                }
+                unsafe {
+                    let _ = ShowWindow(b.hwnd, SW_HIDE);
+                }
+            }
+            self.fullscreen.retain(|m| *m < want);
+        } else {
+            for mon in have..want {
+                for edge in EDGES {
+                    let idx = self.bars.len();
+                    let b = make_bar(target, web_context, ui_dir, &self.cfg, edge, idx, mon);
+                    self.bars.push(b);
+                }
+            }
+        }
+        self.layout(true);
+        for b in &self.bars {
+            if b.registered {
+                unsafe {
+                    let _ = ShowWindow(b.hwnd, SW_SHOWNOACTIVATE);
+                }
+            }
+        }
+        self.last_state.clear();
     }
 
     fn request_layout(&mut self) {
@@ -648,12 +801,24 @@ impl Hub {
         }
     }
 
-    fn set_fullscreen(&mut self, on: bool) {
-        self.fullscreen = on;
-        if on {
-            self.peek_hide();
+    /// Teljes képernyős program a sáv (hwnd) képernyőjén: ott a sávok hátrébb kerülnek.
+    fn set_fullscreen(&mut self, hwnd: isize, on: bool) {
+        let Some(mon) = self.bars.iter().find(|b| b.hwnd.0 as isize == hwnd).map(|b| b.mon) else { return };
+        if on == self.fullscreen.contains(&mon) {
+            return;
         }
-        for b in &self.bars {
+        if on {
+            self.fullscreen.insert(mon);
+            self.peek_hide();
+            self.fly_hide(false);
+        } else {
+            self.fullscreen.remove(&mon);
+        }
+        self.apply_fullscreen(mon, on);
+    }
+
+    fn apply_fullscreen(&self, mon: usize, on: bool) {
+        for b in self.bars.iter().filter(|b| b.mon == mon) {
             unsafe {
                 if on {
                     let _ = SetWindowPos(b.hwnd, Some(HWND_NOTOPMOST), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
@@ -674,8 +839,9 @@ impl Hub {
         }
     }
 
+    /// Üzenet minden képernyő adott szélű sávjának.
     fn eval(&self, edge: Edge, payload: &serde_json::Value) {
-        if let Some(b) = self.bar(edge) {
+        for b in self.bars.iter().filter(|b| b.edge == edge) {
             let _ = b.webview.evaluate_script(&format!("window.hub&&window.hub.receive({payload})"));
         }
     }
@@ -728,15 +894,17 @@ impl Hub {
             Vec::new()
         };
         // A sávok valós mérete CSS-pixelben (a kerekítés miatt eltérhet a beállítottól).
+        let mon = self.bars[idx].mon;
+        let scale = self.bars[idx].scale.max(0.5);
         let size = |e: Edge| -> f64 {
-            self.bar(e)
+            self.bar_on(mon, e)
                 .filter(|b| b.registered)
                 .map(|b| match e {
                     Edge::Left | Edge::Right => (b.rect.right - b.rect.left) as f64,
                     _ => (b.rect.bottom - b.rect.top) as f64,
                 })
                 .unwrap_or(0.0)
-                / self.scale
+                / scale
         };
         let payload = json!({
             "type": "init",
@@ -750,17 +918,23 @@ impl Hub {
             "session": self.session,
             "autostart": autostart::is_enabled(),
             "weather": c.weather,
+            "language": c.language,
         });
-        self.eval(edge, &payload);
+        let _ = edge;
+        self.eval_bar(idx, &payload.to_string());
         if part == "left" {
             self.last_state.clear();
             self.poll();
         }
         if part == "right" {
+            self.send_power(true);
+            self.send_volume(true);
             if let Some(u) = &self.last_usage {
-                if let Some(b) = self.bar(edge) {
-                    let _ = b.webview.evaluate_script(&format!("window.hub&&window.hub.receive({u})"));
-                }
+                self.eval_bar(idx, u);
+            }
+            // újratöltés (pl. panelcsere) után is látszódjon, hogy a beállítások nyitva vannak
+            if self.settings.as_ref().is_some_and(|s| s.visible) {
+                self.eval_bar(idx, &json!({ "type": "settings-open", "on": true }).to_string());
             }
         }
     }
@@ -795,11 +969,15 @@ impl Hub {
             p
         } else if let Some(t) = self.thread_usage.as_ref().filter(|t| t["status"] == "ok") {
             t.to_string()
+        } else if let Some(state) = self.claude.as_ref().map(|c| c.state).filter(|s| *s != "login") {
+            // a claude.ai még nem válaszolt, vagy nem érhető el: ez nem kijelentkezés
+            json!({ "type": "usage", "status": if state == "error" { "offline" } else { "wait" }, "plan": "" }).to_string()
         } else {
             json!({ "type": "usage", "status": "login", "plan": "" }).to_string()
         };
         if self.last_usage.as_deref() != Some(payload.as_str()) {
-            if let Some(b) = self.bar(self.info_edge()) {
+            let info = self.info_edge();
+            for b in self.bars.iter().filter(|b| b.edge == info) {
                 let _ = b.webview.evaluate_script(&format!("window.hub&&window.hub.receive({payload})"));
             }
             self.last_usage = Some(payload);
@@ -809,7 +987,13 @@ impl Hub {
     fn claude_fetch(&mut self) {
         if let Some(c) = self.claude.as_mut() {
             c.next_fetch = Instant::now() + Duration::from_secs(5 * 60);
-            let _ = c.webview.evaluate_script(CLAUDE_FETCH_JS);
+            if c.state == "error" {
+                // ha az oldal sem töltődött be (nem volt hálózat), előbb azt töltjük újra;
+                // a betöltés végén magától lekérdez
+                let _ = c.webview.load_url(CLAUDE_IDLE_URL);
+            } else {
+                let _ = c.webview.evaluate_script(CLAUDE_FETCH_JS);
+            }
         }
     }
 
@@ -833,16 +1017,33 @@ impl Hub {
     }
 
     /// A claude.ai ablakban betöltődött egy oldal: ha a claude.ai-on vagyunk, lekérdezünk.
+    /// A teljes alkalmazás betöltése után (munkamenet megújítása) hagyunk időt az oldalnak.
     fn on_claude_loaded(&mut self, url: &str) {
-        if url.starts_with("https://claude.ai/") {
-            self.claude_fetch();
+        if !url.starts_with("https://claude.ai/") {
+            return;
         }
+        if let Some(c) = self.claude.as_mut() {
+            if !c.visible && url.starts_with(CLAUDE_APP_URL) {
+                c.next_fetch = Instant::now() + Duration::from_secs(6);
+                return;
+            }
+        }
+        self.claude_fetch();
     }
 
     fn on_claude_web(&mut self, raw: &str) {
         let Ok(v) = serde_json::from_str::<serde_json::Value>(raw) else { return };
         let status = v["status"].as_str().unwrap_or("");
         if status == "skip" {
+            // nem a claude.ai oldalon vagyunk (pl. hibaoldal, mert nem volt hálózat):
+            // fél perc múlva újratöltjük az oldalt
+            if let Some(c) = self.claude.as_mut() {
+                if !c.visible && c.state != "ok" {
+                    c.state = "error";
+                    c.next_fetch = Instant::now() + Duration::from_secs(30);
+                    self.publish_usage();
+                }
+            }
             return;
         }
         log(format!(
@@ -860,6 +1061,7 @@ impl Hub {
                 }
                 if let Some(c) = self.claude.as_mut() {
                     if payload["status"] == "ok" {
+                        c.state = "ok";
                         c.ok = Some((Instant::now(), payload.to_string()));
                         if !c.persisted {
                             c.persisted = true;
@@ -870,14 +1072,41 @@ impl Hub {
                 }
                 if self.claude.as_ref().is_some_and(|c| c.visible) {
                     self.claude_hide();
+                } else if let Some(c) = self.claude.as_mut() {
+                    if c.revived {
+                        c.revived = false;
+                        log("claude.ai: a munkamenet megújult");
+                        let _ = c.webview.load_url(CLAUDE_IDLE_URL);
+                    }
+                }
+                // egy későbbi lejáratnál újra megpróbálhatjuk a megújítást
+                if let Some(c) = self.claude.as_mut() {
+                    c.revived = false;
                 }
             }
             "login" => {
                 if let Some(c) = self.claude.as_mut() {
+                    // először megpróbáljuk megújítani a munkamenetet (lásd `revived`)
+                    if !c.revived && !c.visible {
+                        c.revived = true;
+                        log("claude.ai: a munkamenet lejárt kötését a teljes oldal betöltésével megújítom");
+                        c.next_fetch = Instant::now() + Duration::from_secs(60);
+                        let _ = c.webview.load_url(CLAUDE_APP_URL);
+                        return;
+                    }
                     c.ok = None;
+                    c.state = "login";
                 }
             }
-            _ => {}
+            // nem érhető el (hálózat, szerverhiba): hamarabb újrapróbáljuk
+            _ => {
+                if let Some(c) = self.claude.as_mut() {
+                    if c.state != "ok" || c.ok.is_none() {
+                        c.state = "error";
+                    }
+                    c.next_fetch = Instant::now() + Duration::from_secs(30);
+                }
+            }
         }
         self.publish_usage();
     }
@@ -977,6 +1206,7 @@ impl Hub {
             "swap": self.cfg.swap_sides,
             "sections": self.cfg.sections,
             "language": self.cfg.language,
+            "version": version_label(),
             "apps": apps,
             "running": running,
             "theme": self.cfg.theme,
@@ -986,8 +1216,9 @@ impl Hub {
         self.settings_eval(&payload);
     }
 
-    fn settings_show(&mut self) {
+    fn settings_show(&mut self, animate: bool) {
         self.peek_hide();
+        self.fly_hide(false);
         // csak a középső munkaterületet takarja, az oldalsó panelek és a keretek látszanak
         let mon = appbar::work_area();
         if let Some(s) = self.settings.as_mut() {
@@ -1011,7 +1242,9 @@ impl Hub {
         }
         self.send_settings();
         // a felület beúszó animációval jelenik meg
-        self.settings_eval(&json!({ "type": "show" }));
+        if animate {
+            self.settings_eval(&json!({ "type": "show" }));
+        }
         self.eval(self.info_edge(), &json!({ "type": "settings-open", "on": true }));
     }
 
@@ -1046,6 +1279,13 @@ impl Hub {
             unsafe {
                 let _ = SetWindowPos(s.hwnd, Some(HWND_NOTOPMOST), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             }
+        }
+    }
+
+    /// Ha nyitva vannak a beállítások, kiúsznak (pl. egy programikonra kattintottak).
+    fn settings_dismiss(&mut self) {
+        if self.settings.as_ref().is_some_and(|s| s.visible) {
+            self.settings_eval(&json!({ "type": "hide" }));
         }
     }
 
@@ -1124,21 +1364,32 @@ impl Hub {
             "close" => self.settings_hide(),
             "language" => {
                 let lang = if msg["lang"] == "en" { "en" } else { "hu" };
-                if self.cfg.language != lang {
+                if self.cfg.language != lang || self.cfg.language_auto {
                     self.cfg.language = lang.to_string();
+                    self.cfg.language_auto = false;
                     log(format!("nyelv: {lang}"));
-                    if self.save_config() {
-                        self.reload();
-                        if let Some(s) = &self.settings {
-                            let _ = s.webview.load_url(&settings_url(&self.cfg));
-                        }
+                    // A memóriában lévő beállításból töltjük újra a felületeket (nem a fájlból
+                    // olvassuk vissza), így a mentés sikerétől függetlenül átvált a nyelv.
+                    self.save_config();
+                    self.apply_config(None);
+                    if let Some(s) = &self.settings {
+                        let url = settings_url(&self.cfg);
+                        log(format!("beállítások újratöltése: {url}"));
+                        let _ = s.webview.load_url(&nav_url(&url));
                     }
                 }
             }
             "cmd" => match msg["name"].as_str().unwrap_or("") {
+                // a config.json újraolvasása (kézi szerkesztés után) és az összes felület újratöltése;
+                // a beállítások nyitva maradnak, egy üzenet jelzi, hogy megtörtént
                 "reload" => {
-                    self.settings_hide();
-                    self.reload();
+                    if self.reload() {
+                        let t = self.tr(
+                            "A config.json újraolvasva, a felületek újratöltve.",
+                            "config.json re-read, all panels reloaded.",
+                        );
+                        self.settings_eval(&json!({ "type": "toast", "text": t }));
+                    }
                 }
                 "config" => {
                     self.settings_lower();
@@ -1233,11 +1484,12 @@ impl Hub {
 
     /// Az ikonsáv egy több ablakos program fölött időzik: elrendezzük a kisképeket,
     /// és elküldjük a felületnek. Megjelenni akkor fog, amikor a felület kirajzolta.
-    fn peek_open(&mut self, msg: &serde_json::Value) {
+    fn peek_open(&mut self, idx: usize, msg: &serde_json::Value) {
         if self.peek.is_none() {
             return;
         }
-        if self.fullscreen || self.settings.as_ref().is_some_and(|s| s.visible) {
+        let Some((bar_rect, bar_edge, bar_scale, bar_mon)) = self.bars.get(idx).map(|b| (b.rect, b.edge, b.scale, b.mon)) else { return };
+        if self.fullscreen.contains(&bar_mon) || self.settings.as_ref().is_some_and(|s| s.visible) {
             self.peek_hide();
             return;
         }
@@ -1247,10 +1499,9 @@ impl Hub {
             self.peek_hide();
             return;
         }
-        let Some(bar_rect) = self.bar(self.icons_edge()).map(|b| b.rect) else { return };
-        let icons_left = self.icons_edge() == Edge::Left;
-        let scale = self.scale.max(0.5);
-        let work = appbar::work_area();
+        let icons_left = bar_edge == Edge::Left;
+        let scale = bar_scale.max(0.5);
+        let work = appbar::work_area_of(bar_rect);
 
         // hány kártya fér el egymás mellett, illetve egymás alatt
         let card_h = peek::TITLE_H + peek::THUMB_H;
@@ -1320,7 +1571,7 @@ impl Hub {
             }
         };
         let hwnds: Vec<isize> = mine.iter().map(|w| w.hwnd.0 as isize).collect();
-        let mut target = json!({ "y": icon_y });
+        let mut target = json!({ "y": icon_y, "bar": idx });
         if !msg["id"].is_null() {
             target["id"] = msg["id"].clone();
         }
@@ -1460,6 +1711,24 @@ impl Hub {
     /// Időzített teendők a fő ciklusban (az előnézet bezárása, újrarendezése).
     fn tick(&mut self) {
         let now = Instant::now();
+        // a részletes időjárás bezárul, ha máshova kattintanak (elveszti a fókuszt)
+        if let Some(f) = &self.fly {
+            if f.visible && now.duration_since(f.shown_at) > Duration::from_millis(400) {
+                let fg = unsafe { GetForegroundWindow() };
+                if fg != f.hwnd {
+                    self.fly_hide(true);
+                }
+            }
+        }
+        if now >= self.next_power {
+            self.next_power = now + Duration::from_secs(20);
+            self.send_power(false);
+        }
+        // a hangerőt a billentyűzet vagy más program is állíthatja: gyakran ránézünk
+        if now >= self.next_volume {
+            self.next_volume = now + Duration::from_millis(600);
+            self.send_volume(false);
+        }
         let Some(pk) = self.peek.as_ref() else { return };
         if pk.hide_at.is_some_and(|t| now >= t) {
             self.peek_hide();
@@ -1468,16 +1737,250 @@ impl Hub {
             if let Some(pk) = self.peek.as_mut() {
                 pk.refresh_at = None;
             }
-            self.peek_open(&target);
+            let idx = target["bar"].as_u64().unwrap_or(0) as usize;
+            self.peek_open(idx, &target);
         }
     }
 
     /// A legközelebbi időzített teendő (ennyit várhat a fő ciklus).
     fn next_deadline(&self) -> Option<Instant> {
-        let pk = self.peek.as_ref()?;
-        match (pk.hide_at, pk.refresh_at) {
-            (Some(a), Some(b)) => Some(a.min(b)),
-            (a, b) => a.or(b),
+        let fly = self.fly.as_ref().filter(|f| f.visible).map(|_| Instant::now() + Duration::from_millis(150));
+        let pk = self.peek.as_ref();
+        [fly, pk.and_then(|p| p.hide_at), pk.and_then(|p| p.refresh_at)].into_iter().flatten().min()
+    }
+
+    // ---- Laptop: akkumulátor ----
+
+    /// Az akkumulátor állapota az információs panelnek (csak változáskor, vagy ha kérik).
+    fn volume_ctl(&mut self) -> Option<&sys::Volume> {
+        if self.volume.as_ref().is_none_or(|(at, _)| at.elapsed() > Duration::from_secs(60)) {
+            self.volume = sys::Volume::open().map(|v| (Instant::now(), v));
+        }
+        self.volume.as_ref().map(|(_, v)| v)
+    }
+
+    fn send_volume(&mut self, force: bool) {
+        let state = self.volume_ctl().and_then(|v| v.get());
+        if state.is_none() {
+            // az eszköz megszűnhetett: legközelebb újranyitjuk
+            self.volume = None;
+        }
+        let payload = match state {
+            Some((pct, muted)) => json!({ "type": "volume", "ok": true, "pct": pct, "muted": muted }),
+            None => json!({ "type": "volume", "ok": false }),
+        };
+        let s = payload.to_string();
+        if force || s != self.last_volume {
+            self.last_volume = s;
+            self.eval(self.info_edge(), &payload);
+        }
+    }
+
+    fn send_power(&mut self, force: bool) {
+        let payload = match sys::battery() {
+            Some((pct, charging)) => json!({ "type": "power", "laptop": true, "pct": pct, "charging": charging }),
+            None => json!({ "type": "power", "laptop": false }),
+        };
+        let s = payload.to_string();
+        if force || s != self.last_power {
+            self.last_power = s;
+            self.eval(self.info_edge(), &payload);
+        }
+    }
+
+    // ---- Részletes időjárás (oldalpanel) ----
+
+    fn fly_eval(&self, payload: &serde_json::Value) {
+        if let Some(f) = &self.fly {
+            let _ = f.webview.evaluate_script(&format!("window.hub&&window.hub.receive({payload})"));
+        }
+    }
+
+    /// Az időjárásra vagy a dátumra kattintottak: a kérő panel mellett, a szekció magasságában
+    /// kinyílik az oldalpanel. Ha ugyanaz már nyitva van, bezárul.
+    fn fly_open(&mut self, idx: usize, kind: &'static str, msg: &serde_json::Value) {
+        let Some(f) = self.fly.as_ref() else { return };
+        if f.visible && f.kind == kind && f.bar == idx {
+            self.fly_hide(false);
+            return;
+        }
+        // épp most zárult be, mert erre a szekcióra kattintva elvesztette a fókuszt: ez zárás volt
+        if !f.visible && f.kind == kind && f.hidden_at.is_some_and(|t| t.elapsed() < Duration::from_millis(450)) {
+            return;
+        }
+        let Some((bar_rect, bar_edge, bar_scale, bar_mon)) = self.bars.get(idx).map(|b| (b.rect, b.edge, b.scale, b.mon)) else { return };
+        if self.fullscreen.contains(&bar_mon) {
+            return;
+        }
+        // nyitott beállítások: azok kiúsznak, az oldalpanel pedig megnyílik
+        if self.settings.as_ref().is_some_and(|s| s.visible) {
+            self.settings_eval(&json!({ "type": "hide" }));
+        }
+        let scale = bar_scale.max(0.5);
+        let work = appbar::work_area_of(bar_rect);
+        let w = (FLY_W * scale).round() as i32;
+        let h = ((FLY_H * scale).round() as i32).min(work.bottom - work.top - 12);
+        // az alja a szekció aljához igazodik, a munkaterületen belül
+        let sec_bottom = bar_rect.top + (msg["bottom"].as_f64().unwrap_or(0.0) * scale).round() as i32;
+        let top = (sec_bottom - h).clamp(work.top + 6, (work.bottom - h - 6).max(work.top));
+        let left = if bar_edge == Edge::Right { bar_rect.left - w } else { bar_rect.right };
+        self.peek_hide();
+        let Some(f) = self.fly.as_mut() else { return };
+        f.visible = true;
+        f.shown_at = Instant::now();
+        f.hidden_at = None;
+        f.kind = kind;
+        f.bar = idx;
+        unsafe {
+            let _ = SetWindowPos(f.hwnd, Some(HWND_TOPMOST), left, top, w, h, windows::Win32::UI::WindowsAndMessaging::SWP_SHOWWINDOW);
+            let _ = windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow(f.hwnd);
+        }
+        log(format!("oldalpanel megnyitva: {kind}"));
+        let payload = if kind == "calendar" {
+            json!({ "type": "calendar-open", "feeds": self.calendar_feed_list(), "theme": self.cfg.theme, "language": self.cfg.language })
+        } else {
+            json!({ "type": "weather-open", "weather": self.cfg.weather, "theme": self.cfg.theme, "language": self.cfg.language })
+        };
+        self.fly_eval(&payload);
+        self.eval(self.info_edge(), &json!({ "type": "fly-state", "kind": kind, "open": true }));
+    }
+
+    fn fly_hide(&mut self, lost_focus: bool) {
+        let Some(f) = self.fly.as_mut() else { return };
+        if !f.visible {
+            return;
+        }
+        f.visible = false;
+        f.hidden_at = lost_focus.then(Instant::now);
+        unsafe {
+            let _ = ShowWindow(f.hwnd, SW_HIDE);
+        }
+        self.eval(self.info_edge(), &json!({ "type": "fly-state", "open": false }));
+    }
+
+    // ---- Naptár (Google Naptár és más iCal-naptárak) ----
+
+    /// A csatolt naptárak a felületnek: név és szín (a titkos címet nem küldjük ki).
+    fn calendar_feed_list(&self) -> serde_json::Value {
+        json!(self.cfg.calendar.feeds.iter().map(|f| json!({ "name": f.name, "color": f.color })).collect::<Vec<_>>())
+    }
+
+    fn send_calendar_feeds(&self) {
+        self.fly_eval(&json!({ "type": "cal-feeds", "feeds": self.calendar_feed_list() }));
+    }
+
+    /// A naptárak letöltése háttérszálon (tíz percig a legutóbbit adjuk vissza).
+    fn calendar_fetch(&mut self, force: bool) {
+        if let Some((at, data)) = &self.cal_cache {
+            if !force && at.elapsed() < Duration::from_secs(10 * 60) {
+                self.fly_eval(&json!({ "type": "cal-data", "feeds": serde_json::from_str::<serde_json::Value>(data).unwrap_or_default() }));
+                return;
+            }
+        }
+        if self.cfg.calendar.feeds.is_empty() {
+            self.cal_cache = None;
+            self.fly_eval(&json!({ "type": "cal-data", "feeds": [] }));
+            return;
+        }
+        if self.cal_busy {
+            return;
+        }
+        self.cal_busy = true;
+        let feeds: Vec<(String, String, String)> =
+            self.cfg.calendar.feeds.iter().map(|f| (f.name.clone(), f.url.clone(), f.color.clone())).collect();
+        std::thread::spawn(move || {
+            let agent = ureq::Agent::config_builder()
+                .timeout_global(Some(Duration::from_secs(20)))
+                .build()
+                .new_agent();
+            let out: Vec<serde_json::Value> = feeds
+                .iter()
+                .map(|(name, url, color)| {
+                    let res = agent.get(url).header("User-Agent", "CyberHub").call();
+                    match res {
+                        Ok(mut r) => match r.body_mut().with_config().limit(20 * 1024 * 1024).read_to_string() {
+                            Ok(text) if text.contains("BEGIN:VCALENDAR") => {
+                                json!({ "name": name, "color": color, "ok": true, "ics": text })
+                            }
+                            Ok(_) => json!({ "name": name, "color": color, "ok": false, "error": "not-ics" }),
+                            Err(_) => json!({ "name": name, "color": color, "ok": false, "error": "read" }),
+                        },
+                        Err(ureq::Error::StatusCode(code)) => {
+                            json!({ "name": name, "color": color, "ok": false, "error": format!("HTTP {code}") })
+                        }
+                        Err(_) => json!({ "name": name, "color": color, "ok": false, "error": "offline" }),
+                    }
+                })
+                .collect();
+            send(UserEvent::CalendarData(serde_json::Value::Array(out).to_string()));
+        });
+    }
+
+    fn on_calendar_data(&mut self, raw: String) {
+        self.cal_busy = false;
+        let feeds: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
+        let summary: Vec<String> = feeds
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|f| format!("{}: {}", f["name"].as_str().unwrap_or("?"), if f["ok"] == true { "ok" } else { f["error"].as_str().unwrap_or("hiba") }))
+            .collect();
+        log(format!("naptár letöltve – {}", summary.join(", ")));
+        self.cal_cache = Some((Instant::now(), raw));
+        self.fly_eval(&json!({ "type": "cal-data", "feeds": feeds }));
+    }
+
+    /// Új naptár csatolása (Google Naptár: „Titkos cím iCal formátumban”).
+    fn calendar_add(&mut self, msg: &serde_json::Value) {
+        let mut url = msg["url"].as_str().unwrap_or("").trim().to_string();
+        if let Some(rest) = url.strip_prefix("webcal://") {
+            url = format!("https://{rest}");
+        }
+        if !url.starts_with("https://") || url.len() > 2000 {
+            self.fly_eval(&json!({ "type": "cal-error", "error": "url" }));
+            return;
+        }
+        if self.cfg.calendar.feeds.iter().any(|f| f.url == url) {
+            self.fly_eval(&json!({ "type": "cal-error", "error": "dup" }));
+            return;
+        }
+        const COLORS: [&str; 6] = ["#00e1ff", "#f3e600", "#ff2a6d", "#7ee787", "#b26bff", "#ffb02e"];
+        let name = msg["name"].as_str().map(str::trim).filter(|n| !n.is_empty()).map(|n| n.chars().take(40).collect()).unwrap_or_else(|| {
+            if url.contains("google.com") { "Google Naptár".to_string() } else { self.tr("Naptár", "Calendar") }
+        });
+        let color = COLORS[self.cfg.calendar.feeds.len() % COLORS.len()].to_string();
+        log(format!("naptár csatolva: {name}"));
+        self.cfg.calendar.feeds.push(config::CalendarFeed { name, url, color });
+        self.save_config();
+        self.cal_cache = None;
+        self.send_calendar_feeds();
+        self.calendar_fetch(true);
+    }
+
+    fn on_fly_ipc(&mut self, raw: &str) {
+        let Ok(msg) = serde_json::from_str::<serde_json::Value>(raw) else { return };
+        match msg["type"].as_str().unwrap_or("") {
+            "close" => self.fly_hide(false),
+            "cal-fetch" => self.calendar_fetch(msg["force"].as_bool().unwrap_or(false)),
+            "cal-add" => self.calendar_add(&msg),
+            "cal-remove" => {
+                let i = msg["i"].as_u64().unwrap_or(u64::MAX) as usize;
+                if i < self.cfg.calendar.feeds.len() {
+                    let f = self.cfg.calendar.feeds.remove(i);
+                    log(format!("naptár eltávolítva: {}", f.name));
+                    self.save_config();
+                    self.cal_cache = None;
+                    self.send_calendar_feeds();
+                    self.calendar_fetch(true);
+                }
+            }
+            // a Google Naptár beállításai (itt található a titkos iCal-cím)
+            "cal-help" => {
+                wintrack::shell_open("https://calendar.google.com/calendar/r/settings", "", "", false);
+                self.fly_hide(false);
+            }
+            "log" => log(format!("[időjárás] {}", msg["text"].as_str().unwrap_or(""))),
+            _ => {}
         }
     }
 
@@ -1579,6 +2082,10 @@ impl Hub {
     }
 
     fn on_ipc(&mut self, idx: usize, raw: &str) {
+        // egy közben megszűnt képernyő sávjától jövő üzenet
+        if idx >= self.bars.len() {
+            return;
+        }
         let Ok(msg) = serde_json::from_str::<serde_json::Value>(raw) else {
             return;
         };
@@ -1598,12 +2105,15 @@ impl Hub {
                 self.send_init(idx);
             }
             "launch" => {
+                self.settings_dismiss();
                 let id = msg["id"].as_u64().unwrap_or(u64::MAX) as usize;
                 let new_instance = msg["newInstance"].as_bool().unwrap_or(false);
                 self.launch(id, new_instance);
             }
             "cmd" => match msg["name"].as_str().unwrap_or("") {
-                "reload" => self.reload(),
+                "reload" => {
+                    self.reload();
+                }
                 "config" => self.open_config(),
                 "exit" => self.exit_requested = true,
                 "autostart" => self.set_autostart(msg["on"].as_bool().unwrap_or(false)),
@@ -1613,7 +2123,7 @@ impl Hub {
                     if self.settings.as_ref().is_some_and(|s| s.visible) {
                         self.settings_eval(&json!({ "type": "hide" }));
                     } else {
-                        self.settings_show();
+                        self.settings_show(true);
                     }
                 }
                 "power" => {
@@ -1623,10 +2133,42 @@ impl Hub {
                 // a Windows saját Start menüje és keresője (Win, illetve Win+S)
                 "start" => wintrack::press_keys(&[wintrack::VK_WIN]),
                 "search" => wintrack::press_keys(&[wintrack::VK_WIN, b'S']),
+                // laptop: a Windows saját Wi-Fi-listája, illetve az akkumulátor beállításai
+                "wifi" => {
+                    wintrack::shell_open("ms-availablenetworks:", "", "", false);
+                }
+                "battery" => {
+                    wintrack::shell_open("ms-settings:batterysaver", "", "", false);
+                }
                 _ => {}
             },
-            "launch-extra" => self.launch_extra(&msg),
-            "peek" => self.peek_open(&msg),
+            "weather-open" => self.fly_open(idx, "weather", &msg),
+            "calendar-open" => self.fly_open(idx, "calendar", &msg),
+            "launch-extra" => {
+                self.settings_dismiss();
+                self.launch_extra(&msg);
+            }
+            // hangerő: a jobb panel csúszkája, görgetése és némítógombja
+            "volume-set" => {
+                let pct = msg["pct"].as_f64().unwrap_or(0.0).round().clamp(0.0, 100.0) as u8;
+                if let Some(v) = self.volume_ctl() {
+                    v.set(pct);
+                }
+                self.send_volume(true);
+            }
+            "volume-mute" => {
+                let on = msg["on"].as_bool().unwrap_or(false);
+                if let Some(v) = self.volume_ctl() {
+                    v.set_mute(on);
+                }
+                self.send_volume(true);
+            }
+            // a Windows hangerőkeverője (programonkénti hangerő)
+            "volume-open" => {
+                self.settings_dismiss();
+                wintrack::shell_open("ms-settings:apps-volume", "", "", false);
+            }
+            "peek" => self.peek_open(idx, &msg),
             "peek-leave" => self.peek_leave(true),
             "drag-hover" => self.drag_hover(&msg),
             "drop-open" => self.drop_open(&msg),
@@ -1700,14 +2242,14 @@ impl Hub {
     }
 
     /// Fájlhúzás a bal sáv fölött: továbbítjuk a felületnek, az dönti el, melyik ikon fölött van.
-    fn on_drag(&mut self, phase: &str, x: i32, y: i32, paths: Vec<String>) {
+    fn on_drag(&mut self, idx: usize, phase: &str, x: i32, y: i32, paths: Vec<String>) {
         if self.peek.as_ref().is_some_and(|p| p.visible) {
             self.peek_hide();
         }
         if !paths.is_empty() {
             self.drag_paths = paths;
         }
-        self.eval(self.icons_edge(), &json!({ "type": "drag", "phase": phase, "x": x, "y": y }));
+        self.eval_bar(idx, &json!({ "type": "drag", "phase": phase, "x": x, "y": y }).to_string());
     }
 
     /// Húzás közben egy ikon fölött időzött a kurzor: az ablakát a többi fölé hozzuk.
@@ -1899,29 +2441,35 @@ impl Hub {
         if state != self.last_state {
             self.last_state = state;
             // a jobb panel is megkapja (az ott lévő appok futás-jelzéséhez)
-            for e in [Edge::Left, Edge::Right] {
-                if let Some(b) = self.bar(e) {
-                    let _ = b.webview.evaluate_script(&format!("window.hub&&window.hub.receive({})", self.last_state));
-                }
+            for b in self.bars.iter().filter(|b| matches!(b.edge, Edge::Left | Edge::Right)) {
+                let _ = b.webview.evaluate_script(&format!("window.hub&&window.hub.receive({})", self.last_state));
             }
         }
     }
 
-    fn reload(&mut self) {
-        self.peek_hide();
+    fn reload(&mut self) -> bool {
         let old_wallpaper = self.cfg.wallpaper.clone();
         match config::load(&self.cfg_path) {
             Ok(c) => {
                 self.cfg = c;
-                self.matchers = self.cfg.apps.iter().map(Matcher::new).collect();
                 log("konfiguráció újratöltve");
             }
             Err(e) => {
                 log(&e);
                 self.toast(&e);
-                return;
+                return false;
             }
         }
+        self.apply_config(Some(old_wallpaper));
+        true
+    }
+
+    /// A (frissen betöltött vagy memóriában módosított) beállítás alkalmazása: elrendezés,
+    /// a felületek újratöltése az aktuális nyelvvel és panelhelyzettel.
+    fn apply_config(&mut self, old_wallpaper: Option<String>) {
+        self.peek_hide();
+        self.fly_hide(false);
+        self.matchers = self.cfg.apps.iter().map(Matcher::new).collect();
         self.check_available();
         ICONS_RIGHT.store(self.cfg.swap_sides, Ordering::Relaxed);
         self.layout(true);
@@ -1930,13 +2478,18 @@ impl Hub {
         // a címben a nyelv és a panel helye is benne van, ezért mindig újratöltjük a címet
         for b in &mut self.bars {
             b.part = part_for(b.edge, swap);
-            let _ = b.webview.load_url(&bar_url(b.part, b.edge, &self.cfg));
+            let url = bar_url(b.part, b.edge, &self.cfg);
+            log(format!("felület újratöltése: {url}"));
+            let _ = b.webview.load_url(&nav_url(&url));
         }
         if let Some(p) = &self.peek {
-            let _ = p.webview.load_url(&peek_url(&self.cfg));
+            let _ = p.webview.load_url(&nav_url(&peek_url(&self.cfg)));
+        }
+        if let Some(f) = &self.fly {
+            let _ = f.webview.load_url(&nav_url(&fly_url(&self.cfg)));
         }
         // ha a háttérképet a fájlban írták át, beállítjuk
-        if self.cfg.wallpaper != old_wallpaper && !self.cfg.wallpaper.is_empty() {
+        if old_wallpaper.is_some_and(|w| w != self.cfg.wallpaper) && !self.cfg.wallpaper.is_empty() {
             let w = self.cfg.wallpaper.clone();
             match sys::set_wallpaper(&w) {
                 Ok(()) => log(format!("háttérkép a konfigurációból: {w}")),
@@ -1947,7 +2500,7 @@ impl Hub {
         self.last_state.clear();
         // nyitott beállításoknál (pl. panelcsere után) a munkaterület változhatott
         if self.settings.as_ref().is_some_and(|s| s.visible) {
-            self.settings_show();
+            self.settings_show(false);
         }
     }
 
@@ -1994,6 +2547,96 @@ impl Hub {
         }
         log("kilépés, minden visszaállítva");
     }
+}
+
+/// Egy sáv (ablak és felület) létrehozása az adott képernyőhöz. A helyét a `layout` adja meg.
+fn make_bar(
+    target: &tao::event_loop::EventLoopWindowTarget<UserEvent>,
+    web_context: &mut WebContext,
+    ui_dir: &Path,
+    cfg: &Config,
+    edge: Edge,
+    idx: usize,
+    mon: usize,
+) -> Bar {
+    let window = WindowBuilder::new()
+        // Az elsődleges képernyő bal sávja „CyberHub left” (erre keres a --quit és az őrfolyamat),
+        // a többi képernyőé sorszámot kap.
+        .with_title(if mon == 0 { format!("{APP_NAME} {}", edge.name()) } else { format!("{APP_NAME} {} {mon}", edge.name()) })
+        .with_decorations(false)
+        .with_resizable(false)
+        .with_always_on_top(true)
+        .with_visible(false)
+        .with_focused(false)
+        .with_skip_taskbar(true)
+        .with_undecorated_shadow(false)
+        .with_drag_and_drop(false)
+        .with_position(PhysicalPosition::new(0, 0))
+        .with_inner_size(PhysicalSize::new(64u32, 64u32))
+        .build(target)
+        .expect("ablak létrehozása");
+    let hwnd = hwnd_of(&window);
+    unsafe {
+        // Keret nélküli, eszköz típusú ablak: nem látszik az Alt+Tabban, nincs lekerekítve.
+        SetWindowLongPtrW(hwnd, GWL_STYLE, (WS_POPUP | WS_CLIPCHILDREN | WS_CLIPSIBLINGS).0 as isize);
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, (WS_EX_TOOLWINDOW | WS_EX_TOPMOST).0 as isize);
+        let pref = DWMWCP_DONOTROUND;
+        let _ = DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_WINDOW_CORNER_PREFERENCE,
+            &pref as *const _ as *const _,
+            std::mem::size_of_val(&pref) as u32,
+        );
+        let _ = SetWindowPos(hwnd, Some(HWND_TOPMOST), 0, 0, 64, 64, SWP_NOACTIVATE | SWP_FRAMECHANGED);
+        let _ = SetWindowSubclass(hwnd, Some(subclass_proc), 0x4E48, 0);
+    }
+
+    let part = part_for(edge, cfg.swap_sides);
+    let url = bar_url(part, edge, cfg);
+    let bg = (6u8, 7u8, 11u8, 255u8);
+    let dir = ui_dir.to_path_buf();
+    let page_edge = edge.name();
+    let this_edge = edge;
+    // Fájlhúzás: az ikonsávon az ikonokhoz kötjük, a többi sávon csak elnyeljük,
+    // különben a ráejtett fájl a sáv helyén nyílna meg. (A panelek felcserélhetők.)
+    let drag_handler = move |ev: wry::DragDropEvent| -> bool {
+        let icons_here = part_for(this_edge, ICONS_RIGHT.load(Ordering::Relaxed)) == "left";
+        if icons_here {
+            let to_strings = |p: Vec<PathBuf>| p.into_iter().map(|x| x.to_string_lossy().to_string()).collect();
+            match ev {
+                wry::DragDropEvent::Enter { paths, position } => {
+                    send(UserEvent::Drag(idx, "over", position.0, position.1, to_strings(paths)))
+                }
+                wry::DragDropEvent::Over { position } => {
+                    send(UserEvent::Drag(idx, "over", position.0, position.1, Vec::new()))
+                }
+                wry::DragDropEvent::Drop { paths, position } => {
+                    send(UserEvent::Drag(idx, "drop", position.0, position.1, to_strings(paths)))
+                }
+                wry::DragDropEvent::Leave => send(UserEvent::Drag(idx, "leave", 0, 0, Vec::new())),
+                _ => {}
+            }
+        }
+        true
+    };
+    let webview = WebViewBuilder::new_with_web_context(web_context)
+        .with_custom_protocol("cyberhub".into(), move |_id, req| serve(&dir, &req))
+        .with_on_page_load_handler(move |ev, url| {
+            if matches!(ev, wry::PageLoadEvent::Finished) {
+                log(format!("oldal betöltve ({page_edge}): {url}"));
+            }
+        })
+        .with_url(url)
+        .with_background_color(bg)
+        .with_devtools(cfg!(debug_assertions))
+        .with_default_context_menus(false)
+        .with_browser_accelerator_keys(false)
+        .with_ipc_handler(move |req: Request<String>| send(UserEvent::Ipc(idx, req.body().clone())))
+        .with_drag_drop_handler(drag_handler)
+        .build(&window)
+        .expect("WebView2 létrehozása");
+
+    Bar { edge, mon, scale: 1.0, part, window, webview, hwnd, rect: RECT::default(), registered: false }
 }
 
 /// Ha egy korábbi futás nem tudott rendesen kilépni, itt rendbe tesszük a képernyőt.
@@ -2069,6 +2712,7 @@ fn emergency_cleanup() {
 
 fn default_config() -> Config {
     let mut c = Config::default();
+    c.resolve_language();
     c.apps = vec![config::AppEntry {
         name: "Fájlok".into(),
         path: "explorer.exe".into(),
@@ -2170,10 +2814,23 @@ fn main() {
 
     // Az előző futás naplóját megtartjuk (cyberhub.prev.log), hogy egy sikertelen
     // indítás nyoma ne vesszen el.
+    // Ha a fájl épp foglalt (pl. rendszerinduláskor a vírusirtó vizsgálja), néhányszor
+    // újrapróbáljuk, végső esetben időbélyeges nevű naplóba írunk – napló mindig legyen.
     let log_path = data_dir().join("cyberhub.log");
-    let _ = std::fs::rename(&log_path, data_dir().join("cyberhub.prev.log"));
-    if let Ok(f) = std::fs::File::create(&log_path) {
-        *LOG.lock().unwrap() = Some(f);
+    for attempt in 0..10 {
+        let _ = std::fs::rename(&log_path, data_dir().join("cyberhub.prev.log"));
+        if let Ok(f) = std::fs::File::create(&log_path) {
+            *LOG.lock().unwrap() = Some(f);
+            break;
+        }
+        if attempt == 9 {
+            let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+            if let Ok(f) = std::fs::File::create(data_dir().join(format!("cyberhub-{ts}.log"))) {
+                *LOG.lock().unwrap() = Some(f);
+            }
+        } else {
+            std::thread::sleep(Duration::from_millis(300));
+        }
     }
     let started_at = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     log(format!("indulás (unix idő: {started_at}), paraméterek: {:?}", &args[1..]));
@@ -2219,7 +2876,7 @@ fn main() {
             loaded_ok = false;
             let c = default_config();
             if !cfg_path.exists() {
-                let _ = std::fs::write(&cfg_path, serde_json::to_string_pretty(&c).unwrap());
+                let _ = config::save(&cfg_path, &c);
             }
             c
         }
@@ -2228,8 +2885,15 @@ fn main() {
     // a Windows jelenlegi beállítását vesszük át. Bekapcsolt állapotban a bejegyzést
     // mindig frissítjük (aktuális exe-útvonal, az Intézőre váró indítás).
     let registered = autostart::is_enabled();
+    let mut autostart_changed = false;
     match cfg.start_with_windows {
         None => cfg.start_with_windows = Some(registered),
+        // a Windowsban (Feladatkezelő) kikapcsolták: ezt tiszteletben tartjuk
+        Some(true) if autostart::disabled_in_windows() => {
+            log("indítás a Windowszal: a Windowsban letiltották, kikapcsolva");
+            cfg.start_with_windows = Some(false);
+            autostart_changed = true;
+        }
         Some(want) => {
             if want || registered {
                 if let Err(e) = autostart::set(want) {
@@ -2239,7 +2903,7 @@ fn main() {
         }
     }
     // A fájlba minden opció kerüljön bele (a hiányzókat alapértékkel kiegészítjük).
-    if loaded_ok && config::needs_rewrite(&cfg_path, &cfg) {
+    if loaded_ok && (autostart_changed || config::needs_rewrite(&cfg_path, &cfg)) {
         match config::save(&cfg_path, &cfg) {
             Ok(()) => log("konfigurációs fájl kiegészítve az összes opcióval"),
             Err(e) => log(e),
@@ -2268,83 +2932,13 @@ fn main() {
     let mut web_context = WebContext::new(Some(data_dir().join("WebView2")));
     let mut bars: Vec<Bar> = Vec::new();
 
-    for (idx, edge) in EDGES.iter().enumerate() {
-        let window = WindowBuilder::new()
-            .with_title(format!("{APP_NAME} {}", edge.name()))
-            .with_decorations(false)
-            .with_resizable(false)
-            .with_always_on_top(true)
-            .with_visible(false)
-            .with_focused(false)
-            .with_skip_taskbar(true)
-            .with_undecorated_shadow(false)
-            .with_drag_and_drop(false)
-            .with_position(PhysicalPosition::new(0, 0))
-            .with_inner_size(PhysicalSize::new(64u32, 64u32))
-            .build(&event_loop)
-            .expect("ablak létrehozása");
-        let hwnd = hwnd_of(&window);
-        unsafe {
-            // Keret nélküli, eszköz típusú ablak: nem látszik az Alt+Tabban, nincs lekerekítve.
-            SetWindowLongPtrW(hwnd, GWL_STYLE, (WS_POPUP | WS_CLIPCHILDREN | WS_CLIPSIBLINGS).0 as isize);
-            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, (WS_EX_TOOLWINDOW | WS_EX_TOPMOST).0 as isize);
-            let pref = DWMWCP_DONOTROUND;
-            let _ = DwmSetWindowAttribute(
-                hwnd,
-                DWMWA_WINDOW_CORNER_PREFERENCE,
-                &pref as *const _ as *const _,
-                std::mem::size_of_val(&pref) as u32,
-            );
-            let _ = SetWindowPos(hwnd, Some(HWND_TOPMOST), 0, 0, 64, 64, SWP_NOACTIVATE | SWP_FRAMECHANGED);
-            let _ = SetWindowSubclass(hwnd, Some(subclass_proc), 0x4E48, 0);
+    // képernyőnként négy sáv; elöl az elsődleges képernyőé
+    let groups = if cfg.all_monitors { appbar::monitors().len().max(1) } else { 1 };
+    for mon in 0..groups {
+        for edge in EDGES {
+            let idx = bars.len();
+            bars.push(make_bar(&event_loop, &mut web_context, &ui_dir, &cfg, edge, idx, mon));
         }
-
-        let part = part_for(*edge, cfg.swap_sides);
-        let url = bar_url(part, *edge, &cfg);
-        let bg = (6u8, 7u8, 11u8, 255u8);
-        let dir = ui_dir.clone();
-        let page_edge = edge.name();
-        let this_edge = *edge;
-        // Fájlhúzás: az ikonsávon az ikonokhoz kötjük, a többi sávon csak elnyeljük,
-        // különben a ráejtett fájl a sáv helyén nyílna meg. (A panelek felcserélhetők.)
-        let drag_handler = move |ev: wry::DragDropEvent| -> bool {
-            let icons_here = part_for(this_edge, ICONS_RIGHT.load(Ordering::Relaxed)) == "left";
-            if icons_here {
-                let to_strings = |p: Vec<PathBuf>| p.into_iter().map(|x| x.to_string_lossy().to_string()).collect();
-                match ev {
-                    wry::DragDropEvent::Enter { paths, position } => {
-                        send(UserEvent::Drag("over", position.0, position.1, to_strings(paths)))
-                    }
-                    wry::DragDropEvent::Over { position } => {
-                        send(UserEvent::Drag("over", position.0, position.1, Vec::new()))
-                    }
-                    wry::DragDropEvent::Drop { paths, position } => {
-                        send(UserEvent::Drag("drop", position.0, position.1, to_strings(paths)))
-                    }
-                    wry::DragDropEvent::Leave => send(UserEvent::Drag("leave", 0, 0, Vec::new())),
-                    _ => {}
-                }
-            }
-            true
-        };
-        let webview = WebViewBuilder::new_with_web_context(&mut web_context)
-            .with_custom_protocol("cyberhub".into(), move |_id, req| serve(&dir, &req))
-            .with_on_page_load_handler(move |ev, url| {
-                if matches!(ev, wry::PageLoadEvent::Finished) {
-                    log(format!("oldal betöltve ({page_edge}): {url}"));
-                }
-            })
-            .with_url(url)
-            .with_background_color(bg)
-            .with_devtools(cfg!(debug_assertions))
-            .with_default_context_menus(false)
-            .with_browser_accelerator_keys(false)
-            .with_ipc_handler(move |req: Request<String>| send(UserEvent::Ipc(idx, req.body().clone())))
-            .with_drag_drop_handler(drag_handler)
-            .build(&window)
-            .expect("WebView2 létrehozása");
-
-        bars.push(Bar { edge: *edge, part, window, webview, hwnd, rect: RECT::default(), registered: false });
     }
 
     // Teljes képernyős beállítások: rejtve indul, a MENÜ gombra jelenik meg.
@@ -2445,6 +3039,48 @@ fn main() {
             })
         })
     };
+    // Részletes időjárás: rejtve indul, az időjárásra kattintva nyílik ki a panel mellett.
+    let fly_win = {
+        let window = WindowBuilder::new()
+            .with_title("CyberHub – oldalpanel")
+            .with_decorations(false)
+            .with_visible(false)
+            .with_always_on_top(true)
+            .with_skip_taskbar(true)
+            .with_undecorated_shadow(false)
+            .with_drag_and_drop(false)
+            .with_inner_size(PhysicalSize::new(380u32, 560u32))
+            .build(&event_loop)
+            .ok();
+        window.and_then(|window| {
+            let hwnd = hwnd_of(&window);
+            unsafe {
+                SetWindowLongPtrW(hwnd, GWL_STYLE, (WS_POPUP | WS_CLIPCHILDREN | WS_CLIPSIBLINGS).0 as isize);
+                SetWindowLongPtrW(hwnd, GWL_EXSTYLE, (WS_EX_TOOLWINDOW | WS_EX_TOPMOST).0 as isize);
+                let pref = DWMWCP_DONOTROUND;
+                let _ = DwmSetWindowAttribute(
+                    hwnd,
+                    DWMWA_WINDOW_CORNER_PREFERENCE,
+                    &pref as *const _ as *const _,
+                    std::mem::size_of_val(&pref) as u32,
+                );
+            }
+            let dir = ui_dir.clone();
+            let webview = WebViewBuilder::new_with_web_context(&mut web_context)
+                .with_custom_protocol("cyberhub".into(), move |_id, req| serve(&dir, &req))
+                .with_url(fly_url(&cfg))
+                .with_background_color((6, 7, 11, 255))
+                .with_devtools(cfg!(debug_assertions))
+                .with_default_context_menus(false)
+                .with_browser_accelerator_keys(false)
+                .with_ipc_handler(|req: Request<String>| send(UserEvent::FlyIpc(req.body().clone())))
+                .with_drag_drop_handler(|_| true)
+                .build(&window)
+                .map_err(|e| log(format!("oldalpanel nem hozható létre: {e}")))
+                .ok()?;
+            Some(FlyWin { window, webview, hwnd, visible: false, shown_at: Instant::now(), hidden_at: None, kind: "weather", bar: 0 })
+        })
+    };
     ICONS_RIGHT.store(cfg.swap_sides, Ordering::Relaxed);
 
     // claude.ai ablak: rejtve indul, csak belépéskor jelenik meg. A sütik a CyberHub saját
@@ -2453,6 +3089,11 @@ fn main() {
         let (mon, _) = appbar::primary_monitor();
         let window = WindowBuilder::new()
             .with_title(if cfg.language == "en" { "CyberHub – sign in to claude.ai" } else { "CyberHub – belépés a claude.ai-ra" })
+            // a tálcán az exe saját ikonja látszódjon (assets/cyberhub.rc, 1-es azonosító)
+            .with_window_icon({
+                use tao::platform::windows::IconExtWindows;
+                tao::window::Icon::from_resource(1, None).ok()
+            })
             .with_visible(false)
             .with_inner_size(tao::dpi::LogicalSize::new(480.0, 760.0))
             .with_position(PhysicalPosition::new((mon.left + mon.right) / 2 - 300, (mon.top + mon.bottom) / 2 - 470))
@@ -2484,6 +3125,8 @@ fn main() {
                 next_fetch: Instant::now() + Duration::from_secs(300),
                 ok: None,
                 persisted: false,
+                revived: false,
+                state: "pending",
             })
         })
     } else {
@@ -2519,7 +3162,8 @@ fn main() {
         pending: None,
         orig_taskbar,
         want_hidden_taskbar: hide_taskbar,
-        fullscreen: false,
+        fullscreen: HashSet::new(),
+        want_groups: 0,
         scale: 1.0,
         suppress_until: Instant::now(),
         relayout_pending: false,
@@ -2542,6 +3186,14 @@ fn main() {
         peek: peek_win,
         seen: HashMap::new(),
         seen_seq: 0,
+        fly: fly_win,
+        last_power: String::new(),
+        next_power: Instant::now(),
+        volume: None,
+        last_volume: String::new(),
+        next_volume: Instant::now(),
+        cal_cache: None,
+        cal_busy: false,
     };
     hub.check_available();
     // Bejelentkezéskori indulásnál a „géppel induló” programokat is elindítjuk.
@@ -2581,23 +3233,26 @@ fn main() {
 
     let started = Instant::now();
     let mut next_poll = Instant::now();
-    event_loop.run(move |event, _target, control_flow| {
-        let _keep = &web_context;
+    event_loop.run(move |event, target, control_flow| {
         match event {
             Event::UserEvent(ev) => match ev {
                 UserEvent::Ipc(idx, msg) => hub.on_ipc(idx, &msg),
                 UserEvent::Reposition => hub.request_layout(),
                 UserEvent::ShellRestarted => hub.on_shell_restarted(),
-                UserEvent::Fullscreen(on) => hub.set_fullscreen(on),
+                UserEvent::Fullscreen(h, on) => hub.set_fullscreen(h, on),
                 UserEvent::Hotkey(HOTKEY_EXIT) => hub.exit_requested = true,
-                UserEvent::Hotkey(HOTKEY_RELOAD) => hub.reload(),
+                UserEvent::Hotkey(HOTKEY_RELOAD) => {
+                    hub.reload();
+                }
                 UserEvent::Hotkey(_) => {}
                 UserEvent::Usage(payload) => hub.on_usage(payload),
-                UserEvent::Drag(phase, x, y, paths) => hub.on_drag(phase, x, y, paths),
+                UserEvent::Drag(idx, phase, x, y, paths) => hub.on_drag(idx, phase, x, y, paths),
                 UserEvent::ClaudeWeb(raw) => hub.on_claude_web(&raw),
                 UserEvent::ClaudeLoaded(url) => hub.on_claude_loaded(&url),
                 UserEvent::SettingsIpc(raw) => hub.on_settings_ipc(&raw),
                 UserEvent::PeekIpc(raw) => hub.on_peek_ipc(&raw),
+                UserEvent::FlyIpc(raw) => hub.on_fly_ipc(&raw),
+                UserEvent::CalendarData(raw) => hub.on_calendar_data(raw),
             },
             // a claude.ai ablak bezárása csak elrejti
             Event::WindowEvent { window_id, event: WindowEvent::CloseRequested, .. }
@@ -2616,7 +3271,12 @@ fn main() {
         }
         let _keep_settings = hub.settings.as_ref().map(|s| &s.window);
         let _keep_peek = hub.peek.as_ref().map(|p| &p.window);
+        let _keep_fly = hub.fly.as_ref().map(|f| &f.window);
         hub.tick();
+        // képernyő került be vagy ki: a sávcsoportokat itt (ablak létrehozására alkalmas helyen) igazítjuk
+        if hub.needs_rebuild() {
+            hub.rebuild_bars(target, &mut web_context, &ui_dir);
+        }
 
         let now = Instant::now();
         if now >= next_poll {

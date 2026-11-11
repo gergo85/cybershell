@@ -363,8 +363,6 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: squar
 /* aktivitás-visszaszámláló */
 .act-normal, .act-alert, .act-edit { display: flex; flex-direction: column; gap: 6px; }
 .act-alert, .act-edit { display: none; }
-.act.editing .act-normal { display: none; }
-.act.editing .act-edit { display: flex; }
 .act.alerting .act-normal, .act.alerting .act-edit { display: none; }
 .act.alerting .act-alert { display: flex; }
 .act-time {
@@ -424,7 +422,6 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: squar
   text-shadow: 0 0 10px var(--c-main-glow);
 }
 .w-desc { font-size: 9px; letter-spacing: .1em; color: var(--c-text); font-variation-settings: "wdth" 85, "wght" 600; line-height: 1.3; }
-.w-minmax { font: 400 9px/1.3 var(--f-mono); color: var(--c-text-dim); }
 .w-city { font: 400 9px/1 var(--f-mono); letter-spacing: .12em; color: var(--c-alt); }
 .weather.err .w-desc { color: var(--c-hot); }
 
@@ -645,14 +642,12 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: squar
 .ed-add { display: flex; gap: 20px; align-items: flex-start; margin-top: 18px; padding-top: 16px; border-top: 1px dashed color-mix(in srgb, var(--c-main) 20%, transparent); }
 .ed-add > .sbtn { flex: none; }
 .ed-running { flex: 1; min-width: 0; }
-.ed-running-title { font: 400 10px/1 var(--f-mono); letter-spacing: .14em; color: var(--c-text-dim); margin-bottom: 10px; }
 .ed-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .ed-chips .ed-none { padding: 0; }
 
 .ed-foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: auto; padding-top: 20px; }
 .ed-dirty { margin-right: auto; font: 400 11px/1 var(--f-mono); letter-spacing: .1em; color: var(--c-hot); text-transform: uppercase; }
 
-.set-toast { left: auto; right: 48px; bottom: 32px; width: 380px; font-size: 13px; padding: 10px 14px; z-index: 5; }
 
 /* ───────────── Jobb panel: szellősebb, a szekciók egyenletesen elosztva ───────────── */
 .right { justify-content: space-between; }
@@ -754,6 +749,7 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: squar
 .settings.shown .set-main { animation-delay: .08s; }
 .settings.instant .set-wrap, .settings.instant .set-card { animation: none; opacity: 1; }
 .settings.leaving .set-wrap { animation: setOut .23s ease-in both; }
+.settings.anim { overflow: hidden; }
 .settings::after {
   content: ""; position: fixed; left: 0; right: 0; top: 0; height: 2px; pointer-events: none; opacity: 0;
   background: linear-gradient(90deg, transparent, var(--c-alt), #fff, var(--c-alt), transparent);
@@ -799,7 +795,12 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: squar
 .sec-row .grip svg { width: 16px; height: 16px; }
 .sec-row .grip:hover { color: var(--c-main); background: color-mix(in srgb, var(--c-main) 14%, transparent); }
 .sec-row .sbtn { flex: 1; }
-.sec-row.dragging { opacity: .85; }
+.sec-row { position: relative; }
+.set-list.sorting .sec-row { transition: transform .18s cubic-bezier(.2, .8, .2, 1); }
+.set-list.sorting .sec-row.dragging { transition: none; z-index: 2; }
+.set-list.sorting .sec-row.settling { z-index: 2; transition: transform .16s cubic-bezier(.2, .8, .2, 1); }
+.sec-row.dragging .sbtn, .sec-row.settling .sbtn { box-shadow: 0 6px 18px rgba(0, 0, 0, .55), 0 0 10px var(--c-alt-dim); }
+.sec-row.dragging .sbtn { background: color-mix(in srgb, var(--c-alt) 12%, var(--c-bg)); }
 .sec-row.dragging .grip { cursor: grabbing; color: var(--c-bg); background: var(--c-alt); }
 .sec-row.dragging .sbtn { outline: 1px solid var(--c-alt); }
 
@@ -810,10 +811,8 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: squar
 .ib.auto:hover { background: color-mix(in srgb, var(--c-alt) 35%, transparent); color: var(--c-text); }
 .ib.auto.on:hover { background: var(--c-alt); color: var(--c-bg); }
 
-/* ───────────── Hover: rövid késleltetés és puha átmenet ─────────────
-   Az alapállapot átmenete a kilépésre, a :hover-é a belépésre vonatkozik, így az
-   egér gyors áthaladásakor nem villan fel semmi. A Bezárás gomb vár a legtöbbet. */
-:root { --hover-delay: 80ms; --hover-fade: .22s; --close-delay: .22s; }
+/* ───────────── Hover: azonnali reakció, rövid, puha átmenettel ───────────── */
+:root { --hover-delay: 0ms; --hover-fade: .12s; --close-delay: 0s; }
 .sbtn, .ib, .seg button, .run-chip, .pw, .sys-btn, .menu button, .refresh, .grip, .wall-tile,
 .ed-row, .tile, .tile-in, .label, .qtile, .qlabel, .tile img, .pk-card, .pk-x {
   transition-property: background-color, color, border-color, box-shadow, opacity, filter, outline-color;
@@ -828,7 +827,7 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: squar
 }
 .app:hover .tile svg, .app:hover .tile img, .qbtn:hover svg { animation-delay: var(--hover-delay); }
 .set-close {
-  transition: background-color .3s ease, color .3s ease;
+  transition: background-color .12s ease, color .12s ease;
 }
 .set-close:hover { transition-delay: var(--close-delay); }
 .set-close.armed { transition-delay: 0s; }
@@ -982,3 +981,372 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: squar
 .credit-by span { font: 400 10px/1 var(--f-mono); letter-spacing: .14em; color: var(--c-text-dim); text-transform: uppercase; }
 .credit-by b { font-size: 15px; letter-spacing: .04em; color: var(--c-text); font-variation-settings: "wdth" 85, "wght" 600; white-space: nowrap; }
 .settings.shown .set-side .set-card:nth-child(4) { animation-delay: .15s; }
+
+/* ───────────── v1.2: Claude – a visszaállásig hátralévő idő jobban látszik ───────────── */
+.lim-reset { font: 400 10px/1.2 var(--f-mono); letter-spacing: .02em; color: color-mix(in srgb, var(--c-alt) 70%, var(--c-text)); }
+
+/* ───────────── v1.2: időjárás – erősebb szélkijelzés, kattintásra részletek ───────────── */
+.w-wind {
+  display: flex; align-items: baseline; gap: 4px;
+  font: 400 10px/1.2 var(--f-mono); color: var(--c-text);
+}
+.w-wind b { font: 600 15px/1 var(--f-display); font-variation-settings: "wdth" 75, "wght" 650; color: var(--c-alt); }
+.w-wind span { color: var(--c-text-dim); }
+.w-arrow { display: inline-block; font-style: normal; font-size: 12px; line-height: 1; color: var(--c-alt); align-self: center; }
+.weather { position: relative; margin: -4px -4px; padding: 4px; transition: background-color .12s ease; }
+.weather:hover, .weather.open { background: color-mix(in srgb, var(--c-alt) 6%, transparent); }
+.weather:hover h3, .weather.open h3 { color: var(--c-alt); }
+.side-right .weather.open { box-shadow: inset 2px 0 0 var(--c-alt); }
+.side-left .weather.open { box-shadow: inset -2px 0 0 var(--c-alt); }
+
+/* ───────────── v1.2: laptop (Wi-Fi és akkumulátor) ───────────── */
+.lap-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.lap {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  height: 40px; padding-top: 2px;
+  font-size: 8.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--c-text);
+  font-variation-settings: "wdth" 80, "wght" 600; font-variant-numeric: tabular-nums;
+  background: color-mix(in srgb, var(--app, var(--c-main)) 10%, transparent);
+  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+  transition: background-color .12s ease, color .12s ease;
+}
+.lap svg { display: block; width: 17px; height: 17px; color: color-mix(in srgb, var(--app) 85%, var(--c-text)); }
+.lap .bat { display: block; height: 17px; }
+.bat-fill { fill: currentColor; stroke: none; }
+.bat-bolt { stroke: var(--c-main); stroke-width: 1.8; }
+.lap.low { --app: var(--c-hot); }
+.lap.low span:last-child { color: var(--c-hot); }
+.lap.offline svg { opacity: .35; }
+.lap:hover { background: var(--app); color: var(--c-bg); }
+.lap:hover svg { color: var(--c-bg); }
+.lap:hover .bat-bolt { stroke: var(--c-bg); }
+.lap.low:hover span:last-child { color: var(--c-bg); }
+
+/* ───────────── v1.2: beállítások – a két oszlop egyforma magas ───────────── */
+.set-body { align-items: stretch; }
+.set-side > .load { flex: 1; }
+.set-col > .set-main { flex: 1; }
+
+/* készítő: verziószám */
+.set-card.credit { justify-content: flex-start; }
+.set-card.credit > .sbtn { margin-left: auto; }
+
+/* ───────────── v1.2: részletes időjárás (oldalpanel) ───────────── */
+.wfly {
+  position: absolute; inset: 0; overflow: hidden;
+  display: flex; flex-direction: column;
+  background:
+    repeating-linear-gradient(0deg, rgba(255,255,255,.018) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at 100% 0%, color-mix(in srgb, var(--c-alt) 9%, transparent), transparent 60%),
+    var(--c-bg);
+  border: 1px solid color-mix(in srgb, var(--c-alt) 40%, transparent);
+}
+.wfly::before {
+  content: ""; position: absolute; left: -1px; top: -1px; width: 54px; height: 3px;
+  background: var(--c-alt); box-shadow: 0 0 8px var(--c-alt-dim);
+}
+.wfly::after {
+  content: ""; position: absolute; right: -1px; bottom: -1px; width: 28px; height: 3px;
+  background: var(--c-main); box-shadow: 0 0 8px var(--c-main-glow);
+}
+.wfly.in > * { animation: wfIn .3s cubic-bezier(.2, .8, .2, 1) both; }
+.wfly.in > .wf-body { animation-delay: .04s; }
+@keyframes wfIn { 0% { opacity: 0; transform: translateX(10px); } 100% { opacity: 1; transform: none; } }
+
+.wf-head {
+  flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 12px 10px 10px 16px; border-bottom: 1px solid color-mix(in srgb, var(--c-alt) 20%, transparent);
+}
+.wf-title { display: flex; align-items: baseline; gap: 10px; min-width: 0; font: 400 11px/1 var(--f-mono); letter-spacing: .14em; color: var(--c-hot); white-space: nowrap; }
+.wf-title b { font-weight: 400; color: var(--c-alt); overflow: hidden; text-overflow: ellipsis; }
+.wf-x { flex: none; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; color: var(--c-text-dim); transition: background-color .12s, color .12s; }
+.wf-x svg { width: 13px; height: 13px; }
+.wf-x:hover { background: var(--c-hot); color: var(--c-bg); }
+
+.wf-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 14px; padding: 14px 16px 8px; overflow: hidden; }
+.wf-note { margin: auto 0; font-size: 12px; line-height: 1.5; color: var(--c-text-dim); text-align: center; }
+.wf-note.err { color: var(--c-hot); }
+.wf-foot { flex: none; padding: 7px 16px 9px; font: 400 9.5px/1 var(--f-mono); letter-spacing: .08em; color: var(--c-text-dim); border-top: 1px dashed color-mix(in srgb, var(--c-alt) 18%, transparent); }
+
+.wf-hero { display: flex; align-items: center; gap: 14px; }
+.wf-icon svg { display: block; width: 54px; height: 54px; stroke-width: 1.3; color: var(--c-alt); filter: drop-shadow(0 0 6px var(--c-alt-dim)); }
+.wf-now { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.wf-now b {
+  font-size: 44px; line-height: .9; font-weight: normal; color: var(--c-main);
+  font-variation-settings: "wdth" 75, "wght" 650; text-shadow: 0 0 12px var(--c-main-glow);
+}
+.wf-now span { font-size: 12px; letter-spacing: .1em; color: var(--c-text); font-variation-settings: "wdth" 85, "wght" 600; }
+.wf-now em { font: 400 10.5px/1 var(--f-mono); font-style: normal; color: var(--c-text-dim); }
+
+.wf-sec h4 {
+  margin: 0 0 8px; display: flex; align-items: center; gap: 6px;
+  font: 400 9.5px/1 var(--f-mono); letter-spacing: .12em; color: var(--c-hot);
+}
+.wf-sec h4::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, color-mix(in srgb, var(--c-alt) 25%, transparent), transparent); }
+
+.wf-hours { display: grid; grid-template-columns: repeat(var(--n), 1fr); grid-template-rows: 58px auto; }
+.wf-plot { grid-column: 1 / -1; position: relative; }
+.wf-curve { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.wf-curve path { fill: none; stroke: var(--c-main); stroke-width: 1.4; vector-effect: non-scaling-stroke; filter: drop-shadow(0 0 3px var(--c-main-glow)); }
+.wf-hv {
+  position: absolute; transform: translate(-50%, -135%);
+  font-size: 13px; line-height: 1; font-weight: normal; color: var(--c-text); white-space: nowrap;
+  font-variation-settings: "wdth" 75, "wght" 650;
+}
+.wf-h { display: flex; flex-direction: column; align-items: center; gap: 4px; padding-top: 6px; }
+.wf-hi svg { display: block; width: 18px; height: 18px; color: var(--c-alt); }
+.wf-hp { position: relative; width: 6px; height: 16px; background: color-mix(in srgb, var(--c-alt) 12%, transparent); }
+.wf-hp i { position: absolute; left: 0; right: 0; bottom: 0; background: color-mix(in srgb, var(--c-alt) 55%, transparent); }
+.wf-hp.wet i { background: var(--c-alt); box-shadow: 0 0 5px var(--c-alt-dim); }
+.wf-hpv { font: 400 9px/1 var(--f-mono); color: var(--c-text-dim); }
+.wf-ht { font: 400 10px/1 var(--f-mono); color: var(--c-text); }
+.wf-h.now .wf-ht { color: var(--c-main); }
+
+.wf-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.wf-tile {
+  display: flex; flex-direction: column; gap: 6px; padding: 8px 10px 9px; min-width: 0;
+  background: color-mix(in srgb, var(--c-alt) 5%, transparent);
+  border-left: 2px solid color-mix(in srgb, var(--c-alt) 35%, transparent);
+}
+.wf-tl { display: flex; align-items: center; gap: 6px; min-width: 0; font: 400 9.5px/1 var(--f-mono); letter-spacing: .06em; color: var(--c-text-dim); text-transform: uppercase; white-space: nowrap; }
+.wf-tl svg { width: 13px; height: 13px; flex: none; color: var(--c-alt); }
+.wf-tl span { overflow: hidden; text-overflow: ellipsis; }
+.wf-tile b {
+  display: flex; align-items: baseline; gap: 6px;
+  font-size: 19px; line-height: 1; font-weight: normal; color: var(--c-text); font-variation-settings: "wdth" 75, "wght" 600;
+  font-variant-numeric: tabular-nums;
+}
+.wf-tile b small { font: 400 10px/1 var(--f-mono); color: var(--c-text-dim); }
+
+.wf-days { display: flex; flex-direction: column; gap: 6px; }
+.wf-day { display: grid; grid-template-columns: 40px 22px 30px 1fr 30px; align-items: center; gap: 8px; }
+.wf-dn { font: 400 10.5px/1 var(--f-mono); letter-spacing: .08em; color: var(--c-text); }
+.wf-di svg { display: block; width: 18px; height: 18px; color: var(--c-alt); }
+.wf-dmin, .wf-dmax { font-size: 13px; font-variation-settings: "wdth" 75, "wght" 600; font-variant-numeric: tabular-nums; }
+.wf-dmin { color: var(--c-text-dim); text-align: right; }
+.wf-dmax { color: var(--c-text); }
+.wf-dbar { position: relative; height: 5px; background: color-mix(in srgb, var(--c-main) 10%, transparent); }
+.wf-dbar i { position: absolute; top: 0; bottom: 0; background: linear-gradient(90deg, var(--c-alt), var(--c-main)); box-shadow: 0 0 5px var(--c-main-glow); }
+
+/* ───────────── v1.2: az óra és a perc jobban látszik ───────────── */
+.clock-row { font-size: 30px; }
+.clock-row #hh { color: color-mix(in srgb, var(--c-main) 72%, transparent); text-shadow: 0 0 8px color-mix(in srgb, var(--c-main) 22%, transparent); }
+.clock-row .colon { color: color-mix(in srgb, var(--c-text) 45%, transparent); }
+.clock-row #mm { color: color-mix(in srgb, var(--c-text) 68%, transparent); }
+
+/* ───────────── v1.2: aktivitás – a beállítás nem ugrasztja a magasságot ─────────────
+   A normál nézet és a hossz beállítása egy rácscellában van: a szekció mindig a kettő
+   közül a magasabbhoz igazodik, váltáskor nem mozdul semmi. */
+.act-panes { display: grid; }
+.act-panes > .act-normal, .act-panes > .act-edit { grid-area: 1 / 1; display: flex; }
+.act-panes > .act-edit { visibility: hidden; }
+.act.editing .act-panes > .act-normal { visibility: hidden; }
+.act.editing .act-panes > .act-edit { visibility: visible; }
+.act.alerting .act-panes { display: none; }
+.act-edit { gap: 5px; }
+.act-edit input { height: 28px; font-size: 18px; }
+
+/* ───────────── v1.2: beállítások – a verzió ugyanúgy, mint a „Készítette:” ───────────── */
+.credit-by.credit-ver { margin-left: 22px; }
+.credit-by.credit-ver b { font-variant-numeric: tabular-nums; }
+
+/* ───────────── v1.2: a dátum kattintható (naptár) ───────────── */
+.date { position: relative; margin: -4px -4px; padding: 4px; cursor: pointer; transition: background-color .12s ease; }
+.date:hover, .date.open { background: color-mix(in srgb, var(--c-alt) 6%, transparent); }
+.date:hover h3, .date.open h3 { color: var(--c-alt); }
+.side-right .date.open { box-shadow: inset 2px 0 0 var(--c-alt); }
+.side-left .date.open { box-shadow: inset -2px 0 0 var(--c-alt); }
+
+/* ───────────── v1.2: oldalpanel nézetei ───────────── */
+.fview { display: none; flex: 1; min-height: 0; flex-direction: column; }
+.fview.on { display: flex; }
+.wfly.in > * { animation: none; }
+.wfly.in .fview.on > * { animation: wfIn .3s cubic-bezier(.2, .8, .2, 1) both; }
+.wfly.in .fview.on > :nth-child(2) { animation-delay: .03s; }
+.wfly.in .fview.on > :nth-child(3) { animation-delay: .06s; }
+
+/* ───────────── v1.2: naptár ───────────── */
+.cal-nav { flex: none; display: flex; align-items: center; gap: 6px; padding: 10px 12px 6px 16px; }
+.cal-month {
+  flex: 1; font-size: 17px; letter-spacing: .06em; color: var(--c-main);
+  font-variation-settings: "wdth" 80, "wght" 650; text-shadow: 0 0 8px var(--c-main-glow);
+}
+.cal-arrow, .cal-today {
+  height: 26px; display: flex; align-items: center; justify-content: center; color: var(--c-text-dim);
+  background: color-mix(in srgb, var(--c-alt) 7%, transparent);
+  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+  transition: background-color .12s, color .12s;
+}
+.cal-arrow { width: 26px; }
+.cal-arrow svg { width: 14px; height: 14px; }
+.cal-today { padding: 0 9px; font: 700 9.5px/1 var(--f-mono); letter-spacing: .1em; color: var(--c-alt); }
+.cal-arrow:hover, .cal-today:hover { background: var(--c-alt); color: var(--c-bg); }
+
+.cal-grid {
+  flex: none; display: grid; grid-template-columns: 26px repeat(7, 1fr); gap: 2px;
+  padding: 2px 14px 10px 12px; border-bottom: 1px dashed color-mix(in srgb, var(--c-alt) 18%, transparent);
+}
+.cg-h { padding: 4px 0 5px; text-align: center; font: 400 9.5px/1 var(--f-mono); letter-spacing: .06em; color: var(--c-text-dim); }
+.cg-h.we { color: color-mix(in srgb, var(--c-hot) 70%, var(--c-text-dim)); }
+.cg-wk { display: flex; align-items: center; justify-content: center; font: 400 9px/1 var(--f-mono); color: color-mix(in srgb, var(--c-alt) 60%, transparent); }
+.cg-wk.cg-h { color: var(--c-text-dim); }
+.cg-d {
+  position: relative; height: 34px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  font-size: 13px; color: var(--c-text); font-variant-numeric: tabular-nums; font-variation-settings: "wdth" 80, "wght" 550;
+  background: color-mix(in srgb, var(--c-main) 3%, transparent);
+  transition: background-color .12s, color .12s;
+}
+.cg-d.we { color: color-mix(in srgb, var(--c-hot) 55%, var(--c-text)); }
+.cg-d.out { color: color-mix(in srgb, var(--c-text) 28%, transparent); background: none; }
+.cg-d:hover { background: color-mix(in srgb, var(--c-alt) 16%, transparent); }
+.cg-d.today { color: var(--c-main); box-shadow: inset 0 -2px 0 var(--c-main); background: color-mix(in srgb, var(--c-main) 10%, transparent); }
+.cg-d.sel { outline: 1px solid var(--c-alt); outline-offset: -1px; background: color-mix(in srgb, var(--c-alt) 12%, transparent); }
+.cg-dots { display: flex; gap: 2px; height: 4px; }
+.cg-dots b { width: 4px; height: 4px; background: var(--c); box-shadow: 0 0 4px var(--c); }
+
+.cal-day { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 14px 10px 16px; scrollbar-width: thin; scrollbar-color: var(--c-alt) transparent; }
+.cal-dh { margin: 0 0 9px; font: 400 10px/1 var(--f-mono); letter-spacing: .12em; color: var(--c-hot); }
+.cal-empty { padding: 6px 0 12px; font-size: 12px; color: var(--c-text-dim); }
+.cal-events { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+.cal-ev {
+  display: grid; grid-template-columns: 58px 1fr; gap: 10px; align-items: baseline; padding: 7px 10px 8px;
+  background: color-mix(in srgb, var(--c) 7%, transparent); border-left: 2px solid var(--c);
+}
+.cal-ev.live { background: color-mix(in srgb, var(--c) 16%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 40%, transparent); }
+.cal-when { display: flex; flex-direction: column; gap: 3px; font: 700 11px/1 var(--f-mono); color: var(--c); }
+.cal-when em { font-style: normal; font-weight: 400; font-size: 10px; color: var(--c-text-dim); }
+.cal-what { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cal-what b { font-size: 13px; line-height: 1.25; font-weight: normal; color: var(--c-text); font-variation-settings: "wdth" 85, "wght" 600; overflow-wrap: anywhere; }
+.cal-what small { font: 400 10px/1.3 var(--f-mono); color: var(--c-text-dim); overflow-wrap: anywhere; }
+
+.cal-connect {
+  display: flex; flex-direction: column; gap: 9px; padding: 12px 12px 12px;
+  background: color-mix(in srgb, var(--c-alt) 6%, transparent); border: 1px solid color-mix(in srgb, var(--c-alt) 25%, transparent);
+}
+.cal-c-title { display: flex; align-items: center; gap: 8px; }
+.cal-c-title svg { width: 18px; height: 18px; color: var(--c-alt); }
+.cal-c-title b { font-size: 13px; font-weight: normal; color: var(--c-text); font-variation-settings: "wdth" 85, "wght" 650; letter-spacing: .03em; }
+.cal-steps { margin: 0; padding-left: 18px; font-size: 11.5px; line-height: 1.45; color: var(--c-text-dim); }
+.cal-steps b { font-weight: normal; color: var(--c-text); }
+.cal-form { display: flex; gap: 6px; }
+.cal-form input {
+  flex: 1; min-width: 0; height: 30px; padding: 0 8px; font: 400 11px/1 var(--f-mono); color: var(--c-text);
+  background: var(--c-bg); border: 1px solid color-mix(in srgb, var(--c-alt) 30%, transparent); border-radius: 0; outline: none;
+  user-select: text; -webkit-user-select: text;
+}
+.cal-form input:focus { border-color: var(--c-alt); box-shadow: 0 0 6px var(--c-alt-dim); }
+.cal-btn {
+  flex: none; height: 30px; padding: 0 12px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--c-bg); background: var(--c-alt); font-variation-settings: "wdth" 85, "wght" 700;
+  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+}
+.cal-btn:hover { background: color-mix(in srgb, var(--c-alt) 75%, #fff); }
+.cal-err { font-size: 11px; line-height: 1.35; color: var(--c-hot); }
+.cal-err:empty { display: none; }
+.cal-link { align-self: flex-start; display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--c-alt); }
+.cal-link svg { width: 14px; height: 14px; }
+.cal-link:hover span { text-decoration: underline; }
+
+.cal-foot {
+  flex: none; display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 6px 12px 7px 16px;
+  border-top: 1px dashed color-mix(in srgb, var(--c-alt) 18%, transparent);
+}
+.cal-src { font: 400 9.5px/1 var(--f-mono); letter-spacing: .08em; color: var(--c-text-dim); }
+.cal-chips { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 5px; }
+.cal-chip {
+  display: flex; align-items: center; gap: 6px; height: 22px; padding: 0 2px 0 7px; max-width: 160px;
+  font-size: 11px; color: var(--c-text); white-space: nowrap;
+  background: color-mix(in srgb, var(--c) 10%, transparent); border: 1px solid color-mix(in srgb, var(--c) 35%, transparent);
+}
+.cal-chip > i { flex: none; width: 6px; height: 6px; background: var(--c); box-shadow: 0 0 4px var(--c); }
+.cal-chip.bad { border-color: var(--c-hot); color: var(--c-hot); }
+.cal-chip button { width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; color: var(--c-text-dim); }
+.cal-chip button svg { width: 10px; height: 10px; }
+.cal-chip button:hover, .cal-chip button.armed { background: var(--c-hot); color: var(--c-bg); }
+.cal-plus { width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; color: var(--c-alt); border: 1px dashed color-mix(in srgb, var(--c-alt) 45%, transparent); }
+.cal-plus svg { width: 12px; height: 12px; }
+.cal-plus:hover, .cal-plus.on { background: var(--c-alt); color: var(--c-bg); border-style: solid; }
+.cal-refresh { flex: none; display: flex; align-items: center; gap: 5px; font: 400 9.5px/1 var(--f-mono); color: var(--c-text-dim); }
+.cal-refresh svg { width: 12px; height: 12px; }
+.cal-refresh:hover { color: var(--c-alt); }
+.cal-refresh.busy svg { animation: calSpin 1s linear infinite; }
+@keyframes calSpin { to { transform: rotate(360deg); } }
+
+/* ───────────── v1.2: névnap a naptárban (külön sor, nem esemény) ───────────── */
+.cal-names {
+  display: flex; align-items: center; gap: 7px; margin: -2px 0 10px; padding: 0 0 9px;
+  border-bottom: 1px dashed color-mix(in srgb, var(--c-alt) 14%, transparent);
+}
+.cal-names svg { flex: none; width: 13px; height: 13px; color: var(--c-text-dim); }
+.cal-names span { flex: none; font: 400 9.5px/1 var(--f-mono); letter-spacing: .1em; color: var(--c-text-dim); }
+.cal-names b { min-width: 0; font-size: 12px; font-weight: normal; color: var(--c-text); font-variation-settings: "wdth" 85, "wght" 550; overflow-wrap: anywhere; }
+
+/* ───────────── v1.2: keskenyebb programhozzáadó sáv ─────────────
+   A futó programok legfeljebb két sorban látszanak (a többi görgethető), a magyarázó
+   címsor helyett a gombok súgója mondja el, mit csinálnak. */
+.ed-add { margin-top: 12px; padding-top: 12px; gap: 14px; }
+.ed-chips { gap: 6px; max-height: calc(2 * 32px + 6px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--c-alt) transparent; }
+.ed-chips .run-chip { height: 32px; }
+.ed-chips .ed-none { display: flex; align-items: center; min-height: 36px; padding: 0; font-size: 12px; }
+
+/* ───────────── v1.2: főkapcsoló – a megerősítés nem ugrasztja a jobb oszlopot ─────────────
+   A gombok és a megerősítés egy rácscellában vannak: a szekció magassága mindig ugyanaz. */
+.pw-panes { display: grid; }
+.pw-panes > .pw-grid, .pw-panes > .pw-confirm { grid-area: 1 / 1; }
+.pw-panes > .pw-confirm { display: flex; justify-content: center; visibility: hidden; }
+.power.confirming .pw-panes > .pw-grid { display: grid; visibility: hidden; }
+.power.confirming .pw-panes > .pw-confirm { visibility: visible; }
+/* Az ikonlista tölti ki a kártya szabad magasságát (a kártya a bal oszlophoz igazodik),
+   így a hozzáadó sáv alatt nem marad üres hely – a gombok közvetlenül alatta vannak. */
+.set-main .ed-list { flex: 1 1 auto; height: 0; min-height: 150px; max-height: none; }
+
+/* ───────────── v1.2: beállítások – a visszajelzés a Bezárás gomb mellett ─────────────
+   A fejlécben, a gomb bal oldalán jelenik meg (a gombot sosem takarja), hosszabb szövegnél
+   a gombtól balra nő. */
+.set-head .set-toast {
+  position: static; inset: auto; width: auto; max-width: min(620px, 55%); margin: 0 14px 0 auto;
+  padding: 9px 14px; font-size: 13px; line-height: 1.35; z-index: 5;
+  transform: translateX(10px); transition: opacity .2s, transform .2s;
+}
+.set-head .set-toast.show { transform: none; }
+
+/* ───────────── v1.2: hangerő (a főkapcsoló fölött) ───────────── */
+.vol-row { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-bottom: 6px; }
+.vol-mute {
+  flex: none; width: 28px; height: 24px; display: flex; align-items: center; justify-content: center; color: var(--c-alt);
+  background: color-mix(in srgb, var(--c-alt) 10%, transparent);
+  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+  transition: background-color .12s, color .12s;
+}
+.vol-mute svg { width: 16px; height: 16px; }
+.vol-mute:hover { background: var(--c-alt); color: var(--c-bg); }
+.vol-pct {
+  font-size: 20px; line-height: 1; color: var(--c-alt); font-variant-numeric: tabular-nums;
+  font-variation-settings: "wdth" 75, "wght" 650; text-shadow: 0 0 8px var(--c-alt-dim);
+}
+.vol-pct:hover { color: var(--c-text); }
+.vol-bar { padding: 4px 0; cursor: pointer; touch-action: none; }
+.vol-bar > span { position: relative; display: block; height: 6px; background: color-mix(in srgb, var(--c-alt) 14%, transparent); }
+.vol-bar i {
+  position: absolute; left: 0; top: 0; bottom: 0; background: var(--c-alt); box-shadow: 0 0 8px var(--c-alt-dim);
+  -webkit-mask: repeating-linear-gradient(90deg, #000 0 5px, transparent 5px 7px);
+          mask: repeating-linear-gradient(90deg, #000 0 5px, transparent 5px 7px);
+}
+.vol-bar:hover > span { background: color-mix(in srgb, var(--c-alt) 24%, transparent); }
+.vol.muted .vol-pct { color: var(--c-text-dim); text-shadow: none; text-decoration: line-through; }
+.vol.muted .vol-mute { color: var(--c-hot); background: color-mix(in srgb, var(--c-hot) 14%, transparent); }
+.vol.muted .vol-bar i { background: var(--c-text-dim); box-shadow: none; }
+.vol.off { opacity: .45; }
+.vol.off .vol-bar { cursor: default; }
+.vol-pct { display: flex; align-items: baseline; white-space: nowrap; }
+.vol-pct small { margin-left: 1px; font-size: 12px; font-variation-settings: "wdth" 75, "wght" 600; }
+.vol-pct.full { font-size: 17px; }
+.vol-pct.full small { font-size: 11px; }
+
+/* Látható szekciók: a rögzített helyű hangerő sor (nem húzható) */
+.sec-fixed { margin-top: 0; padding-top: 4px; border-top: 1px dashed color-mix(in srgb, var(--c-main) 14%, transparent); }
+.sec-row.fixed .grip { cursor: default; color: color-mix(in srgb, var(--c-text-dim) 70%, transparent); background: none; }
+.sec-row.fixed .grip:hover { color: color-mix(in srgb, var(--c-text-dim) 70%, transparent); background: none; }
+/* öt sor is elférjen görgetés nélkül 1060 px magas munkaterületen */
+.sec-row .sbtn.row { min-height: 30px; }
+.sec-row .grip { min-height: 30px; }

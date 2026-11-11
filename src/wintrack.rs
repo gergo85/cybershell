@@ -259,9 +259,13 @@ pub fn open_with(exe: &str, files: &[String]) -> bool {
 // ---- Nem kitűzött programok neve és ikonja ----
 
 /// A program megjelenítendő neve: a fájl leírása (pl. „Jegyzettömb”), ha nincs,
-/// a fájlnév kiterjesztés nélkül.
+/// a fájlnév kiterjesztés nélkül. Az Electronra és hasonló keretrendszerekre épülő
+/// programoknál (pl. GitHub Desktop, Discord) a leírás gyakran csak a keretrendszer
+/// neve („Electron”) – ilyenkor a termék neve (ProductName) a valódi név.
 pub fn display_name(path: &str) -> String {
-    file_description(path).unwrap_or_else(|| {
+    let info = version_strings(path, &["FileDescription", "ProductName"]);
+    let usable = |s: &Option<String>| s.clone().filter(|t| !is_framework_name(t));
+    usable(&info[0]).or_else(|| usable(&info[1])).unwrap_or_else(|| {
         let stem = Path::new(path).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
         let mut c = stem.chars();
         match c.next() {
@@ -271,15 +275,28 @@ pub fn display_name(path: &str) -> String {
     })
 }
 
-fn file_description(path: &str) -> Option<String> {
+/// Keretrendszer- vagy futtatókörnyezet-név, ami nem a program saját neve.
+fn is_framework_name(name: &str) -> bool {
+    const GENERIC: [&str; 9] = [
+        "electron", "nw.js", "node.js", "node", "cef", "chromium", "chromium embedded framework", "tauri app", "webview2",
+    ];
+    let n = name.trim().to_lowercase();
+    GENERIC.contains(&n.as_str())
+}
+
+/// A fájl verzióadatainak szöveges mezői (pl. FileDescription, ProductName) a megadott sorrendben.
+fn version_strings(path: &str, keys: &[&str]) -> Vec<Option<String>> {
+    let none = || keys.iter().map(|_| None).collect();
     unsafe {
         let file = HSTRING::from(path);
         let size = GetFileVersionInfoSizeW(&file, None);
         if size == 0 {
-            return None;
+            return none();
         }
         let mut data = vec![0u8; size as usize];
-        GetFileVersionInfoW(&file, None, size, data.as_mut_ptr() as *mut _).ok()?;
+        if GetFileVersionInfoW(&file, None, size, data.as_mut_ptr() as *mut _).is_err() {
+            return none();
+        }
         // nyelv és kódlap a fordítási táblából
         let mut ptr: *mut core::ffi::c_void = std::ptr::null_mut();
         let mut len = 0u32;
@@ -291,13 +308,19 @@ fn file_description(path: &str) -> Option<String> {
             let t = std::slice::from_raw_parts(ptr as *const u16, 2);
             lang = (t[0], t[1]);
         }
-        let key = format!("\\StringFileInfo\\{:04x}{:04x}\\FileDescription", lang.0, lang.1);
-        if !VerQueryValueW(data.as_ptr() as *const _, &HSTRING::from(key), &mut ptr, &mut len).as_bool() || len == 0 {
-            return None;
-        }
-        let s = std::slice::from_raw_parts(ptr as *const u16, len as usize);
-        let text = String::from_utf16_lossy(s).trim_end_matches('\0').trim().to_string();
-        if text.is_empty() { None } else { Some(text) }
+        keys.iter()
+            .map(|k| {
+                let key = format!("\\StringFileInfo\\{:04x}{:04x}\\{k}", lang.0, lang.1);
+                let mut ptr: *mut core::ffi::c_void = std::ptr::null_mut();
+                let mut len = 0u32;
+                if !VerQueryValueW(data.as_ptr() as *const _, &HSTRING::from(key), &mut ptr, &mut len).as_bool() || len == 0 {
+                    return None;
+                }
+                let s = std::slice::from_raw_parts(ptr as *const u16, len as usize);
+                let text = String::from_utf16_lossy(s).trim_end_matches('\0').trim().to_string();
+                (!text.is_empty()).then_some(text)
+            })
+            .collect()
     }
 }
 
