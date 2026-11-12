@@ -1,0 +1,90 @@
+/* Vékony keretek a képernyő szélén (fent, lent, és oldalt, ha a panelek fent/lent vannak). */
+
+/* ───────────── Vékony keretek (felső, alsó) ───────────── */
+.strip { position: absolute; inset: 0; overflow: hidden; background: var(--c-bg); }
+.strip > div { position: absolute; }
+.top .line, .bottom .line {
+  left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg,
+    var(--c-main) 0 var(--arm), var(--c-main-dim) var(--arm) calc(100% - var(--arm)), var(--c-main) calc(100% - var(--arm)));
+  box-shadow: 0 0 6px var(--c-main-glow);
+}
+.top .line { bottom: 0; }
+.bottom .line { top: 0; }
+.top .ticks, .bottom .ticks {
+  left: 0; right: 0; height: 3px;
+  background: repeating-linear-gradient(90deg, var(--c-main-faint) 0 1px, transparent 1px 32px);
+}
+.top .ticks { top: 0; }
+.bottom .ticks { bottom: 0; }
+.top .notch, .bottom .notch {
+  left: 50%; width: min(22%, 300px); height: 50%; transform: translateX(-50%);
+  background:
+    repeating-linear-gradient(-60deg, transparent 0 7px, color-mix(in srgb, var(--c-bg) 60%, transparent) 7px 10px),
+    var(--c-main);
+  opacity: .85;
+}
+.top .notch { top: 0; clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 10px 100%); }
+.bottom .notch { bottom: 0; clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 100%, 0 100%); }
+/* a kék és piros rövid csíkok visszafogottan, hogy ne vonják el a figyelmet */
+.chip { height: 3px; width: 28px; background: var(--c-alt); box-shadow: 0 0 3px var(--c-alt-dim); opacity: .55; }
+.top .chip { top: 2px; }
+.bottom .chip { bottom: 2px; }
+.chip.c1 { left: 14%; }
+.chip.c2 { left: calc(14% + 34px); width: 8px; }
+.chip.c3 { right: 16%; width: 18px; background: var(--c-hot); box-shadow: 0 0 3px var(--c-hot-dim); }
+.bottom .hazard-s {
+  left: 0; bottom: 0; width: 110px; height: 4px; opacity: .5;
+  background: repeating-linear-gradient(-45deg, var(--c-main) 0 3px, transparent 3px 7px);
+}
+.top .sweep, .bottom .sweep {
+  left: 0; width: 160px; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--c-alt), #fff, var(--c-alt), transparent);
+  animation: sweepX 9s linear infinite;
+}
+.top .sweep { bottom: 0; }
+.bottom .sweep { top: 0; animation-delay: -4.5s; animation-direction: reverse; }
+@keyframes sweepX {
+  0% { transform: translateX(-170px); }
+  55%, 100% { transform: translateX(100vw); }
+}
+
+/* oldalsó vékony keret (ha a panelek fent és lent vannak) */
+.vleft .line, .vright .line {
+  top: 0; bottom: 0; width: 1px;
+  background: linear-gradient(180deg,
+    var(--c-main) 0 var(--arm), var(--c-main-dim) var(--arm) calc(100% - var(--arm)), var(--c-main) calc(100% - var(--arm)));
+  box-shadow: 0 0 6px var(--c-main-glow);
+}
+.vleft .line { right: 0; }
+.vright .line { left: 0; }
+.vleft .ticks, .vright .ticks { top: 0; bottom: 0; width: 3px; background: repeating-linear-gradient(180deg, var(--c-main-faint) 0 1px, transparent 1px 32px); }
+.vleft .ticks { left: 0; }
+.vright .ticks { right: 0; }
+.vleft .notch, .vright .notch {
+  top: 50%; height: min(22%, 300px); width: 50%; transform: translateY(-50%);
+  background:
+    repeating-linear-gradient(-30deg, transparent 0 7px, color-mix(in srgb, var(--c-bg) 60%, transparent) 7px 10px),
+    var(--c-main);
+  opacity: .85;
+}
+.vleft .notch { left: 0; clip-path: polygon(0 0, 100% 10px, 100% calc(100% - 10px), 0 100%); }
+.vright .notch { right: 0; clip-path: polygon(0 10px, 100% 0, 100% 100%, 0 calc(100% - 10px)); }
+.vleft .chip, .vright .chip { width: 3px; height: 28px; }
+.vleft .chip { left: 2px; }
+.vright .chip { right: 2px; }
+.vleft .chip.c1, .vright .chip.c1 { left: auto; top: 14%; }
+.vleft .chip.c1 { left: 2px; }
+.vleft .chip.c2 { top: calc(14% + 34px); height: 8px; width: 3px; }
+.vleft .chip.c3, .vright .chip.c3 { right: auto; bottom: 16%; height: 18px; width: 3px; }
+.vleft .chip.c3 { left: 2px; }
+.vright .chip.c3 { right: 2px; }
+.vright .hazard-s { right: 0; bottom: 0; width: 4px; height: 110px; opacity: .5; background: repeating-linear-gradient(-45deg, var(--c-main) 0 3px, transparent 3px 7px); }
+.vleft .sweep, .vright .sweep {
+  top: 0; width: 1px; height: 160px;
+  background: linear-gradient(180deg, transparent, var(--c-alt), #fff, var(--c-alt), transparent);
+  animation: sweepY 9s linear infinite;
+}
+.vleft .sweep { right: 0; }
+.vright .sweep { left: 0; animation-delay: -4.5s; animation-direction: reverse; }
+@keyframes sweepY { 0% { transform: translateY(-170px); } 55%, 100% { transform: translateY(100vh); } }

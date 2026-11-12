@@ -1,0 +1,4 @@
+# A projekt kódformázása (cargo fmt). A sorok szélesebbek az alapértelmezettnél,
+# mert a Windows API-hívások és a magyar megjegyzések hosszúak.
+max_width = 140
+use_small_heuristics = "Max"

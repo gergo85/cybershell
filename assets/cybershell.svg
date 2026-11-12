@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
-  <!-- CyberHub ikon: a hub elrendezése – két oldalsáv, vékony felső és alsó keret -->
+  <!-- CyberShell ikon: a hub elrendezése – két oldalsáv, vékony felső és alsó keret -->
   <polygon points="58,10 246,10 246,198 198,246 10,246 10,58" fill="#06070b" stroke="#f3e600" stroke-width="14" stroke-linejoin="miter"/>
   <polygon points="48,48 88,48 88,208 48,208" fill="#f3e600"/>
   <polygon points="168,48 208,48 208,180 180,208 168,208" fill="#00e1ff"/>

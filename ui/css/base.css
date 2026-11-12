@@ -1,0 +1,105 @@
+/* Alap: színek és betűk (változók), a teljes oldal, közös csempe és oldalpanel-háttér, a panelek belső neonvonala, közös animációk. */
+
+/* CyberShell – a színek a config.json "theme" (sötét) és "themeLight" (világos) részéből jönnek, ezek csak alapértékek. */
+:root {
+  --c-main: var(--theme-main, #f3e600);
+  --c-alt: var(--theme-alt, #00e1ff);
+  --c-hot: var(--theme-hot, #ff2a6d);
+  --c-bg: var(--theme-bg, #06070b);
+  --c-text: var(--theme-text, #c9ccd6);
+
+  --c-main-dim: color-mix(in srgb, var(--c-main) 42%, transparent);
+  --c-main-faint: color-mix(in srgb, var(--c-main) 16%, transparent);
+  --c-main-glow: color-mix(in srgb, var(--c-main) 55%, transparent);
+  --c-alt-dim: color-mix(in srgb, var(--c-alt) 45%, transparent);
+  --c-hot-dim: color-mix(in srgb, var(--c-hot) 45%, transparent);
+  --c-panel: color-mix(in srgb, var(--c-main) 4%, var(--c-bg));
+  --c-text-dim: color-mix(in srgb, var(--c-text) 55%, transparent);
+
+  --f-display: "Bahnschrift", "Segoe UI", sans-serif;
+  --f-mono: "Cascadia Mono", "Consolas", monospace;
+
+  /* a sávok tényleges vastagsága, a program tölti ki */
+  --l: 86; --t: 10; --r: 86; --b: 10;
+  --arm: 44px;
+}
+
+/* lejárt az aktivitás-visszaszámláló: minden keret rózsaszínre vált és lüktet */
+html.alert { --c-main: var(--c-hot); }
+html.alert .line, html.alert .edge { animation: alertBlink 1s steps(2) infinite; }
+@keyframes alertBlink { 50% { opacity: .25; } }
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; height: 100%; overflow: hidden;
+  background: var(--c-bg); color: var(--c-text);
+  font-family: var(--f-display);
+  user-select: none; -webkit-user-select: none; cursor: default;
+}
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+#root { position: relative; width: 100%; height: 100%; }
+svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: square; stroke-linejoin: miter; }
+
+/* az oldalpanelek a képernyő széle felől sötétebbek (felcserélhetők, ezért a szél szerint) */
+.side-left {
+  background:
+    repeating-linear-gradient(0deg, rgba(255,255,255,.018) 0 1px, transparent 1px 3px),
+    linear-gradient(90deg, var(--c-bg), var(--c-panel));
+}
+.side-right {
+  background:
+    repeating-linear-gradient(0deg, rgba(255,255,255,.018) 0 1px, transparent 1px 3px),
+    linear-gradient(270deg, var(--c-bg), var(--c-panel));
+}
+
+/* az oldalpanelek belső szélén futó neonvonal, a felső és alsó keret vonalához illesztve */
+.edge {
+  position: absolute; width: 1px;
+  background: linear-gradient(to bottom,
+    var(--c-main) 0 var(--arm), var(--c-main-dim) var(--arm) calc(100% - var(--arm)), var(--c-main) calc(100% - var(--arm)));
+  box-shadow: 0 0 6px var(--c-main-glow);
+}
+.side-left .edge { right: 0; }
+.side-right .edge { left: 0; }
+.edge::before, .edge::after { content: ""; position: absolute; width: 4px; height: 14px; background: var(--c-main); }
+.side-left .edge::before, .side-left .edge::after { right: 0; }
+.side-right .edge::before, .side-right .edge::after { left: 0; }
+.edge::before { top: calc(var(--arm) + 10px); }
+.edge::after { bottom: calc(var(--arm) + 10px); }
+
+/* csempe (a bal sáv ikonjai és a jobb panel gyorsgombjai) */
+.tile, .qtile {
+  position: relative; display: block;
+  clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
+  background: color-mix(in srgb, var(--c-main) 30%, transparent);
+  transition: background .15s;
+}
+.tile-in, .qtile::before {
+  position: absolute; inset: 1px;
+  clip-path: polygon(8.6px 0, 100% 0, 100% calc(100% - 8.6px), calc(100% - 8.6px) 100%, 0 100%, 0 8.6px);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--c-main) 6%, transparent), transparent 60%),
+    var(--c-bg);
+}
+@keyframes glitch {
+  0% { transform: translate(0); }
+  25% { transform: translate(-2px, 1px); }
+  50% { transform: translate(2px, -1px); }
+  75% { transform: translate(-1px, 0); }
+  100% { transform: translate(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sweep, .sys-btn::before { animation: none !important; display: none; }
+}
+
+/* ───────────── Hover: azonnali reakció, rövid, puha átmenettel ───────────── */
+:root { --hover-delay: 0ms; --hover-fade: .12s; --close-delay: 0s; }
+
+/* ───────────── panelek bármelyik szélen ─────────────
+   --ia / --ib: a sáv két végén lévő (később elhelyezett) merőleges sávok vastagsága;
+   ennyivel beljebb kezdődik a neonvonal és a tartalom. */
+.edge { top: calc(var(--ia, 0) * 1px - 1px); bottom: calc(var(--ib, 0) * 1px - 1px); }
+
+/* ───────────── világos téma – Ghost in the Shell ─────────────
+   Hűvös, papírfehér felületek, vékony türkiz és acélkék vonalak, finom műszaki rácsháló
+   (mint a kiberagy-kijelzők), narancsvörös figyelmeztetés. A neonfény helyett tompa árnyék. */
+:root { color-scheme: dark; }

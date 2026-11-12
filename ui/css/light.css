@@ -1,0 +1,153 @@
+/* Világos téma (Ghost in the Shell): színek, rácsháló, lekerekített keretek és saját díszítés. */
+
+html[data-scheme="light"] {
+  color-scheme: light;
+  --c-main: var(--theme-main, #00848a);
+  --c-alt: var(--theme-alt, #2c62a6);
+  --c-hot: var(--theme-hot, #d6452a);
+  --c-bg: var(--theme-bg, #e3e9ec);
+  --c-text: var(--theme-text, #18262d);
+  --c-main-glow: color-mix(in srgb, var(--c-main) 20%, transparent);
+  --c-alt-dim: color-mix(in srgb, var(--c-alt) 35%, transparent);
+  --c-hot-dim: color-mix(in srgb, var(--c-hot) 35%, transparent);
+  --c-main-faint: color-mix(in srgb, var(--c-main) 14%, transparent);
+  --c-panel: color-mix(in srgb, var(--c-main) 6%, var(--c-bg));
+  --c-text-dim: color-mix(in srgb, var(--c-text) 60%, transparent);
+}
+html[data-scheme="light"] :is(.side-left, .side-right, .side-top, .side-bottom) {
+  background:
+    repeating-linear-gradient(0deg, color-mix(in srgb, var(--c-main) 6%, transparent) 0 1px, transparent 1px 22px),
+    repeating-linear-gradient(90deg, color-mix(in srgb, var(--c-main) 6%, transparent) 0 1px, transparent 1px 22px),
+    linear-gradient(90deg, color-mix(in srgb, #fff 55%, var(--c-bg)), var(--c-panel));
+}
+html[data-scheme="light"] :is(.wfly, .lx, .peek, .settings) {
+  background:
+    repeating-linear-gradient(0deg, color-mix(in srgb, var(--c-main) 5%, transparent) 0 1px, transparent 1px 28px),
+    repeating-linear-gradient(90deg, color-mix(in srgb, var(--c-main) 5%, transparent) 0 1px, transparent 1px 28px),
+    radial-gradient(ellipse at 100% 0%, color-mix(in srgb, var(--c-alt) 10%, transparent), transparent 60%),
+    var(--c-bg);
+}
+
+/* a fénylő szövegárnyékok helyett tiszta, éles vonalak */
+html[data-scheme="light"] :is(.brand-name, .lx-brand, .set-title) {
+  text-shadow: 1px 0 0 color-mix(in srgb, var(--c-hot) 45%, transparent), -1px 0 0 color-mix(in srgb, var(--c-alt) 45%, transparent);
+}
+html[data-scheme="light"] :is(.act-time, .vol-pct, .w-temp, .clock-row #hh, .lim-head b, .meter-head b) { text-shadow: none; }
+html[data-scheme="light"] .clock-row #hh { color: var(--c-main); }
+html[data-scheme="light"] .clock-row #mm { color: color-mix(in srgb, var(--c-text) 70%, transparent); }
+html[data-scheme="light"] :is(.mu-title, .mu-artist) { text-shadow: 0 0 4px color-mix(in srgb, #fff 80%, transparent); }
+html[data-scheme="light"] .mu-art img { opacity: .55; }
+html[data-scheme="light"] .lx-menu { box-shadow: 0 8px 24px rgba(20, 40, 50, .18); }
+html[data-scheme="light"] .pk-box { background: color-mix(in srgb, var(--c-text) 12%, var(--c-bg)); }
+html[data-scheme="light"] .tile img { filter: grayscale(1) contrast(1.1); opacity: .75; }
+html[data-scheme="light"] .strip { background: color-mix(in srgb, #fff 40%, var(--c-bg)); }
+html[data-scheme="light"] .edge, html[data-scheme="light"] :is(.top, .bottom, .vleft, .vright) .line { box-shadow: none; }
+html[data-scheme="light"] .hb { --hb: #d8202f; }
+html[data-scheme="light"] .mu-art::after {
+  background:
+    repeating-linear-gradient(0deg, rgba(255,255,255,.3) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, color-mix(in srgb, var(--c-bg) 30%, transparent), color-mix(in srgb, var(--c-bg) 82%, transparent) 70%);
+}
+
+/* ───────────── Ghost in the Shell – saját keretformák és díszítés ─────────────
+   A cyberpunkos levágott sarkok, sárga–fekete veszélycsíkok és trapéz helyett: lekerekített,
+   vékony vonalas keretek, gyűrűk, pontsorok és finom adatcsík-mintázat (kiberagy-kijelző). */
+/* ikonkeretek: lekerekített, vékony kontúr, hoverkor dupla gyűrű */
+html[data-scheme="light"] :is(.tile, .qtile, .tile-in, .lx-tile, .ed-icon) { clip-path: none; }
+html[data-scheme="light"] :is(.tile, .qtile) { border-radius: 11px; }
+html[data-scheme="light"] .tile-in, html[data-scheme="light"] .qtile::before { clip-path: none; border-radius: 10px; }
+html[data-scheme="light"] .tile-in, html[data-scheme="light"] .qtile::before {
+  background:
+    radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--c-main) 10%, transparent), transparent 70%),
+    color-mix(in srgb, #fff 60%, var(--c-bg));
+}
+html[data-scheme="light"] :is(.app:hover .tile, .app.active .tile, .qbtn:hover .qtile, .qbtn.open .qtile) {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--c-bg) 100%, transparent), 0 0 0 3px color-mix(in srgb, var(--c-main) 45%, transparent);
+}
+html[data-scheme="light"] :is(.lx-tile, .ed-icon) { border-radius: 10px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-main) 18%, transparent); }
+
+/* a futásjelzés kis pont, nem csík */
+html[data-scheme="light"] .left:not(.horiz) .app::before { left: 5px; width: 4px; border-radius: 2px; }
+html[data-scheme="light"] .left:not(.horiz) .app.active::before { left: 5px; width: 4px; }
+html[data-scheme="light"] .app::after { border-radius: 1px; }
+
+/* gombok és kártyák: a levágott sarkok helyett lekerekítés */
+html[data-scheme="light"] :is(.ib, .pw, .lap, .mu-launch, .mu-live, .vol-mute, .lx-fbtn, .lx-search, .sbtn, .lang-row,
+  .set-close, .pk-card, .wall-tile, .hb) { clip-path: none; border-radius: 7px; }
+html[data-scheme="light"] .hb { border-radius: 0 0 12px 12px; }
+html[data-scheme="light"] :is(.wfly, .lx, .peek, .set-card) { border-radius: 4px; }
+html[data-scheme="light"] .seg button:first-child { border-radius: 6px 0 0 6px; }
+html[data-scheme="light"] .seg button:last-child { border-radius: 0 6px 6px 0; }
+
+/* az oldalpanelek neonvonala: vékony kettős vonal, a „karok” kis gyűrűk */
+html[data-scheme="light"] .edge {
+  background: var(--c-main-dim);
+  box-shadow: none;
+}
+html[data-scheme="light"] .side-left .edge { box-shadow: -3px 0 0 color-mix(in srgb, var(--c-main) 14%, transparent); }
+html[data-scheme="light"] .side-right .edge { box-shadow: 3px 0 0 color-mix(in srgb, var(--c-main) 14%, transparent); }
+html[data-scheme="light"] .side-top .edge { box-shadow: 0 -3px 0 color-mix(in srgb, var(--c-main) 14%, transparent); }
+html[data-scheme="light"] .side-bottom .edge { box-shadow: 0 3px 0 color-mix(in srgb, var(--c-main) 14%, transparent); }
+html[data-scheme="light"] .edge::before, html[data-scheme="light"] .edge::after {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--c-bg); border: 1px solid var(--c-main); box-sizing: border-box;
+}
+html[data-scheme="light"] .side-left .edge::before, html[data-scheme="light"] .side-left .edge::after { right: -4px; }
+html[data-scheme="light"] .side-right .edge::before, html[data-scheme="light"] .side-right .edge::after { left: -4px; }
+html[data-scheme="light"] .side-top .edge::before, html[data-scheme="light"] .side-top .edge::after { bottom: -4px; }
+html[data-scheme="light"] .side-bottom .edge::before, html[data-scheme="light"] .side-bottom .edge::after { top: -4px; }
+
+/* a márkajel alatti és a futó programok előtti elválasztó: pontsor a csíkok helyett */
+html[data-scheme="light"] :is(.hazard, .extras-sep) {
+  opacity: .8;
+  background: radial-gradient(circle, var(--c-main) 1.2px, transparent 1.6px) 0 50% / 7px 7px repeat-x;
+}
+html[data-scheme="light"] .left.horiz :is(.hazard, .extras-sep) { background-repeat: repeat-y; background-position: 50% 0; }
+html[data-scheme="light"] .extras-sep { background-image: radial-gradient(circle, var(--c-alt) 1.2px, transparent 1.6px); }
+
+/* vékony keretek (fent, lent, oldalt) */
+html[data-scheme="light"] .strip .line { box-shadow: none; background: var(--c-main-dim); }
+html[data-scheme="light"] :is(.top, .bottom) .ticks {
+  background: radial-gradient(circle, color-mix(in srgb, var(--c-main) 45%, transparent) 1px, transparent 1.4px) 0 50% / 16px 3px repeat-x;
+}
+html[data-scheme="light"] :is(.vleft, .vright) .ticks {
+  background: radial-gradient(circle, color-mix(in srgb, var(--c-main) 45%, transparent) 1px, transparent 1.4px) 50% 0 / 3px 16px repeat-y;
+}
+
+/* a középső trapéz helyett lekerekített „adatkapszula” sűrű vonalkázással */
+html[data-scheme="light"] .strip .notch {
+  clip-path: none; opacity: 1;
+  border: 1px solid color-mix(in srgb, var(--c-main) 55%, transparent);
+  background:
+    repeating-linear-gradient(90deg, color-mix(in srgb, var(--c-main) 30%, transparent) 0 1px, transparent 1px 5px),
+    color-mix(in srgb, var(--c-main) 6%, var(--c-bg));
+}
+html[data-scheme="light"] .top .notch { border-top: 0; border-radius: 0 0 9px 9px; }
+html[data-scheme="light"] .bottom .notch { border-bottom: 0; border-radius: 9px 9px 0 0; }
+html[data-scheme="light"] .vleft .notch { border-left: 0; border-radius: 0 9px 9px 0; }
+html[data-scheme="light"] .vright .notch { border-right: 0; border-radius: 9px 0 0 9px; }
+html[data-scheme="light"] :is(.vleft, .vright) .notch {
+  background:
+    repeating-linear-gradient(180deg, color-mix(in srgb, var(--c-main) 30%, transparent) 0 1px, transparent 1px 5px),
+    color-mix(in srgb, var(--c-main) 6%, var(--c-bg));
+}
+
+/* a színes chipek helyett kis gyűrűk és egy telt pont */
+html[data-scheme="light"] .strip .chip {
+  width: 6px; height: 6px; border-radius: 50%; box-shadow: none;
+  background: transparent; border: 1px solid var(--c-alt); box-sizing: border-box;
+}
+html[data-scheme="light"] .strip .chip.c2 { width: 6px; height: 6px; background: var(--c-alt); }
+html[data-scheme="light"] .strip .chip.c3 { width: 6px; height: 6px; border-color: var(--c-hot); }
+
+/* a sarokba tett veszélycsík helyett szaggatott vonal */
+html[data-scheme="light"] .strip .hazard-s {
+  opacity: .7;
+  background: repeating-linear-gradient(90deg, var(--c-main) 0 6px, transparent 6px 10px);
+  height: 2px;
+}
+html[data-scheme="light"] .vright .hazard-s {
+  background: repeating-linear-gradient(180deg, var(--c-main) 0 6px, transparent 6px 10px);
+  width: 2px; height: 110px;
+}
+html[data-scheme="light"] .strip .sweep { opacity: .6; }

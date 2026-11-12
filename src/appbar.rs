@@ -1,13 +1,13 @@
 //! Képernyősávok lefoglalása (AppBar API) és a Windows tálca kezelése.
 
 use windows::Win32::Foundation::{HWND, LPARAM, POINT, RECT};
-use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTOPRIMARY};
+use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MONITOR_DEFAULTTOPRIMARY, MONITORINFO, MonitorFromPoint};
 use windows::Win32::UI::Shell::{
-    SHAppBarMessage, ABE_BOTTOM, ABE_LEFT, ABE_RIGHT, ABE_TOP, ABM_GETSTATE, ABM_GETTASKBARPOS, ABM_NEW,
-    ABM_QUERYPOS, ABM_REMOVE, ABM_SETPOS, ABM_SETSTATE, ABS_AUTOHIDE, APPBARDATA,
+    ABE_BOTTOM, ABE_LEFT, ABE_RIGHT, ABE_TOP, ABM_GETSTATE, ABM_GETTASKBARPOS, ABM_NEW, ABM_QUERYPOS, ABM_REMOVE, ABM_SETPOS, ABM_SETSTATE,
+    ABS_AUTOHIDE, APPBARDATA, SHAppBarMessage,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    FindWindowW, IsWindowVisible, SetWindowPos, ShowWindow, HWND_TOPMOST, SWP_NOACTIVATE, SW_HIDE, SW_SHOW, WM_APP,
+    FindWindowW, HWND_TOPMOST, IsWindowVisible, SW_HIDE, SW_SHOW, SWP_NOACTIVATE, SetWindowPos, ShowWindow, WM_APP,
 };
 use windows::core::w;
 
@@ -116,15 +116,7 @@ pub fn set(hwnd: HWND, edge: Edge, rc: RECT) -> RECT {
             }
         }
         unsafe {
-            let _ = SetWindowPos(
-                hwnd,
-                Some(HWND_TOPMOST),
-                r.left,
-                r.top,
-                r.right - r.left,
-                r.bottom - r.top,
-                SWP_NOACTIVATE,
-            );
+            let _ = SetWindowPos(hwnd, Some(HWND_TOPMOST), r.left, r.top, r.right - r.left, r.bottom - r.top, SWP_NOACTIVATE);
         }
         r
     }
@@ -132,7 +124,7 @@ pub fn set(hwnd: HWND, edge: Edge, rc: RECT) -> RECT {
 
 /// Az asztal munkaterülete: a képernyő a lefoglalt sávok (és a tálca) nélkül.
 pub fn work_area() -> RECT {
-    use windows::Win32::UI::WindowsAndMessaging::{SystemParametersInfoW, SPI_GETWORKAREA, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS};
+    use windows::Win32::UI::WindowsAndMessaging::{SPI_GETWORKAREA, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, SystemParametersInfoW};
     let mut r = RECT::default();
     unsafe {
         let _ = SystemParametersInfoW(SPI_GETWORKAREA, 0, Some(&mut r as *mut RECT as *mut _), SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0));
@@ -178,7 +170,7 @@ pub fn monitors() -> Vec<Monitor> {
 
 /// Annak a képernyőnek a munkaterülete, amelyiken a megadott terület (pl. egy sáv) van.
 pub fn work_area_of(rc: RECT) -> RECT {
-    use windows::Win32::Graphics::Gdi::{MonitorFromRect, MONITOR_DEFAULTTONEAREST};
+    use windows::Win32::Graphics::Gdi::{MONITOR_DEFAULTTONEAREST, MonitorFromRect};
     unsafe {
         let mon = MonitorFromRect(&rc, MONITOR_DEFAULTTONEAREST);
         let mut mi = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };

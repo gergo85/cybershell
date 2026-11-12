@@ -1,0 +1,74 @@
+/* Ablakelőnézet: több ablakos programok kisképei. */
+
+.sbtn, .ib, .seg button, .run-chip, .pw, .sys-btn, .menu button, .refresh, .grip, .wall-tile,
+.ed-row, .tile, .tile-in, .label, .qtile, .qlabel, .tile img, .pk-card, .pk-x {
+  transition-property: background-color, color, border-color, box-shadow, opacity, filter, outline-color;
+  transition-duration: var(--hover-fade);
+  transition-timing-function: ease;
+}
+:is(.sbtn, .ib, .seg button, .run-chip, .pw, .sys-btn, .menu button, .refresh, .grip, .wall-tile, .ed-row, .pk-card, .pk-x):hover,
+.app:hover :is(.tile, .tile-in, .label, .tile img),
+.qbtn:hover :is(.qtile, .qlabel),
+:is(.sbtn, .pw):hover svg {
+  transition-delay: var(--hover-delay);
+}
+
+/* ───────────── Ablakelőnézet ───────────── */
+.peek {
+  position: absolute; inset: 0; overflow: hidden;
+  background:
+    repeating-linear-gradient(0deg, rgba(255,255,255,.018) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at 0% 0%, color-mix(in srgb, var(--c-main) 8%, transparent), transparent 60%),
+    var(--c-bg);
+  border: 1px solid color-mix(in srgb, var(--c-main) 38%, transparent);
+}
+.peek::before {
+  content: ""; position: absolute; left: -1px; top: -1px; width: 54px; height: 3px;
+  background: var(--c-main); box-shadow: 0 0 8px var(--c-main-glow);
+}
+.peek::after {
+  content: ""; position: absolute; right: -1px; bottom: -1px; width: 28px; height: 3px;
+  background: var(--c-alt); box-shadow: 0 0 8px var(--c-alt-dim);
+}
+.pk-head {
+  position: absolute; left: 14px; right: 14px; top: 11px; height: 18px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  font: 400 11px/1 var(--f-mono); letter-spacing: .14em; text-transform: uppercase;
+}
+.pk-name { min-width: 0; line-height: 18px; color: var(--c-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pk-count { flex: none; color: var(--c-hot); }
+.pk-card {
+  position: absolute; cursor: pointer;
+  background: color-mix(in srgb, var(--c-main) 4%, var(--c-bg));
+  border: 1px solid color-mix(in srgb, var(--c-main) 16%, transparent);
+  clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
+}
+.pk-card:hover { border-color: var(--c-main); background: color-mix(in srgb, var(--c-main) 12%, var(--c-bg)); }
+.pk-card.active { border-color: color-mix(in srgb, var(--c-alt) 70%, transparent); }
+.pk-card.active::before {
+  content: ""; position: absolute; left: 0; top: 0; width: 3px; height: 30px; background: var(--c-alt);
+  box-shadow: 0 0 6px var(--c-alt);
+}
+.pk-card.closing { opacity: .25; pointer-events: none; transition: opacity .2s; }
+.pk-title {
+  height: 30px; display: flex; align-items: center; gap: 7px; padding: 0 3px 0 10px;
+  font-size: 12px; color: var(--c-text); font-variation-settings: "wdth" 85, "wght" 500;
+}
+.pk-title > img, .pk-title > svg { flex: none; width: 16px; height: 16px; object-fit: contain; }
+.pk-title > svg { color: var(--c-text-dim); }
+.pk-title span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pk-card:hover .pk-title span { color: #fff; }
+.pk-x {
+  flex: none; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;
+  color: var(--c-text-dim); opacity: 0;
+}
+.pk-x svg { width: 13px; height: 13px; }
+.pk-card:hover .pk-x { opacity: 1; }
+.pk-x:hover { background: var(--c-hot); color: var(--c-bg); }
+.pk-box { position: absolute; background: color-mix(in srgb, #000 70%, var(--c-bg)); }
+.pk-frame { position: absolute; outline: 1px solid color-mix(in srgb, var(--c-alt) 35%, transparent); }
+.pk-min {
+  height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  font: 400 10px/1 var(--f-mono); letter-spacing: .14em; color: var(--c-text-dim);
+}
+.pk-min img, .pk-min svg { width: 40px; height: 40px; object-fit: contain; opacity: .55; }

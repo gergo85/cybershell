@@ -3,19 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CyberHub előnézet</title>
+<title>CyberShell előnézet</title>
 <style>
-  :root { --l: 86px; --r: 86px; --t: 10px; --b: 10px; }
   html, body { margin: 0; height: 100%; background: #111; overflow: hidden; }
   #stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; background: #000; }
   iframe { position: absolute; border: 0; display: block; }
-  #left { left: 0; top: 0; width: var(--l); height: 1080px; }
-  #right { left: calc(1920px - var(--r)); top: 0; width: var(--r); height: 1080px; }
-  #top { left: var(--l); top: 0; width: calc(1920px - var(--l) - var(--r)); height: var(--t); }
-  #bottom { left: var(--l); top: calc(1080px - var(--b)); width: calc(1920px - var(--l) - var(--r)); height: var(--b); }
   #work {
-    position: absolute; left: var(--l); top: var(--t); width: calc(1920px - var(--l) - var(--r)); height: calc(1080px - var(--t) - var(--b));
-    background: #1e1e1e; font: 13px "Segoe UI", sans-serif; color: #c8c8d0; display: flex; flex-direction: column;
+    position: absolute; background: #1e1e1e; font: 13px "Segoe UI", sans-serif; color: #c8c8d0; display: flex; flex-direction: column;
   }
   .bar { height: 32px; display: flex; align-items: center; padding: 0 12px; background: #2a2a2a; color: #ddd; gap: 10px; }
   .bar span:last-child { margin-left: auto; letter-spacing: 14px; color: #999; }
@@ -26,24 +20,57 @@
 <body>
 <div id="stage">
   <div id="work">
-    <div class="bar"><span>●</span><span>Egy program teljes méretben – CyberHub előnézet</span><span>–□×</span></div>
+    <div class="bar"><span>●</span><span>Egy program teljes méretben – CyberShell előnézet</span><span>–□×</span></div>
     <div class="code"><i>/* a programok ide, középre nyílnak */</i></div>
   </div>
-  <iframe id="left" src="ui/hub.html?part=left&l=86&t=10&r=86&b=10"></iframe>
-  <iframe id="right" src="ui/hub.html?part=right&l=86&t=10&r=86&b=10"></iframe>
-  <iframe id="top" src="ui/hub.html?part=top&l=86&t=10&r=86&b=10"></iframe>
-  <iframe id="bottom" src="ui/hub.html?part=bottom&l=86&t=10&r=86&b=10"></iframe>
 </div>
 <script>
+  // ?icons=left|right|top|bottom&info=…  – a panelek helye (mint a config.json iconsEdge/infoEdge)
+  // ?scheme=light – világos téma
   // ?z=3&x=1700&y=0 – nagyítás egy részletre (ellenőrzéshez)
   const p = new URLSearchParams(location.search);
+  const W = 1920, H = 1080;
+  const icons = p.get('icons') || 'left';
+  let info = p.get('info') || (icons === 'right' ? 'left' : 'right');
+  if (info === icons) info = icons === 'right' ? 'left' : 'right';
+  const frames = ['left', 'right', 'top', 'bottom'].filter((e) => e !== icons && e !== info);
+  const order = [icons, info, ...frames];
+  const thick = (e) => (e === icons || e === info ? 86 : 10);
+  const vertical = (e) => e === 'left' || e === 'right';
+  // ugyanaz az elhelyezés, mint a programban: a korábbi sáv kapja a teljes hosszt
+  const rem = { l: 0, t: 0, r: W, b: H };
+  const rects = {};
+  for (const e of order) {
+    const t = thick(e);
+    if (e === 'left') { rects[e] = { x: rem.l, y: rem.t, w: t, h: rem.b - rem.t }; rem.l += t; }
+    if (e === 'right') { rects[e] = { x: rem.r - t, y: rem.t, w: t, h: rem.b - rem.t }; rem.r -= t; }
+    if (e === 'top') { rects[e] = { x: rem.l, y: rem.t, w: rem.r - rem.l, h: t }; rem.t += t; }
+    if (e === 'bottom') { rects[e] = { x: rem.l, y: rem.b - t, w: rem.r - rem.l, h: t }; rem.b -= t; }
+  }
+  const rank = (e) => order.indexOf(e);
+  const stage = document.getElementById('stage');
+  for (const e of order) {
+    const [a, b] = vertical(e) ? ['top', 'bottom'] : ['left', 'right'];
+    const ia = rank(a) > rank(e) ? thick(a) : 0;
+    const ib = rank(b) > rank(e) ? thick(b) : 0;
+    const part = e === icons ? 'left' : e === info ? 'right' : 'strip';
+    const f = document.createElement('iframe');
+    const r = rects[e];
+    Object.assign(f.style, { left: `${r.x}px`, top: `${r.y}px`, width: `${r.w}px`, height: `${r.h}px` });
+    f.id = part === 'strip' ? `strip-${e}` : part;
+    f.src = `ui/hub.html?part=${part}&side=${e}&l=${thick('left')}&t=${thick('top')}&r=${thick('right')}&b=${thick('bottom')}&ia=${ia}&ib=${ib}&scheme=${p.get('scheme') || 'dark'}`;
+    stage.appendChild(f);
+  }
+  if (p.get('scheme') === 'light') {
+    document.getElementById('work').style.background = '#f4f6f7';
+  }
+  Object.assign(document.getElementById('work').style, { left: `${rem.l}px`, top: `${rem.t}px`, width: `${rem.r - rem.l}px`, height: `${rem.b - rem.t}px` });
   const fit = () => {
-    const stage = document.getElementById('stage');
     if (p.get('z')) {
       stage.style.transform = `scale(${p.get('z')}) translate(${-(p.get('x') || 0)}px, ${-(p.get('y') || 0)}px)`;
       return;
     }
-    const s = Math.min(innerWidth / 1920, innerHeight / 1080);
+    const s = Math.min(innerWidth / W, innerHeight / H);
     stage.style.transform = `scale(${s})`;
   };
   addEventListener('resize', fit); fit();

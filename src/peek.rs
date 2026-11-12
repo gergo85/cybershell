@@ -4,9 +4,8 @@
 
 use windows::Win32::Foundation::{HWND, RECT};
 use windows::Win32::Graphics::Dwm::{
-    DwmGetWindowAttribute, DwmRegisterThumbnail, DwmUnregisterThumbnail, DwmUpdateThumbnailProperties,
-    DWMWA_EXTENDED_FRAME_BOUNDS, DWM_THUMBNAIL_PROPERTIES, DWM_TNP_OPACITY, DWM_TNP_RECTDESTINATION,
-    DWM_TNP_RECTSOURCE, DWM_TNP_SOURCECLIENTAREAONLY, DWM_TNP_VISIBLE,
+    DWM_THUMBNAIL_PROPERTIES, DWM_TNP_OPACITY, DWM_TNP_RECTDESTINATION, DWM_TNP_RECTSOURCE, DWM_TNP_SOURCECLIENTAREAONLY, DWM_TNP_VISIBLE,
+    DWMWA_EXTENDED_FRAME_BOUNDS, DwmGetWindowAttribute, DwmRegisterThumbnail, DwmUnregisterThumbnail, DwmUpdateThumbnailProperties,
 };
 use windows::Win32::UI::WindowsAndMessaging::GetWindowRect;
 
@@ -49,12 +48,8 @@ pub fn visible_source(src: HWND) -> Option<RECT> {
         let mut wr = RECT::default();
         GetWindowRect(src, &mut wr).ok()?;
         let mut ext = RECT::default();
-        let got = DwmGetWindowAttribute(
-            src,
-            DWMWA_EXTENDED_FRAME_BOUNDS,
-            &mut ext as *mut RECT as *mut _,
-            std::mem::size_of::<RECT>() as u32,
-        );
+        let got =
+            DwmGetWindowAttribute(src, DWMWA_EXTENDED_FRAME_BOUNDS, &mut ext as *mut RECT as *mut _, std::mem::size_of::<RECT>() as u32);
         let r = if got.is_ok() && ext.right > ext.left && ext.bottom > ext.top {
             RECT { left: ext.left - wr.left, top: ext.top - wr.top, right: ext.right - wr.left, bottom: ext.bottom - wr.top }
         } else {

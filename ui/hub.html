@@ -3,13 +3,35 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CyberHub</title>
-<link rel="stylesheet" href="hub.css">
+<title>CyberShell</title>
+<!-- stílusok: alap, komponensek, majd a vízszintes elrendezés és a világos téma (ezek felülírnak) -->
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/strip.css">
+<link rel="stylesheet" href="css/icons.css">
+<link rel="stylesheet" href="css/panel.css">
+<link rel="stylesheet" href="css/peek.css">
+<link rel="stylesheet" href="css/flyout.css">
+<link rel="stylesheet" href="css/settings.css">
+<link rel="stylesheet" href="css/launcher.css">
+<link rel="stylesheet" href="css/health.css">
+<link rel="stylesheet" href="css/horizontal.css">
+<link rel="stylesheet" href="css/light.css">
 </head>
 <body>
 <div id="root"></div>
+<!-- adatok: ikonok, szövegek -->
 <script src="icons.js"></script>
 <script src="i18n.js"></script>
+<!-- közös segédek, majd felületenként egy fájl; az indító a cím szerint választ közülük -->
+<script src="core.js"></script>
+<script src="parts/strip.js"></script>
+<script src="parts/icons.js"></script>
+<script src="parts/panel.js"></script>
+<script src="parts/peek.js"></script>
+<script src="parts/flyout.js"></script>
+<script src="parts/launcher.js"></script>
+<script src="parts/health.js"></script>
+<script src="parts/settings.js"></script>
 <script src="hub.js"></script>
 </body>
 </html>

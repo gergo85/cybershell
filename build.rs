@@ -1,6 +1,6 @@
-//! Az exe ikonjának beágyazása (assets/cyberhub.ico, a forrása assets/cyberhub.svg).
+//! Az exe ikonjának beágyazása (assets/cybershell.ico, a forrása assets/cybershell.svg).
 fn main() {
-    println!("cargo:rerun-if-changed=assets/cyberhub.rc");
-    println!("cargo:rerun-if-changed=assets/cyberhub.ico");
-    embed_resource::compile("assets/cyberhub.rc", embed_resource::NONE).manifest_optional().unwrap();
+    println!("cargo:rerun-if-changed=assets/cybershell.rc");
+    println!("cargo:rerun-if-changed=assets/cybershell.ico");
+    embed_resource::compile("assets/cybershell.rc", embed_resource::NONE).manifest_optional().unwrap();
 }

@@ -9,15 +9,15 @@ use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 const URL: &str = "https://api.anthropic.com/api/oauth/usage";
 
 fn credentials_path() -> PathBuf {
-    if let Ok(d) = std::env::var("CLAUDE_CONFIG_DIR") {
-        if !d.trim().is_empty() {
-            return PathBuf::from(d).join(".credentials.json");
-        }
+    if let Ok(d) = std::env::var("CLAUDE_CONFIG_DIR")
+        && !d.trim().is_empty()
+    {
+        return PathBuf::from(d).join(".credentials.json");
     }
     let home = std::env::var("USERPROFILE").unwrap_or_default();
     PathBuf::from(home).join(".claude").join(".credentials.json")
@@ -35,7 +35,7 @@ fn status(status: &str, plan: &str, message: &str) -> Value {
 fn read_text(path: &std::path::Path) -> Result<String, std::io::Error> {
     let bytes = std::fs::read(path)?;
     if bytes.starts_with(&[0xFF, 0xFE]) {
-        let units: Vec<u16> = bytes[2..].chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+        let units: Vec<u16> = bytes[2..].as_chunks::<2>().0.iter().map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
         return Ok(String::from_utf16_lossy(&units));
     }
     Ok(String::from_utf8_lossy(&bytes).trim_start_matches('\u{feff}').to_string())
@@ -56,10 +56,10 @@ fn find_oauth(v: &Value, depth: u32) -> Option<&Value> {
     v.as_object()?.values().find_map(|x| find_oauth(x, depth - 1))
 }
 
-/// Ide menti a Claude Code állapotsor-parancsa (CyberHub.exe --statusline) a korlátokat.
+/// Ide menti a Claude Code állapotsor-parancsa (CyberShell.exe --statusline) a korlátokat.
 pub fn limits_file() -> PathBuf {
     let base = std::env::var("LOCALAPPDATA").map(PathBuf::from).unwrap_or_else(|_| std::env::temp_dir());
-    let d = base.join("CyberHub");
+    let d = base.join("CyberShell");
     let _ = std::fs::create_dir_all(&d);
     d.join("claude-limits.json")
 }
@@ -73,9 +73,7 @@ fn from_statusline(plan: &str) -> Option<Value> {
         let l = &v[key];
         let Some(pct) = l["used_percentage"].as_f64() else { continue };
         // a visszaállás ideje másodpercben érkezik; ha szövegként, a felület értelmezi
-        let resets_ms = l["resets_at"]
-            .as_f64()
-            .map(|s| if s < 100_000_000_000.0 { s * 1000.0 } else { s } as i64);
+        let resets_ms = l["resets_at"].as_f64().map(|s| if s < 100_000_000_000.0 { s * 1000.0 } else { s } as i64);
         let resets_iso = l["resets_at"].as_str().map(str::to_string);
         // ha az ablak azóta lejárt, a régi érték már nem érvényes
         let expired = resets_ms.map(|r| r <= now_ms()).unwrap_or(false);
@@ -138,7 +136,7 @@ fn fetch_direct() -> Value {
         .header("Authorization", &format!("Bearer {token}"))
         .header("anthropic-beta", "oauth-2025-04-20")
         .header("Accept", "application/json")
-        .header("User-Agent", "CyberHub/0.2")
+        .header("User-Agent", "CyberShell/0.2")
         .call();
 
     let body: Value = match res {
@@ -161,15 +159,15 @@ fn fetch_direct() -> Value {
     let mut limits = Vec::new();
     for (key, label, always) in keys {
         let l = &body[key];
-        if let Some(pct) = l["utilization"].as_f64() {
-            if always || pct > 0.0 {
-                limits.push(json!({
-                    "key": key,
-                    "label": label,
-                    "pct": pct,
-                    "resetsAt": l["resets_at"].as_str(),
-                }));
-            }
+        if let Some(pct) = l["utilization"].as_f64()
+            && (always || pct > 0.0)
+        {
+            limits.push(json!({
+                "key": key,
+                "label": label,
+                "pct": pct,
+                "resetsAt": l["resets_at"].as_str(),
+            }));
         }
     }
     if limits.is_empty() {
@@ -195,9 +193,7 @@ pub fn spawn(wake: Receiver<()>, deliver: impl Fn(Value) + Send + 'static) {
             };
             deliver(result);
             match wake.recv_timeout(Duration::from_secs(wait)) {
-                Ok(()) | Err(RecvTimeoutError::Timeout) => {
-                    while wake.try_recv().is_ok() {}
-                }
+                Ok(()) | Err(RecvTimeoutError::Timeout) => while wake.try_recv().is_ok() {},
                 Err(RecvTimeoutError::Disconnected) => break,
             }
         }

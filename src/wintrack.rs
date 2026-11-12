@@ -6,23 +6,19 @@ use std::path::Path;
 use std::sync::Mutex;
 
 use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM};
-use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED};
+use windows::Win32::Graphics::Dwm::{DWMWA_CLOAKED, DwmGetWindowAttribute};
 use windows::Win32::Graphics::Gdi::{
-    DeleteObject, GetDC, GetDIBits, GetObjectW, ReleaseDC, BITMAP, BITMAPINFO, BITMAPINFOHEADER, BI_RGB,
-    DIB_RGB_COLORS, HGDIOBJ,
+    BI_RGB, BITMAP, BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS, DeleteObject, GetDC, GetDIBits, GetObjectW, HGDIOBJ, ReleaseDC,
 };
 use windows::Win32::Storage::FileSystem::{GetFileVersionInfoSizeW, GetFileVersionInfoW, VerQueryValueW};
-use windows::Win32::System::Threading::{
-    OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
-};
-use windows::Win32::UI::Input::KeyboardAndMouse::{keybd_event, KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, VK_MENU};
+use windows::Win32::System::Threading::{OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW};
+use windows::Win32::UI::Input::KeyboardAndMouse::{KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, VK_MENU, keybd_event};
 use windows::Win32::UI::Shell::{SHDefExtractIconW, ShellExecuteW};
 use windows::Win32::UI::WindowsAndMessaging::{
-    DestroyIcon, EnumWindows, GetAncestor, GetClassNameW, GetIconInfo, GetWindow, GetWindowLongPtrW, GetWindowTextW,
-    GetWindowThreadProcessId, IsIconic, IsWindowVisible, SetForegroundWindow, SetWindowPos, ShowWindow, GA_ROOTOWNER,
-    GWL_EXSTYLE, GWL_STYLE, GW_OWNER, HICON, HWND_NOTOPMOST, HWND_TOPMOST, ICONINFO, SWP_NOACTIVATE, SWP_NOMOVE,
-    SWP_NOSIZE, SW_MAXIMIZE, SW_MINIMIZE, SW_RESTORE, SW_SHOWMAXIMIZED, SW_SHOWNORMAL, WS_EX_APPWINDOW,
-    WS_EX_TOOLWINDOW, WS_MAXIMIZEBOX,
+    DestroyIcon, EnumWindows, GA_ROOTOWNER, GW_OWNER, GWL_EXSTYLE, GWL_STYLE, GetAncestor, GetClassNameW, GetIconInfo, GetWindow,
+    GetWindowLongPtrW, GetWindowTextW, GetWindowThreadProcessId, HICON, HWND_NOTOPMOST, HWND_TOPMOST, ICONINFO, IsIconic, IsWindowVisible,
+    SW_MAXIMIZE, SW_MINIMIZE, SW_RESTORE, SW_SHOWMAXIMIZED, SW_SHOWNORMAL, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SetForegroundWindow,
+    SetWindowPos, ShowWindow, WS_EX_APPWINDOW, WS_EX_TOOLWINDOW, WS_MAXIMIZEBOX,
 };
 use windows::core::{BOOL, HSTRING, PCWSTR, PWSTR};
 
@@ -54,8 +50,7 @@ impl Matcher {
         Matcher { exes: app.exe_names(), title: app.match_title.to_lowercase() }
     }
     pub fn matches(&self, w: &WinInfo) -> bool {
-        (!w.exe.is_empty() && self.exes.iter().any(|e| *e == w.exe))
-            || (!self.title.is_empty() && w.title.contains(&self.title))
+        (!w.exe.is_empty() && self.exes.contains(&w.exe)) || (!self.title.is_empty() && w.title.contains(&self.title))
     }
 }
 
@@ -79,7 +74,7 @@ fn title_of(hwnd: HWND) -> String {
     String::from_utf16_lossy(&buf[..n.max(0) as usize])
 }
 
-fn path_of_pid(pid: u32) -> Option<String> {
+pub fn path_of_pid(pid: u32) -> Option<String> {
     unsafe {
         let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
         let mut buf = [0u16; 1024];
@@ -123,7 +118,7 @@ impl Tracker {
     /// Az összes látható alkalmazásablak z-sorrendben (legfelső elöl).
     pub fn snapshot(&mut self, own: &[HWND]) -> Vec<WinInfo> {
         self.polls += 1;
-        if self.polls % 120 == 0 {
+        if self.polls.is_multiple_of(120) {
             self.pid_cache.clear();
         }
         let mut all: Vec<HWND> = Vec::new();
@@ -201,8 +196,10 @@ pub fn raise_for_drop(hwnd: HWND) {
 }
 
 pub const VK_WIN: u8 = 0x5B;
+pub const VK_CONTROL: u8 = 0x11;
 
-/// Billentyűkombináció lenyomása (sorban le, fordított sorrendben fel).
+/// Billentyűkombináció lenyomása (sorban le, fordított sorrendben fel): a Windows saját
+/// Start menüjéhez (Win) és keresőjéhez (Win+S), ha a saját menü ki van kapcsolva.
 pub fn press_keys(keys: &[u8]) {
     let flags = |vk: u8| if vk == VK_WIN { KEYEVENTF_EXTENDEDKEY } else { Default::default() };
     unsafe {
@@ -244,9 +241,7 @@ pub fn shell_open(file: &str, args: &str, cwd: &str, maximized: bool) -> bool {
     let args = opt(args);
     let cwd = opt(cwd);
     let show = if maximized { SW_SHOWMAXIMIZED } else { SW_SHOWNORMAL };
-    let r = unsafe {
-        ShellExecuteW(None, &HSTRING::from("open"), &file, pcwstr(&args), pcwstr(&cwd), show)
-    };
+    let r = unsafe { ShellExecuteW(None, &HSTRING::from("open"), &file, pcwstr(&args), pcwstr(&cwd), show) };
     r.0 as isize > 32
 }
 
@@ -277,9 +272,8 @@ pub fn display_name(path: &str) -> String {
 
 /// Keretrendszer- vagy futtatókörnyezet-név, ami nem a program saját neve.
 fn is_framework_name(name: &str) -> bool {
-    const GENERIC: [&str; 9] = [
-        "electron", "nw.js", "node.js", "node", "cef", "chromium", "chromium embedded framework", "tauri app", "webview2",
-    ];
+    const GENERIC: [&str; 9] =
+        ["electron", "nw.js", "node.js", "node", "cef", "chromium", "chromium embedded framework", "tauri app", "webview2"];
     let n = name.trim().to_lowercase();
     GENERIC.contains(&n.as_str())
 }
@@ -301,9 +295,7 @@ fn version_strings(path: &str, keys: &[&str]) -> Vec<Option<String>> {
         let mut ptr: *mut core::ffi::c_void = std::ptr::null_mut();
         let mut len = 0u32;
         let mut lang = (0x0409u16, 0x04B0u16);
-        if VerQueryValueW(data.as_ptr() as *const _, &HSTRING::from("\\VarFileInfo\\Translation"), &mut ptr, &mut len)
-            .as_bool()
-            && len >= 4
+        if VerQueryValueW(data.as_ptr() as *const _, &HSTRING::from("\\VarFileInfo\\Translation"), &mut ptr, &mut len).as_bool() && len >= 4
         {
             let t = std::slice::from_raw_parts(ptr as *const u16, 2);
             lang = (t[0], t[1]);
@@ -329,10 +321,10 @@ static ICON_CACHE: Mutex<Option<HashMap<String, Option<Vec<u8>>>>> = Mutex::new(
 /// A program ikonja PNG-ként (48 px), gyorsítótárazva.
 pub fn icon_png(path: &str) -> Option<Vec<u8>> {
     let key = path.to_lowercase();
-    if let Ok(g) = ICON_CACHE.lock() {
-        if let Some(hit) = g.as_ref().and_then(|m| m.get(&key)) {
-            return hit.clone();
-        }
+    if let Ok(g) = ICON_CACHE.lock()
+        && let Some(hit) = g.as_ref().and_then(|m| m.get(&key))
+    {
+        return hit.clone();
     }
     let png = extract_icon(path);
     if let Ok(mut g) = ICON_CACHE.lock() {
@@ -401,8 +393,8 @@ unsafe fn hicon_to_png(icon: HICON) -> Option<Vec<u8>> {
             return None;
         }
         // BGRA → RGBA; régi ikonoknál nincs alfa, ott teljesen átlátszatlan
-        let has_alpha = px.chunks_exact(4).any(|p| p[3] != 0);
-        for p in px.chunks_exact_mut(4) {
+        let has_alpha = px.as_chunks::<4>().0.iter().any(|p| p[3] != 0);
+        for p in px.as_chunks_mut::<4>().0 {
             p.swap(0, 2);
             if !has_alpha {
                 p[3] = 255;
@@ -418,4 +410,11 @@ unsafe fn hicon_to_png(icon: HICON) -> Option<Vec<u8>> {
         }
         Some(out)
     }
+}
+
+/// Megnyitás adott művelettel (pl. "runas": futtatás rendszergazdaként).
+pub fn shell_verb(verb: &str, file: &str, args: &str) -> bool {
+    let args = opt(args);
+    let r = unsafe { ShellExecuteW(None, &HSTRING::from(verb), &HSTRING::from(file), pcwstr(&args), PCWSTR::null(), SW_SHOWNORMAL) };
+    r.0 as isize > 32
 }
