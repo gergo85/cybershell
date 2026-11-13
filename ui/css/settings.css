@@ -247,26 +247,26 @@
 .lang-row .seg button { width: 44px; height: 26px; font-size: 11px; }
 
 /* szekciósorok: bal oldalt húzható jel, a többi rész kapcsoló */
-.sec-row { display: flex; align-items: stretch; gap: 4px; }
-.sec-row .grip {
+:is(.sec-row, .ed-item) { display: flex; align-items: stretch; gap: 4px; }
+:is(.sec-row, .ed-item) > .grip {
   flex: none; width: 26px; display: flex; align-items: center; justify-content: center;
   color: var(--c-text-dim); cursor: grab; touch-action: none;
   background: color-mix(in srgb, var(--c-main) 5%, transparent);
 }
-.sec-row .grip svg { width: 16px; height: 16px; }
-.sec-row .grip:hover { color: var(--c-main); background: color-mix(in srgb, var(--c-main) 14%, transparent); }
+:is(.sec-row, .ed-item) > .grip svg { width: 16px; height: 16px; }
+:is(.sec-row, .ed-item) > .grip:hover { color: var(--c-main); background: color-mix(in srgb, var(--c-main) 14%, transparent); }
 .sec-row .sbtn { flex: 1; }
-.sec-row { position: relative; }
+:is(.sec-row, .ed-item) { position: relative; }
 .set-list.sorting .sec-row { transition: transform .18s cubic-bezier(.2, .8, .2, 1); }
 .set-list.sorting .sec-row.dragging { transition: none; z-index: 2; }
 .set-list.sorting .sec-row.settling { z-index: 2; transition: transform .16s cubic-bezier(.2, .8, .2, 1); }
 .sec-row.dragging .sbtn, .sec-row.settling .sbtn { box-shadow: 0 6px 18px rgba(0, 0, 0, .55), 0 0 10px var(--c-alt-dim); }
 .sec-row.dragging .sbtn { background: color-mix(in srgb, var(--c-alt) 12%, var(--c-bg)); }
-.sec-row.dragging .grip { cursor: grabbing; color: var(--c-bg); background: var(--c-alt); }
+:is(.sec-row, .ed-item).dragging > .grip { cursor: grabbing; color: var(--c-bg); background: var(--c-alt); }
 .sec-row.dragging .sbtn { outline: 1px solid var(--c-alt); }
 
 /* ikonlista: plusz oszlop az automatikus indításhoz */
-.ed-head, .ed-row { grid-template-columns: 34px 40px minmax(140px, 200px) minmax(120px, 1fr) 160px 42px 112px 40px 34px; }
+.ed-head, .ed-row { grid-template-columns: 34px 40px minmax(140px, 200px) minmax(120px, 1fr) 160px 42px 40px 34px; }
 .ib.auto { color: var(--c-text-dim); }
 .ib.auto.on { color: var(--c-bg); background: var(--c-alt); box-shadow: 0 0 8px var(--c-alt-dim); }
 .ib.auto:hover { background: color-mix(in srgb, var(--c-alt) 35%, transparent); color: var(--c-text); }
@@ -386,7 +386,7 @@
 
 /* öt sor is elférjen görgetés nélkül 1060 px magas munkaterületen */
 .sec-row .sbtn.row { min-height: 30px; }
-.sec-row .grip { min-height: 30px; }
+:is(.sec-row, .ed-item) > .grip { min-height: 30px; }
 
 /* ───────────── beállítások – GitHub gomb, a panelek helye ───────────── */
 /* a GitHub és a Weboldal gomb szorosan egymás mellett (a kártya 12 px-es réséből 6 px marad) */
@@ -450,7 +450,7 @@
 
 /* Látható szekciók: a sorok ugyanolyan magasak, mint a többi kapcsoló (36 px) */
 #secList { gap: 6px; }
-.sec-row .sbtn.row, .sec-row .grip { min-height: 36px; }
+.sec-row .sbtn.row, :is(.sec-row, .ed-item) > .grip { min-height: 36px; }
 
 /* Rendszerterhelés: kisebb százalékok */
 .meter-head b { font-size: 24px; }
@@ -460,3 +460,86 @@
    oszlop alja egy vonalba kerül */
 .set-side > .load .meter { flex: 1 1 0; min-height: 0; }
 .set-side > .load .spark { flex: 1 1 auto; height: auto; min-height: 50px; }
+
+/* ───────────── beállítások – Egészség és Időjárás egymás alatt a Megjelenés mellett ─────────────
+   Az Egészség tömörebb lett (nincs alatta üres hely), alatta az Időjárás: a település szabad
+   szöveggel, mellette a Szél kapcsoló. A Megjelenés sorai szokásos sűrűségűek; ha a kártya
+   magasabb, az Egészség nyúlik vele, a tartalma középen. */
+.set-stack { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.set-stack > .set-card { min-width: 0; }
+.set-stack > .health { flex: 1; display: flex; flex-direction: column; }
+.set-stack > .health > .hl-row { flex: 1; align-content: center; }
+.set-card.wset { padding-top: 14px; padding-bottom: 14px; }
+.set-card.wset h2 { margin-bottom: 10px; white-space: nowrap; }
+.set-card.wset h2 small { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: color-mix(in srgb, var(--c-alt) 75%, var(--c-text)); }
+.set-card.wset h2 small.bad { color: var(--c-hot); }
+.settings.shown .set-card.wset { animation-delay: .14s; }
+.ws-row { display: flex; align-items: center; gap: 10px; }
+.ws-city {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 5px 0 14px;
+  background: color-mix(in srgb, var(--c-main) 7%, transparent);
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+}
+.ws-city > svg { flex: none; width: 17px; height: 17px; color: var(--c-alt); }
+.ws-city input {
+  flex: 1; min-width: 0; height: 28px; padding: 0 10px; font: inherit; font-size: 14px; color: var(--c-text);
+  font-variation-settings: "wdth" 90, "wght" 550;
+  background: var(--c-bg); border: 1px solid color-mix(in srgb, var(--c-main) 30%, transparent); border-radius: 0; outline: none;
+  user-select: text; -webkit-user-select: text;
+}
+.ws-city input::placeholder { color: var(--c-text-dim); }
+.ws-city input:focus { border-color: var(--c-main); box-shadow: 0 0 6px var(--c-main-glow); }
+.ws-row > .sbtn.toggle { flex: none; min-width: 130px; }
+.ws-row > .sbtn.toggle svg { color: var(--c-alt); }
+html[data-scheme="light"] .ws-city { clip-path: none; border-radius: 7px; }
+html[data-scheme="light"] .ws-city input { border-radius: 5px; }
+
+
+/* Háttérkép: Alapállapot gomb, megerősítésre várva piros */
+#wallReset.armed { color: var(--c-bg); background: var(--c-hot); }
+#wallReset.armed svg { color: var(--c-bg); }
+
+/* Időjárás: Enter gomb a mező jobb oldalán, a mezőn belül */
+.ws-field { position: relative; flex: 1; min-width: 0; display: flex; }
+.ws-field input { width: 100%; padding-right: 34px; }
+.ws-go {
+  position: absolute; right: 3px; top: 3px; bottom: 3px; width: 28px;
+  display: flex; align-items: center; justify-content: center; color: var(--c-text-dim);
+  background: color-mix(in srgb, var(--c-main) 8%, transparent);
+}
+.ws-go svg { width: 14px; height: 14px; }
+.ws-go:hover { color: var(--c-bg); background: var(--c-main); }
+html[data-scheme="light"] .ws-go { border-radius: 4px; }
+
+
+/* ───────────── beállítások – a bal oszlop a jobbhoz igazodik ─────────────
+   A bal oszlop nem növeli a sor magasságát (a sor magasságát a jobb oszlop adja), a
+   maradék helyet a Rendszerterhelés két grafikonja tölti ki, egyforma magasan: a memória
+   mérője a sávja (10 px + 6 px rés) miatt ennyivel nagyobb alapot kap. */
+.set-body > .set-side { height: 0; min-height: 100%; }
+.set-side > .load { flex: 1 1 0; min-height: 0; }
+.set-side > .load .meter { flex: 1 1 0; min-height: 0; }
+.set-side > .load .meter.mem { flex-basis: 16px; }
+.set-side > .load .spark { flex: 1 1 0; height: auto; min-height: 24px; }
+
+/* a sorrend-fogantyúk sarka olyan, mint a többi gombé (sötét témában levágott, világosban kerek) */
+:is(.sec-row, .ed-item) > .grip { clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px); }
+html[data-scheme="light"] :is(.sec-row, .ed-item) > .grip { clip-path: none; border-radius: 7px; }
+
+
+/* ───────────── Ikonok: a sor ugyanúgy épül, mint a Látható szekcióknál ─────────────
+   A fogantyú a sor mellett külön doboz (ugyanazokkal a szabályokkal, mint a szekcióknál),
+   a sor maga a fogantyútól jobbra kezdődik. */
+.ed-item > .ed-row { flex: 1; min-width: 0; }
+.ed-head, .ed-row { grid-template-columns: 40px minmax(140px, 200px) minmax(120px, 1fr) 160px 42px 40px 34px; }
+.ed-head { padding-left: 42px; }
+.ed-list.sorting .ed-item { transition: transform .18s cubic-bezier(.2, .8, .2, 1); }
+.ed-list.sorting .ed-item.dragging { transition: none; z-index: 2; }
+.ed-list.sorting .ed-item.settling { z-index: 2; transition: transform .16s cubic-bezier(.2, .8, .2, 1); }
+.ed-item.dragging > .ed-row, .ed-item.settling > .ed-row { box-shadow: 0 6px 18px rgba(0, 0, 0, .55), 0 0 10px var(--c-alt-dim); }
+.ed-item.dragging > .ed-row { background: color-mix(in srgb, var(--c-alt) 12%, var(--c-bg)); outline: 1px solid var(--c-alt); }
+
+/* Ikonok: a sor elején nincs sárga szegély (mint a Látható szekcióknál); csak a nem
+   telepített program kap piros jelzést */
+.ed-row { border-left: 0; }
+.ed-row.missing { box-shadow: inset 2px 0 0 var(--c-hot); }

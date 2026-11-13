@@ -22,7 +22,8 @@
   background:
     repeating-linear-gradient(-60deg, transparent 0 7px, color-mix(in srgb, var(--c-bg) 60%, transparent) 7px 10px),
     var(--c-main);
-  opacity: .85;
+  /* halványabb, hogy ne vonja el a figyelmet a munkaterületről */
+  opacity: .55;
 }
 .top .notch { top: 0; clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 10px 100%); }
 .bottom .notch { bottom: 0; clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 100%, 0 100%); }
@@ -66,7 +67,7 @@
   background:
     repeating-linear-gradient(-30deg, transparent 0 7px, color-mix(in srgb, var(--c-bg) 60%, transparent) 7px 10px),
     var(--c-main);
-  opacity: .85;
+  opacity: .55;
 }
 .vleft .notch { left: 0; clip-path: polygon(0 0, 100% 10px, 100% calc(100% - 10px), 0 100%); }
 .vright .notch { right: 0; clip-path: polygon(0 10px, 100% 0, 100% 100%, 0 calc(100% - 10px)); }

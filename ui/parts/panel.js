@@ -6,11 +6,18 @@
     root.className = `right side-${side}${horiz ? ' horiz' : ''}`;
     root.innerHTML = `
       <div class="edge"></div>
-      <div class="quick">
-        <div class="quick-apps" id="quickApps"></div>
-        <button class="qbtn" data-cmd="search" style="--app:#4fd1c5"><span class="qtile">${svg('search')}</span><span class="qlabel">${T('search')}</span></button>
-        <button class="qbtn" data-cmd="start" style="--app:#3b9eff"><span class="qtile">${svg('start')}</span><span class="qlabel">${T('start')}</span></button>
+      <div class="sys sys-start">
+        <button class="sys-btn" id="startBtn" data-cmd="start">${T('startBtn')}</button>
       </div>
+      <section class="sec tools" id="toolsSec">
+        <h3>${T('secTools')}</h3>
+        <div class="tool-grid">
+          <button class="tool" data-tool="calc" title="${T('toolCalc')}" style="--app:#ffb02e">${svg('calc')}</button>
+          <button class="tool" data-tool="notepad" title="${T('toolNotepad')}" style="--app:#5b8def">${svg('notes')}</button>
+          <button class="tool" data-cmd="search" title="${T('search')}" style="--app:#4fd1c5">${svg('search')}</button>
+          <button class="tool" data-tool="snip" title="${T('toolSnip')}" style="--app:#ff4fa3">${svg('snip')}</button>
+        </div>
+      </section>
       <section class="sec" id="claudeSec">
         <h3>${T('secClaude')}</h3>
         <div id="usage"><div class="note">…</div></div>
@@ -123,32 +130,20 @@
       </div>
       <div class="toast" id="toast"></div>`;
 
-    // Keresés és Indítás: a Windows saját keresője és Start menüje; fölöttük a
-    // jobb oldalra tett programok (config "place": "right")
-    root.querySelector('.quick').addEventListener('click', (e) => {
-      const b = e.target.closest('.qbtn');
-      if (!b) return;
-      if (b.dataset.id != null) post({ type: 'launch', id: Number(b.dataset.id), newInstance: e.shiftKey });
-      else post({ type: 'cmd', name: b.dataset.cmd, along: alongOf(b) });
+    // Indítás (a panel tetején) és Keresés (az Eszköztárban): a CyberShell Start menüje és keresője
+    for (const b of root.querySelectorAll('#startBtn, .tool[data-cmd]')) b.addEventListener('click', () => {
+      if (demo) return toast(`Demo: ${b.dataset.cmd}`);
+      post({ type: 'cmd', name: b.dataset.cmd, along: alongOf(b) });
+    });
+    // Eszköztár: Számológép, Jegyzettömb, Képmetsző
+    for (const b of root.querySelectorAll('.tool[data-tool]')) b.addEventListener('click', () => {
+      if (demo) return toast(`Demo: ${b.dataset.tool}`);
+      post({ type: 'cmd', name: 'tool', tool: b.dataset.tool });
     });
     // egy elem közepe a panel mentén (függőleges panelnél fentről, vízszintesnél balról)
     const alongOf = (el) => {
       const r = el.getBoundingClientRect();
       return Math.round(horiz ? r.left + r.width / 2 : r.top + r.height / 2);
-    };
-    const renderQuickApps = (apps) => {
-      $('quickApps').innerHTML = (apps || []).map((a) => {
-        const icon = a.img ? `<img src="${esc(a.img)}" alt="">` : svg(window.HUB_ICONS[a.icon] ? a.icon : 'app');
-        return `<button class="qbtn qapp" data-id="${a.id}"${appColor(a)}><span class="qtile">${icon}</span><span class="qlabel">${esc(a.name)}</span></button>`;
-      }).join('');
-    };
-    const applyQuickState = (running, active) => {
-      const run = new Set(running || []);
-      for (const el of root.querySelectorAll('.qapp')) {
-        const id = Number(el.dataset.id);
-        el.classList.toggle('running', run.has(id));
-        el.classList.toggle('active', id === active);
-      }
     };
 
     // MENÜ: a beállításokat nyitja meg
@@ -206,17 +201,27 @@
     const overflows = () => (horiz ? root.scrollWidth > root.clientWidth + 1 : root.scrollHeight > root.clientHeight + 1);
     let quickSig = '';
     const fitPanel = () => {
-      root.classList.remove('tight', 'tighter');
+      root.classList.remove('tight', 'tighter', 'overflow');
       if (overflows()) {
         root.classList.add('tight');
         if (overflows()) root.classList.add('tighter');
+        // ha így sem fér ki: görgethető, a Start és a MENÜ a helyén marad
+        if (overflows()) root.classList.add('overflow');
       }
       // az Indítás és a Keresés gomb helye: a Win billentyűvel nyitott menü is ide igazodik
-      const pos = { start: alongOf(root.querySelector('[data-cmd="start"]')), search: alongOf(root.querySelector('[data-cmd="search"]')) };
+      const pos = { start: alongOf($('startBtn')), search: alongOf(root.querySelector('.tool[data-cmd="search"]')) };
       const sig = JSON.stringify(pos);
       if (sig !== quickSig) { quickSig = sig; post({ type: 'quick-pos', ...pos }); }
     };
     window.addEventListener('resize', fitPanel);
+    // vízszintes panelen a görgő oldalra görget, ha nem fér ki minden (a zene és a hangerő
+    // fölött a görgő továbbra is a hangerőt állítja)
+    root.addEventListener('wheel', (e) => {
+      if (!horiz || !root.classList.contains('overflow') || e.defaultPrevented) return;
+      if (e.target.closest('#volSec, #musicSec')) return;
+      root.scrollLeft += e.deltaY || e.deltaX;
+      e.preventDefault();
+    }, { passive: false });
     // bármelyik szekció mérete változik (pl. megjön a Claude-adat), újramérünk
     let fitQueued = false;
     const queueFit = () => {
@@ -225,15 +230,17 @@
       setTimeout(() => { fitQueued = false; fitPanel(); }, 30);
     };
     const fitObserver = new ResizeObserver(queueFit);
-    for (const el of root.querySelectorAll('.sec, .quick')) fitObserver.observe(el);
+    for (const el of root.querySelectorAll('.sec')) fitObserver.observe(el);
 
     // ── szekciók láthatósága és sorrendje (a beállításokból) ──
     let claudeEnabled = true;
-    let sections = { claude: true, activity: true, clock: true, date: true, weather: true, music: true, volume: true,
-      order: ['claude', 'activity', 'date', 'clock', 'weather', 'music', 'volume'] };
-    const SECTION_EL = { claude: 'claudeSec', activity: 'act', clock: 'clockSec', date: 'dateSec', weather: 'weatherSec', music: 'musicSec', volume: 'volSec' };
+    let sections = { tools: true, claude: true, activity: true, clock: true, date: true, weather: true, music: true, volume: true,
+      order: ['tools', 'claude', 'activity', 'date', 'clock', 'weather', 'music', 'volume', 'power'] };
+    const SECTION_EL = { tools: 'toolsSec', claude: 'claudeSec', activity: 'act', clock: 'clockSec', date: 'dateSec', weather: 'weatherSec', music: 'musicSec', volume: 'volSec', power: 'powerSec' };
     let weatherOn = true;
     const applySections = () => {
+      $('toolsSec').style.display = sections.tools !== false ? '' : 'none';
+      $('powerSec').style.display = sections.power !== false ? '' : 'none';
       $('claudeSec').style.display = claudeEnabled && sections.claude !== false ? '' : 'none';
       $('act').style.display = sections.activity !== false ? '' : 'none';
       $('clockSec').style.display = sections.clock !== false ? '' : 'none';
@@ -241,9 +248,11 @@
       $('volSec').style.display = sections.volume !== false ? '' : 'none';
       $('musicSec').style.display = sections.music !== false ? '' : 'none';
       $('weatherSec').style.display = weatherOn && sections.weather !== false ? '' : 'none';
-      // a szekciók a beállított sorrendben, a Főkapcsoló előtt (ami a listából hiányzik, a végére kerül)
-      const anchor = $('powerSec');
+      // a szekciók (a Főkapcsolóval együtt) a beállított sorrendben, a MENÜ előtt (ami a listából hiányzik, a végére kerül)
+      const anchor = root.querySelector('.sys:not(.sys-start)');
       const order = [...(sections.order || [])];
+      // az Eszköztár (v1.4-ben új) alapból a Claude fölött van
+      if (!order.includes('tools')) order.splice(Math.max(0, order.indexOf('claude')), 0, 'tools');
       for (const k of Object.keys(SECTION_EL)) if (!order.includes(k)) order.push(k);
       for (const k of order) {
         const el = $(SECTION_EL[k]);
@@ -479,6 +488,16 @@
         wTimer = setTimeout(fetchWeather, 2 * 60000);
       }
     };
+    const setWeather = (next) => {
+      const placeChanged = !wcfg || wcfg.city !== next.city || wcfg.latitude !== next.latitude || wcfg.longitude !== next.longitude;
+      wcfg = next;
+      weatherOn = wcfg.enabled !== false;
+      $('weatherSec').style.display = weatherOn && sections.weather !== false ? '' : 'none';
+      // a szél sebessége és iránya kikapcsolható (a hibaüzenet ettől függetlenül látszik)
+      $('weatherSec').classList.toggle('no-wind', wcfg.wind === false);
+      if (!weatherOn) return clearTimeout(wTimer);
+      if (placeChanged) fetchWeather();
+    };
     // kattintásra a panel mellett kinyílik a részletes mai előrejelzés
     $('weatherSec').addEventListener('click', () => {
       if (!wcfg) return;
@@ -640,7 +659,7 @@
     });
 
     // ── laptop: Wi-Fi és akkumulátor (a Windows saját felületét nyitják meg) ──
-    root.querySelector('.lap-grid').addEventListener('click', (e) => {
+    $('laptopSec').querySelector('.lap-grid').addEventListener('click', (e) => {
       const b = e.target.closest('.lap');
       if (!b) return;
       if (demo) return toast(`Demo: ${b.dataset.cmd}`);
@@ -679,16 +698,13 @@
         if (msg.sections) sections = msg.sections;
         applySections();
         if (!act) initActivity();
-        renderQuickApps(msg.apps);
-        wcfg = msg.weather || { enabled: true, city: 'Budapest' };
-        weatherOn = wcfg.enabled !== false;
-        $('weatherSec').style.display = weatherOn && sections.weather !== false ? '' : 'none';
-        if (wcfg.enabled !== false) fetchWeather();
+        setWeather(msg.weather || { enabled: true, city: 'Budapest' });
         fitPanel();
       }
+      // a beállításokban megadott település vagy a szél kapcsolója változott
+      if (msg.type === 'weather' && msg.weather) setWeather(msg.weather);
       if (msg.type === 'sections') { sections = msg.sections || sections; applySections(); }
       if (msg.type === 'settings-open') sysBtn.classList.toggle('open', !!msg.on);
-      if (msg.type === 'state') applyQuickState(msg.running, msg.active);
       if (msg.type === 'toast') toast(msg.text);
       if (msg.type === 'power') showPower(msg);
       if (msg.type === 'volume') {
@@ -699,7 +715,7 @@
       if (msg.type === 'media') { mu = msg; renderMusic(); }
       queueFit();
       if (msg.type === 'launcher-state') {
-        for (const b of root.querySelectorAll('.qbtn[data-cmd]')) b.classList.toggle('open', !!msg.open && b.dataset.cmd === msg.mode);
+        for (const b of root.querySelectorAll('#startBtn, .tool[data-cmd]')) b.classList.toggle('open', !!msg.open && b.dataset.cmd === msg.mode);
       }
       if (msg.type === 'fly-state') {
         $('weatherSec').classList.toggle('open', !!msg.open && msg.kind === 'weather');
@@ -714,11 +730,10 @@
       }
     };
     h.demo = () => {
-      h({ type: 'init', activity: { minutes: 20, autoStart: false }, session: 1, claudeUsage: true, weather: { enabled: true, city: 'Budapest' },
-        apps: [{ id: 13, name: 'Cyberpunk', icon: 'game', color: '#ff3b5c' }] });
+      h({ type: 'init', activity: { minutes: 20, autoStart: false }, session: 1, claudeUsage: true, weather: { enabled: true, city: 'Budapest' } });
       h({ type: 'power', laptop: true, pct: 76, charging: true });
       h({ type: 'media', running: true, title: 'Neon Rain (Extended Mix)', artist: 'Night Runner', album: 'Afterglow', playing: true,
-        shuffle: false, canSeek: true, pos: 74, dur: 246, at: Date.now(), art: '../wallpapers/04-neon-street.jpg' });
+        shuffle: false, canSeek: true, pos: 74, dur: 246, at: Date.now(), art: '../wallpapers/dust-bridge.jpg' });
       const inH = (hrs) => new Date(Date.now() + hrs * 3600000).toISOString();
       h({ type: 'usage', status: 'ok', plan: 'pro', limits: [
         { key: 'five_hour', label: '5 órás', pct: 34, resetsAt: inH(2.3) },

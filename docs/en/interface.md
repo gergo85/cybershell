@@ -1,0 +1,41 @@
+[← Back to README](../../README.md) · **English** · [Magyar](../hu/interface.md)
+
+# Interface: Icons bar and info panel
+
+A cyberpunk-style shell for Windows. The Icons bar on the left, the info panel on the right, thin neon frames at the top and bottom. Programs open in the middle and fill the remaining space when maximized.
+
+With several screens the full interface (Icons, info panel, frames) appears on each of them, and it adjusts by itself when a screen is connected or disconnected. The bars reserve the screen edges the same way the Windows taskbar does, so maximized windows never overlap them. While CyberShell runs, the stock taskbar stays hidden. Everything is restored on exit.
+
+## Icons (left by default)
+
+| Action | What it does |
+|---|---|
+| Click | Starts the program, or brings it to the front if it is already running. |
+| Click on the active program | Minimizes it; if it has several windows, switches to the next one. |
+| Shift+click or middle button | Starts a new instance. |
+| Right-click | If the program has exactly one window open, a small menu like on the Windows taskbar: **Maximize** (if the window is not maximized yet) and **Close window**. |
+
+The cyan mark next to an icon shows that the program is running. For the active program the mark is yellow and longer, and the tile frame lights up. If the program has several windows open, a second, shorter stripe appears next to the mark.
+
+**Window preview:** if a program has several windows open and you rest the pointer on its icon for a moment, live thumbnails of its windows appear side by side next to the icon. Clicking a thumbnail brings that window forward; the **×** in the top right corner of the card (or the middle mouse button) closes the window. Windows does not provide a picture of minimized windows; for those the program icon and the "MINIMIZED" label are shown. The preview disappears when the pointer leaves the icon and the preview; while it is showing, moving to another program with several windows switches to it immediately.
+
+**Running programs:** programs that run but are not pinned appear below the icons after a cyan separator, with their own icon and name (longer names wrap onto two lines). They work just like the pinned icons.
+
+**Dragging files:** if you drag a file over an icon and hold it there for a moment, the program's window comes forward and you can drop the file into it. Dropping it on the icon itself opens the file with the program.
+
+## Info panel (right by default)
+
+From top to bottom: Start, Toolbar, Claude, Activity, then date and time, the Laptop section on laptops, weather, music, volume, power and the menu. If everything does not fit (smaller screen, laptop), the panel tightens the gaps between the sections by itself; if it still does not fit, the panel becomes scrollable (mouse wheel), while Start and MENU always stay in place.
+
+- **Start:** at the top of the panel, a button just like MENU at the bottom. It opens the CyberShell Start menu (see [Start menu and search](start-menu.md)). While open the button is lit yellow; it closes on another click, on `Esc` or when you click elsewhere.
+- **Toolbar:** four icons in two rows: **Calculator**, **Notepad**, **Search** (the CyberShell search) and **Snipping Tool** (the Windows Snipping Tool). Rest the pointer on an icon to see which is which.
+- **Music:** playback of the Spotify desktop app, above Volume. The album cover is the section background; below it the track title (long titles scroll slowly), the artist, the progress bar (click to seek; hover to see the time), and four buttons in two rows: **shuffle** (yellow when on) and **play/pause**, below them **previous** and **next track**. Clicking the cover or the title brings Spotify forward. If Spotify is not running, a **SPOTIFY** button starts it. No Spotify account link is needed: the Spotify app itself reports what it plays to the Windows media controls (the Windows volume pop-up shows the same), and CyberShell reads and controls it through them. Other players (browser, video player) are ignored. Scrolling over the section changes the volume.
+- **Clock:** hours and minutes in one row, with a 12-segment seconds bar below.
+- **Date:** in its own section, in numbers: the year, below it the month and day, then the week number (ISO week, e.g. "WEEK 46"). Clicking it opens the **calendar** next to the panel, centered on the section: a month view with week numbers, one colored dot per event on each day, and the events of the selected day below. Browse months with the arrows or by scrolling; the **TODAY** button jumps back to today.
+- **Google Calendar:** can be attached at the bottom of the calendar. In Google Calendar settings choose your calendar, copy the **Secret address in iCal format** under *Integrate calendar*, and paste it. Several calendars can be attached (+ button), each with its own color; remove one by clicking the × next to its name twice. CyberShell downloads them every ten minutes and on the refresh button; recurring events are shown too. **Name days** (yearly, all-day entries whose title is only a first name, e.g. "Rózsa" or "Konrád, Zelmira") get no dot; they are listed on a separate line for the day. The address is stored in the `calendar` part of `config.json` – it is secret, do not share it. The calendar is read only; CyberShell cannot change it.
+- **Volume:** the volume of the Windows default audio device. Scroll over the section to change it in 2% steps; the slider can be clicked and dragged, the speaker icon mutes. Clicking the percentage opens the Windows volume mixer. If you change the volume elsewhere (e.g. with the keyboard), the panel follows.
+- **Power:** Lock, Sleep, Shut down, Restart. Shutting down and restarting ask for confirmation; CyberShell restores everything first.
+- **Claude:** the 5-hour and weekly usage limits in percent, and how long until they reset (↻). The bar turns cyan above 60% and pink above 85%. It refreshes every five minutes, or immediately when you click the refresh time.
+- **Activity:** a countdown, 20 minutes by default. It does not start by itself when the program starts (start it with ▶); if you want it to, set `activity.autoStart` to `true` in `config.json`. When it runs out, the panel and the frames turn pink and blink, and the computer plays a sound. **✓:** start a new round. **+5:** snooze for five minutes. The three small buttons are pause/resume, restart and settings. In the settings you can type any length in minutes (1–240); the program remembers it.
+- **Laptop:** shown only on battery-powered computers, above the weather. The **Wi-Fi** button opens the Windows network list, the battery button (charge level, charging indicator) opens the Windows Power & battery settings. It turns pink below 20%.
+- **Weather:** at the bottom of the panel, from the free Open-Meteo service, refreshed every quarter hour. It shows an icon, the temperature, a description and the wind with its direction (the wind can be switched off in the settings). Clicking it opens the detailed forecast next to the panel, centered on the section: the next 24 hours in three-hour steps (temperature curve, chance of precipitation), feels-like temperature, humidity, wind and gusts, today's precipitation, UV index, sunrise and sunset, and the next three days. It closes when you click elsewhere, on `Esc` or on another click. Set the city on the Weather card of the settings.

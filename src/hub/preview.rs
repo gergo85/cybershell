@@ -162,6 +162,66 @@ impl Hub {
         self.peek_eval(&payload);
     }
 
+    /// Jobb kattintás egy ikonon: kis menü a program ablakához (Teljes képernyőre – ha még
+    /// nincs úgy –, Ablak bezárása), az ablakelőnézet felugró ablakában, annak stílusában.
+    /// Csak akkor jelenik meg, ha a programnak pontosan egy ablaka van nyitva.
+    pub(crate) fn app_menu(&mut self, idx: usize, msg: &serde_json::Value) {
+        use windows::Win32::UI::WindowsAndMessaging::IsZoomed;
+        if self.peek.is_none() {
+            return;
+        }
+        let Some((bar_rect, bar_edge, bar_scale)) = self.bars.get(idx).map(|b| (b.rect, b.edge, b.scale)) else { return };
+        let (mine, _) = self.target_windows(msg);
+        if mine.len() != 1 {
+            self.peek_hide();
+            return;
+        }
+        let win = mine[0].clone();
+        let zoomed = !win.iconic && unsafe { IsZoomed(win.hwnd).as_bool() };
+        let mut items = Vec::new();
+        if !zoomed {
+            items.push(json!({ "cmd": "max", "icon": "maximize", "label": self.tr("Teljes képernyőre", "Maximize") }));
+        }
+        items.push(json!({ "cmd": "close", "icon": "close", "label": self.tr("Ablak bezárása", "Close window"), "danger": true }));
+        let name = match msg["id"].as_u64() {
+            Some(id) => self.cfg.apps.get(id as usize).map(|a| a.name.clone()).unwrap_or_default(),
+            None => self.program_name(&win.path),
+        };
+
+        // méret: fejléc, gombok (32 px), köztük 4 px, alul 10 px
+        let n = items.len() as f64;
+        let (w_css, h_css) = (232.0, 38.0 + n * 32.0 + (n - 1.0) * 4.0 + 10.0);
+        let scale = bar_scale.max(0.5);
+        let (w, h) = ((w_css * scale).round() as i32, (h_css * scale).round() as i32);
+        let work = appbar::work_area_of(bar_rect);
+        let along = if is_vertical(bar_edge) { msg["y"].as_f64().unwrap_or(0.0) } else { msg["x"].as_f64().unwrap_or(0.0) };
+        let (left, top) = popup_pos(bar_rect, bar_edge, w, h, (along * scale).round() as i32, work);
+
+        let Some(pk) = self.peek.as_mut() else { return };
+        for (id, _) in pk.thumbs.drain(..) {
+            peek::drop_thumb(id);
+        }
+        pk.seq += 1;
+        pk.pending.clear();
+        pk.hwnds = vec![win.hwnd.0 as isize];
+        pk.target = json!({ "menu": true });
+        pk.hide_at = None;
+        pk.refresh_at = None;
+        let seq = pk.seq;
+        unsafe {
+            let _ = SetWindowPos(pk.hwnd, Some(HWND_TOPMOST), left, top, w, h, SWP_NOACTIVATE);
+        }
+        let payload = json!({
+            "type": "menu",
+            "seq": seq,
+            "name": name,
+            "hwnd": win.hwnd.0 as isize,
+            "items": items,
+            "theme": self.theme_json(),
+        });
+        self.peek_eval(&payload);
+    }
+
     /// A felület kirajzolta az előnézetet: bejegyezzük a kisképeket és megjelenítjük.
     pub(crate) fn peek_ready(&mut self, seq: u64) {
         let Some(pk) = self.peek.as_mut() else { return };
@@ -258,6 +318,28 @@ impl Hub {
                 unsafe {
                     let _ = PostMessageW(Some(h), WM_CLOSE, WPARAM(0), LPARAM(0));
                 }
+            }
+            // az ikon menüje: Teljes képernyőre, Ablak bezárása
+            "menu-pick" => {
+                let Some(h) = self.peek.as_ref().and_then(|pk| known(pk, hwnd)) else { return };
+                self.peek_hide();
+                match msg["cmd"].as_str().unwrap_or("") {
+                    "max" => {
+                        log("ikonmenü: teljes képernyőre");
+                        wintrack::maximize(h);
+                        wintrack::activate(h);
+                        self.last_fg = Some(h);
+                    }
+                    "close" => {
+                        log("ikonmenü: ablak bezárása");
+                        unsafe {
+                            let _ = PostMessageW(Some(h), WM_CLOSE, WPARAM(0), LPARAM(0));
+                        }
+                    }
+                    _ => {}
+                }
+                self.last_state.clear();
+                self.poll();
             }
             "log" => log(format!("[előnézet] {}", msg["text"].as_str().unwrap_or(""))),
             _ => {}

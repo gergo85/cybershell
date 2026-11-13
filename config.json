@@ -4,11 +4,15 @@
   "hideTaskbar": true,
   "leftWidth": 86,
   "rightWidth": 86,
-  "swapSides": false,
+  "iconsEdge": "left",
+  "infoEdge": "auto",
   "allMonitors": true,
+  "iconLabels": true,
   "frame": {
     "top": 10,
-    "bottom": 10
+    "bottom": 10,
+    "left": 10,
+    "right": 10
   },
   "activity": {
     "minutes": 20,
@@ -18,31 +22,60 @@
   "claudeUsage": true,
   "weather": {
     "enabled": true,
-    "city": "Budapest"
+    "city": "Budapest",
+    "wind": false
   },
   "calendar": {
     "feeds": []
   },
   "sections": {
+    "tools": true,
     "claude": true,
     "activity": false,
     "clock": true,
     "date": true,
+    "weather": false,
+    "music": true,
     "volume": true,
+    "power": true,
     "order": [
+      "tools",
       "claude",
       "activity",
+      "weather",
+      "music",
+      "volume",
       "clock",
-      "date"
+      "date",
+      "power"
     ]
   },
+  "appearance": "dark",
   "theme": {
     "main": "#f3e600",
     "alt": "#00e1ff",
     "hot": "#ff2a6d",
-    "bg": "#06070b"
+    "bg": "#06070b",
+    "text": "#c9ccd6"
   },
-  "wallpaper": "C:\\Users\\szg00\\OneDrive\\Dokumentumok\\GitHub\\cyberhub\\wallpapers\\06-red-moon.jpg",
+  "themeLight": {
+    "main": "#00848a",
+    "alt": "#2c62a6",
+    "hot": "#d6452a",
+    "bg": "#e3e9ec",
+    "text": "#18262d"
+  },
+  "health": {
+    "enabled": false,
+    "minutes": 90
+  },
+  "startMenu": {
+    "winKey": true,
+    "pinned": [],
+    "webSearch": "https://www.google.com/search?q={q}",
+    "clipboard": true
+  },
+  "wallpaper": "",
   "apps": [
     {
       "name": "Firefox",
@@ -117,11 +150,6 @@
       "color": "#ff4fa3"
     },
     {
-      "name": "Fotós Eszköztár",
-      "path": "D:\\_resize\\Fotós Eszköztár.exe",
-      "icon": "exe"
-    },
-    {
       "name": "ArtCraft",
       "path": "%LOCALAPPDATA%\\Programs\\ArtCraft\\Launcher\\artcraft-launcher.exe",
       "icon": "rocket",
@@ -149,8 +177,7 @@
         "cyberpunk2077.exe"
       ],
       "maximize": false,
-      "color": "#ff3b5c",
-      "place": "right"
+      "color": "#ff3b5c"
     }
   ]
 }

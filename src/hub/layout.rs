@@ -62,14 +62,17 @@ pub(crate) fn is_vertical(edge: Edge) -> bool {
     matches!(edge, Edge::Left | Edge::Right)
 }
 
-/// Az elhelyezés sorrendje: az ikonsáv, majd az információs panel kapja a teljes hosszt
-/// (a képernyő sarkait is), a két vékony keret közéjük kerül.
+/// Az elhelyezés sorrendje: a két panel kapja a teljes hosszt (a képernyő sarkait is), a két
+/// vékony keret közéjük kerül. Ha az egyik panel oldalt, a másik fent vagy lent van, az oldalsó
+/// kerül előre: az a képernyő teljes magasságát kapja, a vízszintes panel mellette fut. Két
+/// oldalsó vagy két vízszintes panelnél az ikonsáv az első.
 pub(crate) fn edge_order(cfg: &Config) -> [Edge; 4] {
     let (icons, info) = (icons_edge_of(cfg), info_edge_of(cfg));
-    let mut out = [icons, info, Edge::Top, Edge::Bottom];
+    let (first, second) = if !is_vertical(icons) && is_vertical(info) { (info, icons) } else { (icons, info) };
+    let mut out = [first, second, Edge::Top, Edge::Bottom];
     let mut k = 2;
     for e in EDGES {
-        if e != icons && e != info && k < 4 {
+        if e != first && e != second && k < 4 {
             out[k] = e;
             k += 1;
         }

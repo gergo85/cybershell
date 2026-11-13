@@ -5,6 +5,10 @@ mod apps;
 mod autostart;
 mod clipboard;
 mod config;
+/// A beágyazott felület és gyári háttérképek (a build.rs készíti).
+mod embedded {
+    include!(concat!(env!("OUT_DIR"), "/embedded.rs"));
+}
 mod hub;
 mod keyhook;
 mod lifecycle;
@@ -168,7 +172,7 @@ fn find_base_dir() -> PathBuf {
     exe.parent().map(Path::to_path_buf).unwrap_or_default()
 }
 
-/// A program verziója a beállítások számára („1.2.0” → „v1.2”).
+/// A program verziója a beállítások számára („1.4.0” → „v1.4”).
 fn version_label() -> String {
     let v = env!("CARGO_PKG_VERSION");
     format!("v{}", v.strip_suffix(".0").unwrap_or(v))
@@ -308,6 +312,18 @@ fn main() {
 
     let base_dir = find_base_dir();
     let ui_dir = base_dir.join("ui");
+    // Ha csak az exe-t másolták át (nincs mellette wallpapers mappa), a gyári háttérképeket
+    // kicsomagoljuk; a felületet a beágyazott példányból szolgáljuk ki, ha nincs ui mappa.
+    let wall_dir = base_dir.join("wallpapers");
+    if !wall_dir.exists() && std::fs::create_dir_all(&wall_dir).is_ok() {
+        for (name, data) in embedded::WALLPAPERS {
+            let _ = std::fs::write(wall_dir.join(name), data);
+        }
+        log(format!("gyári háttérképek kicsomagolva: {}", wall_dir.display()));
+    }
+    if !ui_dir.join("hub.html").exists() {
+        log("nincs ui mappa az exe mellett: a beágyazott felület töltődik be");
+    }
     let cfg_path = value("--config").map(PathBuf::from).unwrap_or_else(|| base_dir.join("config.json"));
     let mut loaded_ok = true;
     let mut cfg = match config::load(&cfg_path) {
@@ -506,6 +522,7 @@ fn main() {
         last_fg: initial_fg,
         last_state: String::new(),
         pending: None,
+        settings_watch: None,
         orig_taskbar,
         want_hidden_taskbar: hide_taskbar,
         fullscreen: HashSet::new(),
@@ -543,6 +560,8 @@ fn main() {
         cal_busy: false,
         launcher: launch_win,
         quick_along: HashMap::new(),
+        settings_bar: None,
+        launcher_bar: None,
         health: health_win,
         health_due: None,
         next_idle_check: Instant::now(),

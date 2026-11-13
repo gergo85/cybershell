@@ -181,6 +181,69 @@ pub fn app_available(app: &AppEntry) -> bool {
     unsafe { SearchPathW(None, &HSTRING::from(p.as_str()), None, Some(&mut buf), None) > 0 }
 }
 
+/// Egy exe telepített helye a Windows „App Paths” nyilvántartásából (a telepítők ide írják be,
+/// hogy a Futtatás ablak és a Start menü név szerint megtalálja).
+fn app_paths(exe: &str) -> Option<String> {
+    use windows::Win32::System::Registry::{HKEY_LOCAL_MACHINE, RRF_RT_REG_SZ};
+    let key = HSTRING::from(format!(r"Software\Microsoft\Windows\CurrentVersion\App Paths\{exe}"));
+    for root in [HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE] {
+        let mut buf = [0u16; 1024];
+        let mut size = (buf.len() * 2) as u32;
+        let r = unsafe { RegGetValueW(root, &key, None, RRF_RT_REG_SZ, None, Some(buf.as_mut_ptr() as *mut _), Some(&mut size)) };
+        if r.is_ok() {
+            let n = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
+            let p = String::from_utf16_lossy(&buf[..n]).trim_matches('"').to_string();
+            if Path::new(&p).is_file() {
+                return Some(p);
+            }
+        }
+    }
+    None
+}
+
+/// Egy (ezen a gépen) nem található program megkeresése, ha máshova telepítették: más
+/// mappába, más verziószámmal (pl. „Photoshop 2025” a „2026” helyett), Store-app helyett
+/// asztali változatként vagy fordítva. Sorrendben: a Windows App Paths nyilvántartása az exe
+/// neve szerint, a Start menü parancsikonjai ugyanarra az exe-re, végül a Start menüben
+/// pontosan ugyanilyen nevű program. Steam-játékot nem keres.
+pub fn locate_app(app: &AppEntry, start: &[crate::apps::StartApp]) -> Option<String> {
+    let p = app.resolved_path();
+    let lower = p.to_lowercase();
+    if lower.contains("://") {
+        return None;
+    }
+    let mut exes: Vec<String> = Vec::new();
+    if !lower.starts_with("shell:")
+        && lower.ends_with(".exe")
+        && let Some(f) = Path::new(&p).file_name()
+    {
+        exes.push(f.to_string_lossy().to_lowercase());
+    }
+    for m in &app.match_exe {
+        let m = m.to_lowercase();
+        if m.ends_with(".exe") && !exes.contains(&m) {
+            exes.push(m);
+        }
+    }
+    for e in &exes {
+        if let Some(found) = app_paths(e) {
+            return Some(found);
+        }
+    }
+    let file_of = |t: &str| Path::new(t).file_name().map(|f| f.to_string_lossy().to_lowercase()).unwrap_or_default();
+    for e in &exes {
+        if let Some(a) = start.iter().find(|a| !a.target.is_empty() && file_of(&a.target) == *e && Path::new(&a.target).is_file()) {
+            return Some(a.target.clone());
+        }
+    }
+    let name = app.name.trim().to_lowercase();
+    let hits: Vec<&crate::apps::StartApp> = start.iter().filter(|a| a.name.trim().to_lowercase() == name).collect();
+    if let [a] = hits.as_slice() {
+        return Some(if a.target.is_empty() { format!(r"shell:AppsFolder\{}", a.id) } else { a.target.clone() });
+    }
+    None
+}
+
 fn steam_installed(id: &str) -> bool {
     let key = HSTRING::from(format!("Software\\Valve\\Steam\\Apps\\{id}"));
     let mut val: u32 = 0;
@@ -252,8 +315,44 @@ pub fn set_wallpaper(path: &str) -> Result<(), String> {
     }
 }
 
-/// A jelenlegi háttérkép útvonala (üres, ha nincs, vagy egyszínű a háttér).
+/// Fájlok áthelyezése a Lomtárba (visszaállíthatók), kérdés és előrehaladás-ablak nélkül.
+pub fn recycle(files: &[std::path::PathBuf]) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::Win32::UI::Shell::{
+        FO_DELETE, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT, SHFILEOPSTRUCTW, SHFileOperationW,
+    };
+    // dupla nullával lezárt lista
+    let mut from: Vec<u16> = Vec::new();
+    for f in files {
+        from.extend(f.as_os_str().encode_wide());
+        from.push(0);
+    }
+    from.push(0);
+    let mut op = SHFILEOPSTRUCTW {
+        wFunc: FO_DELETE,
+        pFrom: PCWSTR(from.as_ptr()),
+        fFlags: (FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI).0 as u16,
+        ..Default::default()
+    };
+    let r = unsafe { SHFileOperationW(&mut op) };
+    if r != 0 { Err(format!("hibakód {r}")) } else { Ok(()) }
+}
+
+/// A jelenlegi háttérkép útvonala (üres, ha nincs, vagy egyszínű a háttér). Előbb a
+/// beállításhoz is használt IDesktopWallpaper-től kérdezzük (ez a beállítás után azonnal az új
+/// képet adja; a régi SPI-lekérdezés egy ideig még az előzőt mutatta), aztán a régi módon.
 pub fn current_wallpaper() -> String {
+    let fresh = unsafe {
+        CoCreateInstance::<_, IDesktopWallpaper>(&DesktopWallpaper, None, CLSCTX_ALL).ok().and_then(|dw| {
+            let p = dw.GetWallpaper(PCWSTR::null()).ok()?;
+            let s = p.to_string().ok();
+            CoTaskMemFree(Some(p.0 as *const _));
+            s
+        })
+    };
+    if let Some(p) = fresh.filter(|p| !p.is_empty()) {
+        return p;
+    }
     let mut buf = [0u16; 1024];
     let ok = unsafe {
         SystemParametersInfoW(

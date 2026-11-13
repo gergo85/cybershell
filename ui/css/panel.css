@@ -8,12 +8,11 @@
 .qbtn[style*="--app"]:hover .qtile { background: var(--c-main); color: var(--app); }
 .sys { flex: none; width: 100%; display: flex; justify-content: center; }
 .sys-btn {
-  width: 100%; height: 28px; display: flex; align-items: center; justify-content: center; gap: 6px;
+  width: 100%; height: 34px; display: flex; align-items: center; justify-content: center; gap: 6px;
   font-family: var(--f-mono); font-size: 9px; letter-spacing: .12em; color: var(--c-text-dim);
   border-top: 1px solid var(--c-main-faint); border-bottom: 1px solid var(--c-main-faint);
   transition: color .15s, border-color .15s;
 }
-.sys-btn::before { content: ""; width: 5px; height: 5px; flex: none; background: var(--c-alt); box-shadow: 0 0 6px var(--c-alt); animation: blink 2.4s steps(1) infinite; }
 .sys-btn:hover, .sys-btn.open { color: var(--c-main); border-color: var(--c-main-dim); }
 @keyframes blink { 0%, 80% { opacity: 1; } 90% { opacity: .2; } }
 .menu {
@@ -317,7 +316,7 @@
 .power.confirming .pw-panes > .pw-confirm { visibility: visible; }
 
 /* ───────────── hangerő (a főkapcsoló fölött) ───────────── */
-.vol-row { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-bottom: 6px; }
+.vol-row { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-bottom: 0; }
 .vol-mute {
   flex: none; width: 28px; height: 24px; display: flex; align-items: center; justify-content: center; color: var(--c-alt);
   background: color-mix(in srgb, var(--c-alt) 10%, transparent);
@@ -331,7 +330,8 @@
   font-variation-settings: "wdth" 75, "wght" 650; text-shadow: 0 0 8px var(--c-alt-dim);
 }
 .vol-pct:hover { color: var(--c-text); }
-.vol-bar { padding: 4px 0; cursor: pointer; touch-action: none; }
+/* a csúszka közvetlenül a hangszóró és a százalék alatt (a kattintható sáv magasabb, mint a vonal) */
+.vol-bar { padding: 2px 0 5px; cursor: pointer; touch-action: none; }
 .vol-bar > span { position: relative; display: block; height: 6px; background: color-mix(in srgb, var(--c-alt) 14%, transparent); }
 .vol-bar i {
   position: absolute; left: 0; top: 0; bottom: 0; background: var(--c-alt); box-shadow: 0 0 8px var(--c-alt-dim);
@@ -373,13 +373,12 @@
 .mu-art img { display: block; width: 100%; height: 100%; object-fit: cover; opacity: .42; filter: saturate(1.1) contrast(1.1); transition: opacity .2s; }
 .music.noart .mu-art img { visibility: hidden; }
 
-/* sötétítés alul (olvashatóság), képcsöves sorok, vékony neon keret */
+/* sötétítés alul (olvashatóság), képcsöves sorok (keret nélkül) */
 .mu-art::after {
   content: ""; position: absolute; inset: 0; pointer-events: none;
   background:
     repeating-linear-gradient(0deg, rgba(0,0,0,.25) 0 1px, transparent 1px 3px),
     linear-gradient(180deg, color-mix(in srgb, var(--c-bg) 25%, transparent), color-mix(in srgb, var(--c-bg) 80%, transparent) 70%);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-alt) 35%, transparent);
 }
 .mu-live:hover .mu-art img { opacity: .6; }
 .mu-eq { position: absolute !important; right: 5px; top: 6px; display: flex; align-items: flex-end; gap: 2px; height: 9px; pointer-events: none; }
@@ -433,3 +432,35 @@
 .right:not(.horiz) .pw { padding-top: 0; }
 .right:not(.horiz) .pw span { display: none; }
 .right:not(.horiz) .pw svg { width: 17px; height: 17px; }
+
+/* időjárás: a szél a beállításokban kikapcsolható (hibánál a sor az üzenetet mutatja) */
+.weather.no-wind:not(.err) .w-wind { display: none; }
+
+/* ───────────── Indítás: a panel tetején, ugyanolyan gomb, mint a MENÜ ───────────── */
+.sys-start { margin-bottom: -2px; }
+.sys-start .sys-btn { white-space: nowrap; }
+
+/* ───────────── Eszköztár: Számológép, Jegyzettömb, Keresés, Képmetsző (2×2 ikon) ───────────── */
+.tool-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.tool {
+  display: flex; align-items: center; justify-content: center; height: 32px;
+  background: color-mix(in srgb, var(--app, var(--c-main)) 10%, transparent);
+  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+  transition: background-color .12s ease;
+}
+.tool svg { display: block; width: 17px; height: 17px; color: color-mix(in srgb, var(--app) 85%, var(--c-text)); transition: color .12s ease; }
+.tool:hover, .tool.open { background: var(--app); }
+.tool:hover svg, .tool.open svg { color: var(--c-bg); }
+.right.tighter .tool { height: 28px; }
+html[data-scheme="light"] .tool { clip-path: none; border-radius: 7px; }
+
+/* ───────────── ha szűkítve sem fér ki minden (kis képernyő, laptop) ─────────────
+   A panel görgethető (görgetősáv nélkül), a Start a panel elején, a MENÜ a végén mindig a
+   helyén marad, hogy a beállítások mindig elérhetők legyenek. */
+.right.overflow { overflow: auto; scrollbar-width: none; justify-content: flex-start; }
+.right.overflow::-webkit-scrollbar { display: none; }
+.right.overflow > .sys { position: sticky; z-index: 5; background: var(--c-bg); }
+.right.overflow:not(.horiz) > .sys-start { top: calc(-1 * (var(--ia, 0) * 1px + 12px)); padding-top: calc(var(--ia, 0) * 1px + 12px); margin-top: calc(-1 * (var(--ia, 0) * 1px + 12px)); }
+.right.overflow:not(.horiz) > .sys:not(.sys-start) { bottom: calc(-1 * (var(--ib, 0) * 1px + 10px)); padding-bottom: calc(var(--ib, 0) * 1px + 10px); margin-bottom: calc(-1 * (var(--ib, 0) * 1px + 10px)); margin-top: auto; }
+.right.overflow.horiz > .sys-start { left: calc(-1 * (var(--ia, 0) * 1px + 12px)); padding-left: calc(var(--ia, 0) * 1px + 12px); margin-left: calc(-1 * (var(--ia, 0) * 1px + 12px)); }
+.right.overflow.horiz > .sys:not(.sys-start) { right: calc(-1 * (var(--ib, 0) * 1px + 8px)); padding-right: calc(var(--ib, 0) * 1px + 8px); margin-right: calc(-1 * (var(--ib, 0) * 1px + 8px)); margin-left: auto; }

@@ -199,7 +199,12 @@ impl Hub {
         log(format!("{} megnyitva", if mode == "start" { "Start menü" } else { "kereső" }));
         self.launcher_eval(&json!({ "type": "launcher-open", "mode": mode }));
         self.send_launcher_data();
-        self.eval(info, &json!({ "type": "launcher-state", "mode": mode, "open": true }));
+        self.launcher_bar = Some(idx);
+        self.eval_info_at(
+            Some(idx),
+            &json!({ "type": "launcher-state", "mode": mode, "open": true }),
+            &json!({ "type": "launcher-state", "open": false }),
+        );
         self.apps_refresh(false);
     }
 
@@ -428,6 +433,7 @@ impl Hub {
                 self.power(&action);
             }
             "settings" => {
+                self.settings_bar = self.launcher_bar;
                 self.launcher_hide(false);
                 self.settings_show(true);
             }

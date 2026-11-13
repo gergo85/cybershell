@@ -24,19 +24,16 @@
 .side-top .edge::before, .side-bottom .edge::before { left: calc(var(--arm) + 10px); }
 .side-top .edge::after, .side-bottom .edge::after { left: auto; right: calc(var(--arm) + 10px); }
 
-/* ── vízszintes ikonsáv (fent vagy lent) ── */
+/* ── vízszintes ikonsáv (fent vagy lent): az ikonok középre rendezve ──
+   Az automatikus margó középre teszi a sort; ha nem fér ki, a margó nullára esik, és a sor
+   az elejétől görgethető (nem vágódik le a bal széle). */
 .left.horiz {
   flex-direction: row; align-items: center;
-  padding: 0 calc(var(--ib, 0) * 1px + 10px) 0 calc(var(--ia, 0) * 1px + 14px);
-}
-.left.horiz .brand { flex: none; }
-.left.horiz .hazard {
-  width: 4px; height: 52px; margin: 0 4px 0 14px;
-  background: repeating-linear-gradient(-45deg, var(--c-main) 0 3px, transparent 3px 7px);
+  padding: 0 calc(var(--ib, 0) * 1px + 10px) 0 calc(var(--ia, 0) * 1px + 10px);
 }
 .left.horiz .apps {
-  flex-direction: row; align-items: center; width: auto; height: 100%; min-width: 0;
-  gap: 2px; padding: 0 8px; overflow-x: auto; overflow-y: hidden;
+  flex: 0 1 auto; flex-direction: row; align-items: center; width: auto; max-width: 100%; height: 100%; min-width: 0;
+  margin: 0 auto; gap: 2px; padding: 0 8px; overflow-x: auto; overflow-y: hidden;
 }
 .left.horiz .app { width: 70px; }
 
@@ -130,5 +127,10 @@
 
 /* vízszintes panelen a MENÜ gomb vízszintes felirattal, a szokásos magasságban, középre igazítva */
 .right.horiz .sys { flex: none; width: 78px; align-items: center; }
-.right.horiz .sys-btn { height: 30px; padding: 0 8px; white-space: nowrap; }
+.right.horiz .sys-btn { height: 36px; padding: 0 8px; white-space: nowrap; }
 .right.horiz .toast { left: auto; right: calc(var(--ib, 0) * 1px + 96px); bottom: auto; top: 8px; width: max-content; max-width: 420px; }
+
+/* Indítás (a sor elején) és Eszköztár vízszintes panelen */
+.right.horiz .sys-start { margin: 0; }
+.right.horiz .tools { width: 84px; }
+.right.horiz .tool { height: 24px; }

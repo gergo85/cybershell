@@ -120,6 +120,7 @@ pub(crate) fn serve(ui_dir: &Path, req: &Request<Vec<u8>>) -> Response<Cow<'stat
             None => not_found(),
         };
     }
+    let mut embedded_rel: Option<String> = None;
     let file = if let Some(abs) = path.strip_prefix("/__file/") {
         let p = PathBuf::from(abs);
         let ext = p.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
@@ -132,7 +133,9 @@ pub(crate) fn serve(ui_dir: &Path, req: &Request<Vec<u8>>) -> Response<Cow<'stat
         if rel.split(['/', '\\']).any(|seg| seg == "..") {
             return not_found();
         }
-        ui_dir.join(if rel.is_empty() { "hub.html" } else { rel })
+        let rel = if rel.is_empty() { "hub.html" } else { rel };
+        embedded_rel = Some(rel.replace('\\', "/"));
+        ui_dir.join(rel)
     };
     let mime = match file.extension().map(|e| e.to_string_lossy().to_lowercase()).as_deref() {
         Some("html") => "text/html; charset=utf-8",
@@ -150,14 +153,15 @@ pub(crate) fn serve(ui_dir: &Path, req: &Request<Vec<u8>>) -> Response<Cow<'stat
         Some("ttf") => "font/ttf",
         _ => "application/octet-stream",
     };
-    match std::fs::read(&file) {
-        Ok(data) => Response::builder()
-            .header(CONTENT_TYPE, mime)
-            .header("Cache-Control", "no-store")
-            .body(Cow::Owned(data))
-            .unwrap_or_else(|_| not_found()),
-        Err(_) => not_found(),
-    }
+    // Elsőként a lemezről (az ui mappa szabadon átírható); ha nincs ott, a beágyazott példányból.
+    let data = match std::fs::read(&file) {
+        Ok(d) => Cow::Owned(d),
+        Err(_) => match embedded_rel.and_then(|r| crate::embedded::UI_FILES.iter().find(|(n, _)| *n == r)) {
+            Some((_, d)) => Cow::Borrowed(*d),
+            None => return not_found(),
+        },
+    };
+    Response::builder().header(CONTENT_TYPE, mime).header("Cache-Control", "no-store").body(data).unwrap_or_else(|_| not_found())
 }
 
 pub(crate) fn not_found() -> Response<Cow<'static, [u8]>> {

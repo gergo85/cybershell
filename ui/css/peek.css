@@ -72,3 +72,21 @@
   font: 400 10px/1 var(--f-mono); letter-spacing: .14em; color: var(--c-text-dim);
 }
 .pk-min img, .pk-min svg { width: 40px; height: 40px; object-fit: contain; opacity: .55; }
+
+/* ───────────── Ikon menüje (jobb kattintás): ugyanaz a keret, gombok a beállítások stílusában ───────────── */
+.pk-menu .pk-items { position: absolute; left: 10px; right: 10px; top: 38px; display: flex; flex-direction: column; gap: 4px; }
+.pm-item {
+  height: 32px; display: flex; align-items: center; gap: 10px; padding: 0 12px; text-align: left;
+  font-size: 13px; letter-spacing: .04em; color: var(--c-text); font-variation-settings: "wdth" 90, "wght" 500;
+  background: color-mix(in srgb, var(--c-main) 7%, transparent);
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+  transition: background-color var(--hover-fade) ease, color var(--hover-fade) ease;
+}
+.pm-item svg { flex: none; width: 16px; height: 16px; color: var(--c-main); }
+.pm-item span { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pm-item:hover { background: color-mix(in srgb, var(--c-main) 22%, transparent); }
+.pm-item.danger { color: var(--c-hot); background: color-mix(in srgb, var(--c-hot) 10%, transparent); }
+.pm-item.danger svg { color: var(--c-hot); }
+.pm-item.danger:hover { color: var(--c-bg); background: var(--c-hot); }
+.pm-item.danger:hover svg { color: var(--c-bg); }
+html[data-scheme="light"] .pm-item { clip-path: none; border-radius: 7px; }

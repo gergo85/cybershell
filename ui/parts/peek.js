@@ -14,6 +14,7 @@
 
     const render = (msg) => {
       if (msg.theme) setTheme(msg.theme);
+      root.className = 'peek';
       $('pkHead').innerHTML = `<span class="pk-name">// ${esc(msg.name || '')}</span><span class="pk-count">${T('peekWindows', { n: msg.count })}</span>`;
       $('pkItems').innerHTML = (msg.items || []).map((it) => {
         const c = it.card;
@@ -31,11 +32,25 @@
       post({ type: 'peek-ready', seq: msg.seq });
     };
 
+    // jobb kattintás egy ikonon: kis menü a program egyetlen ablakához
+    let menuHwnd = 0;
+    const renderMenu = (msg) => {
+      if (msg.theme) setTheme(msg.theme);
+      root.className = 'peek pk-menu';
+      menuHwnd = msg.hwnd;
+      $('pkHead').innerHTML = `<span class="pk-name">// ${esc(msg.name || '')}</span>`;
+      $('pkItems').innerHTML = (msg.items || []).map((it) =>
+        `<button class="pm-item${it.danger ? ' danger' : ''}" data-cmd="${esc(it.cmd)}">${svg(it.icon)}<span>${esc(it.label)}</span></button>`).join('');
+      post({ type: 'peek-ready', seq: msg.seq });
+    };
+
     const closeCard = (card) => {
       card.classList.add('closing');
       post({ type: 'peek-close', hwnd: Number(card.dataset.hwnd) });
     };
     $('pkItems').addEventListener('click', (e) => {
+      const item = e.target.closest('.pm-item');
+      if (item) return post({ type: 'menu-pick', cmd: item.dataset.cmd, hwnd: menuHwnd });
       const card = e.target.closest('.pk-card');
       if (!card || card.classList.contains('closing')) return;
       if (e.target.closest('[data-close]')) return closeCard(card);
@@ -49,6 +64,7 @@
 
     const h = (msg) => {
       if (msg.type === 'peek') render(msg);
+      if (msg.type === 'menu') renderMenu(msg);
       if (msg.type === 'peek-clear') { $('pkHead').innerHTML = ''; $('pkItems').innerHTML = ''; }
     };
     h.demo = () => {

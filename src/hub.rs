@@ -69,6 +69,10 @@ pub(crate) struct Hub {
     pub(crate) last_fg: Option<HWND>,
     pub(crate) last_state: String,
     pub(crate) pending: Option<Pending>,
+    /// Nyitott beállítások mellett indított program: az első új ablakáig figyeljük, és csak
+    /// akkor zárjuk be a beállításokat, ha az ablak ugyanazon a képernyőn jelenik meg.
+    /// (A már ismert ablakok azonosítói és a figyelés határideje.)
+    pub(crate) settings_watch: Option<(HashSet<isize>, Instant)>,
     /// Hány képernyőn kellene sávcsoport (ha eltér a meglévőtől, a fő ciklus újraépíti).
     pub(crate) want_groups: usize,
     /// Ha mi rejtettük el a tálcát: az eredeti állapota.
@@ -124,6 +128,10 @@ pub(crate) struct Hub {
     pub(crate) launcher: Option<LaunchWin>,
     /// Sávonként az Indítás és a Keresés gomb közepe a sáv mentén (CSS-pixel).
     pub(crate) quick_along: HashMap<(usize, &'static str), f64>,
+    /// Melyik képernyő információs paneljén nyitották meg a beállításokat, illetve a Start
+    /// menüt / keresőt: a gomb csak ott világít.
+    pub(crate) settings_bar: Option<usize>,
+    pub(crate) launcher_bar: Option<usize>,
     /// A telepített programok (a Start menünek), a felsorolás ideje, és hogy folyamatban van-e.
     pub(crate) start_apps: Vec<apps::StartApp>,
     pub(crate) apps_at: Option<Instant>,
@@ -185,6 +193,18 @@ impl Hub {
         }
     }
 
+    /// Nyitott állapot (MENÜ, Start, Időjárás, Dátum) csak annak a képernyőnek az információs
+    /// paneljén, ahol rákattintottak (ha nem ismert, az elsődlegesén); a többin kikapcsolva.
+    pub(crate) fn eval_info_at(&self, idx: Option<usize>, on: &serde_json::Value, off: &serde_json::Value) {
+        let info = self.info_edge();
+        let target = idx
+            .filter(|i| self.bars.get(*i).is_some_and(|b| b.edge == info))
+            .or_else(|| self.bars.iter().position(|b| b.edge == info && b.mon == 0));
+        for (i, b) in self.bars.iter().enumerate().filter(|(_, b)| b.edge == info) {
+            push(&b.webview, if Some(i) == target { on } else { off });
+        }
+    }
+
     /// A felület nyelvének megfelelő szöveg.
     pub(crate) fn tr(&self, hu: &str, en: &str) -> String {
         if self.cfg.language == "en" { en.to_string() } else { hu.to_string() }
@@ -192,6 +212,33 @@ impl Hub {
 
     pub(crate) fn check_available(&mut self) {
         self.available = self.cfg.apps.iter().map(sys::app_available).collect();
+        // Ami nincs a megadott helyén (pl. egy másik gépről átmásolt config.json), azt
+        // megpróbáljuk megtalálni: más mappa, más verzió, Store-app helyett asztali vagy fordítva.
+        // A megtalált útvonal bekerül a config.json-ba.
+        if self.available.iter().any(|ok| !ok) {
+            let start = crate::apps::enumerate();
+            let mut fixed = 0;
+            for i in 0..self.cfg.apps.len() {
+                if self.available[i] {
+                    continue;
+                }
+                let app = self.cfg.apps[i].clone();
+                if let Some(path) = sys::locate_app(&app, &start) {
+                    let mut moved = app.clone();
+                    moved.path = path.clone();
+                    if sys::app_available(&moved) {
+                        log(format!("program megtalálva máshol: {} ({} → {path})", app.name, app.path));
+                        self.cfg.apps[i].path = path;
+                        self.available[i] = true;
+                        fixed += 1;
+                    }
+                }
+            }
+            if fixed > 0 {
+                self.matchers = self.cfg.apps.iter().map(Matcher::new).collect();
+                self.save_config();
+            }
+        }
         for (a, ok) in self.cfg.apps.iter().zip(&self.available) {
             if !ok {
                 log(format!("nincs telepítve, elrejtve: {} ({})", a.name, a.path));
@@ -234,13 +281,12 @@ impl Hub {
         let edge = self.bars[idx].edge;
         let part = self.bars[idx].part;
         let c = &self.cfg;
-        // Az ikonsáv a "left" helyű appokat kapja, az információs panel a "right" helyűeket
-        // (ezek az Indítás gomb alá kerülnek). A nem telepített appok kimaradnak.
-        let apps: Vec<serde_json::Value> = if part == "left" || part == "right" {
+        // Minden program az ikonsávon van (a nem telepítettek kimaradnak).
+        let apps: Vec<serde_json::Value> = if part == "left" {
             c.apps
                 .iter()
                 .enumerate()
-                .filter(|(i, a)| a.on_right() == (part == "right") && self.available.get(*i).copied().unwrap_or(true))
+                .filter(|(i, _)| self.available.get(*i).copied().unwrap_or(true))
                 .map(|(i, a)| self.app_json(i, a))
                 .collect()
         } else {
@@ -272,6 +318,7 @@ impl Hub {
             "session": self.session,
             "autostart": autostart::is_enabled(),
             "weather": c.weather,
+            "iconLabels": c.icon_labels,
             "language": c.language,
         });
         let _ = edge;
@@ -290,7 +337,7 @@ impl Hub {
                 self.eval_bar(idx, u);
             }
             // újratöltés (pl. panelcsere) után is látszódjon, hogy a beállítások nyitva vannak
-            if self.settings.as_ref().is_some_and(|s| s.visible) {
+            if self.settings.as_ref().is_some_and(|s| s.visible) && self.settings_bar.is_none_or(|b| b == idx) {
                 self.eval_bar(idx, &json!({ "type": "settings-open", "on": true }).to_string());
             }
         }
@@ -463,8 +510,8 @@ impl Hub {
                     self.push_theme();
                 }
             }
+            // a beállítások csak akkor záródnak be, ha a program ugyanazon a képernyőn jön elő
             "launch" => {
-                self.settings_dismiss();
                 let id = msg["id"].as_u64().unwrap_or(u64::MAX) as usize;
                 let new_instance = msg["newInstance"].as_bool().unwrap_or(false);
                 self.launch(id, new_instance);
@@ -482,6 +529,7 @@ impl Hub {
                     if self.settings.as_ref().is_some_and(|s| s.visible) {
                         self.settings_eval(&json!({ "type": "hide" }));
                     } else {
+                        self.settings_bar = Some(idx);
                         self.settings_show(true);
                     }
                 }
@@ -507,6 +555,19 @@ impl Hub {
                         }
                     }
                 }
+                // Eszköztár: Számológép, Jegyzettömb, Képmetsző (a Keresés a "search" parancs)
+                "tool" => {
+                    self.settings_dismiss();
+                    let target = match msg["tool"].as_str().unwrap_or("") {
+                        "calc" => "calc.exe",
+                        "notepad" => "notepad.exe",
+                        "snip" => r"shell:AppsFolder\Microsoft.ScreenSketch_8wekyb3d8bbwe!App",
+                        _ => "",
+                    };
+                    if !target.is_empty() && !wintrack::shell_open(target, "", "", false) {
+                        log(format!("eszköz nem indult: {target}"));
+                    }
+                }
                 // laptop: a Windows saját Wi-Fi-listája, illetve az akkumulátor beállításai
                 "wifi" => {
                     wintrack::shell_open("ms-availablenetworks:", "", "", false);
@@ -526,8 +587,8 @@ impl Hub {
             }
             "weather-open" => self.fly_open(idx, "weather", &msg),
             "calendar-open" => self.fly_open(idx, "calendar", &msg),
+            "app-menu" => self.app_menu(idx, &msg),
             "launch-extra" => {
-                self.settings_dismiss();
                 self.launch_extra(&msg);
             }
             // hangerő: a jobb panel csúszkája, görgetése és némítógombja
@@ -588,6 +649,18 @@ impl Hub {
         if self.seen.len() > 400 {
             let live: HashSet<isize> = wins.iter().map(|w| w.hwnd.0 as isize).collect();
             self.seen.retain(|k, _| live.contains(k));
+        }
+
+        if let Some((known, deadline)) = &self.settings_watch {
+            if Instant::now() > *deadline || !self.settings_visible() {
+                self.settings_watch = None;
+            } else if let Some(w) = wins.iter().find(|w| !known.contains(&(w.hwnd.0 as isize)) && !w.iconic) {
+                let h = w.hwnd;
+                self.settings_watch = None;
+                if self.on_settings_monitor(h) {
+                    self.settings_dismiss();
+                }
+            }
         }
 
         if let Some(p) = &self.pending {
@@ -690,8 +763,7 @@ impl Hub {
         .to_string();
         if state != self.last_state {
             self.last_state = state;
-            // a jobb panel is megkapja (az ott lévő appok futás-jelzéséhez)
-            for b in self.bars.iter().filter(|b| b.part == "left" || b.part == "right") {
+            for b in self.bars.iter().filter(|b| b.part == "left") {
                 push(&b.webview, &self.last_state);
             }
         }

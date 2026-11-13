@@ -346,8 +346,8 @@
       <button class="lx-item${i === sel ? ' sel' : ''}${armed === it.key ? ' armed' : ''}" data-i="${i}">
         <span class="lx-ico">${itemIcon(it)}</span>
         <span class="lx-txt"><b>${esc(armed === it.key ? T('lxConfirm', { a: it.name }) : it.name)}</b><small>${esc(it.sub || '')}</small></span>
-        ${it.kind === 'clip' || it.kind === 'file' ? `<span class="lx-del" data-del="${i}" title="${delTitle(it)}">${svg('trash')}</span>` : ''}
         <span class="lx-go">${svg('enter')}</span>
+        ${it.kind === 'clip' || it.kind === 'file' ? `<span class="lx-del" data-del="${i}" title="${delTitle(it)}">${svg('trash')}</span>` : ''}
       </button>`;
     // csoportcím, a vágólapnál és a legutóbbi fájloknál „Összes törlése” gombbal (két kattintásra)
     let clearArmed = '';

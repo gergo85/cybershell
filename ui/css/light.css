@@ -29,7 +29,7 @@ html[data-scheme="light"] :is(.wfly, .lx, .peek, .settings) {
 }
 
 /* a fénylő szövegárnyékok helyett tiszta, éles vonalak */
-html[data-scheme="light"] :is(.brand-name, .lx-brand, .set-title) {
+html[data-scheme="light"] :is(.lx-brand, .set-title) {
   text-shadow: 1px 0 0 color-mix(in srgb, var(--c-hot) 45%, transparent), -1px 0 0 color-mix(in srgb, var(--c-alt) 45%, transparent);
 }
 html[data-scheme="light"] :is(.act-time, .vol-pct, .w-temp, .clock-row #hh, .lim-head b, .meter-head b) { text-shadow: none; }
@@ -97,12 +97,12 @@ html[data-scheme="light"] .side-right .edge::before, html[data-scheme="light"] .
 html[data-scheme="light"] .side-top .edge::before, html[data-scheme="light"] .side-top .edge::after { bottom: -4px; }
 html[data-scheme="light"] .side-bottom .edge::before, html[data-scheme="light"] .side-bottom .edge::after { top: -4px; }
 
-/* a márkajel alatti és a futó programok előtti elválasztó: pontsor a csíkok helyett */
-html[data-scheme="light"] :is(.hazard, .extras-sep) {
+/* a futó programok előtti elválasztó: pontsor a csíkok helyett */
+html[data-scheme="light"] .extras-sep {
   opacity: .8;
   background: radial-gradient(circle, var(--c-main) 1.2px, transparent 1.6px) 0 50% / 7px 7px repeat-x;
 }
-html[data-scheme="light"] .left.horiz :is(.hazard, .extras-sep) { background-repeat: repeat-y; background-position: 50% 0; }
+html[data-scheme="light"] .left.horiz .extras-sep { background-repeat: repeat-y; background-position: 50% 0; }
 html[data-scheme="light"] .extras-sep { background-image: radial-gradient(circle, var(--c-alt) 1.2px, transparent 1.6px); }
 
 /* vékony keretek (fent, lent, oldalt) */

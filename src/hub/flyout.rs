@@ -88,7 +88,11 @@ impl Hub {
             json!({ "type": "weather-open", "weather": self.cfg.weather, "theme": self.theme_json(), "language": self.cfg.language })
         };
         self.fly_eval(&payload);
-        self.eval(self.info_edge(), &json!({ "type": "fly-state", "kind": kind, "open": true }));
+        self.eval_info_at(
+            Some(idx),
+            &json!({ "type": "fly-state", "kind": kind, "open": true }),
+            &json!({ "type": "fly-state", "open": false }),
+        );
     }
 
     pub(crate) fn fly_hide(&mut self, lost_focus: bool) {

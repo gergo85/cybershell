@@ -13,25 +13,33 @@ use std::time::{Duration, Instant};
 impl Hub {
     /// Egy program ablakai közti váltás, ahogy a tálca is csinálja: ha nem aktív,
     /// előhozza; ha aktív és egy ablaka van, kis méretre teszi; ha több, a következőre vált.
+    /// Nyitott beállítások mellett csak akkor zárja be azokat, ha az előhozott ablak ugyanazon
+    /// a képernyőn van (kis méretre tételnél nyitva maradnak).
     pub(crate) fn toggle_windows(&mut self, mine: &[WinInfo]) {
         if mine.is_empty() {
             return;
         }
         let active = mine.iter().find(|w| Some(w.hwnd) == self.last_fg && !w.iconic);
-        match active {
+        let shown = match active {
             Some(cur) if mine.len() > 1 => {
                 let next = mine.iter().rev().find(|w| w.hwnd != cur.hwnd).unwrap();
                 wintrack::activate(next.hwnd);
                 self.last_fg = Some(next.hwnd);
+                Some(next.hwnd)
             }
             Some(cur) => {
                 wintrack::minimize(cur.hwnd);
                 self.last_fg = None;
+                None
             }
             None => {
                 wintrack::activate(mine[0].hwnd);
                 self.last_fg = Some(mine[0].hwnd);
+                Some(mine[0].hwnd)
             }
+        };
+        if let Some(h) = shown {
+            self.settings_dismiss_for(Some(h), &[]);
         }
         self.last_state.clear();
         self.poll();
@@ -61,7 +69,11 @@ impl Hub {
         let (mine, exe) = self.target_windows(msg);
         if new_instance {
             if let Some(exe) = exe {
-                wintrack::shell_open(&exe, "", "", false);
+                let own = self.own_hwnds();
+                let known: Vec<isize> = self.tracker.snapshot(&own).iter().map(|w| w.hwnd.0 as isize).collect();
+                if wintrack::shell_open(&exe, "", "", false) {
+                    self.settings_dismiss_for(None, &known);
+                }
             }
             return;
         }
@@ -123,6 +135,8 @@ impl Hub {
         let ok = wintrack::shell_open(&path, &config::expand_env(&app.args), &config::expand_env(&app.cwd), app.maximize());
         log(format!("indítás: {} ({path}) -> {}", app.name, if ok { "ok" } else { "HIBA" }));
         if ok {
+            let known: Vec<isize> = wins.iter().map(|w| w.hwnd.0 as isize).collect();
+            self.settings_dismiss_for(None, &known);
             if app.maximize() {
                 self.pending = Some(Pending {
                     app: id,

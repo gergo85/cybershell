@@ -34,9 +34,10 @@
   let info = p.get('info') || (icons === 'right' ? 'left' : 'right');
   if (info === icons) info = icons === 'right' ? 'left' : 'right';
   const frames = ['left', 'right', 'top', 'bottom'].filter((e) => e !== icons && e !== info);
-  const order = [icons, info, ...frames];
-  const thick = (e) => (e === icons || e === info ? 86 : 10);
+  // a két panel kapja a teljes hosszt; oldalsó és vízszintes panelnél az oldalsó az első
   const vertical = (e) => e === 'left' || e === 'right';
+  const order = (!vertical(icons) && vertical(info) ? [info, icons] : [icons, info]).concat(frames);
+  const thick = (e) => (e === icons || e === info ? 86 : 10);
   // ugyanaz az elhelyezés, mint a programban: a korábbi sáv kapja a teljes hosszt
   const rem = { l: 0, t: 0, r: W, b: H };
   const rects = {};

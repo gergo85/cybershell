@@ -6,17 +6,6 @@
   display: flex; flex-direction: column; align-items: center;
   padding: calc(var(--t) * 1px + 14px) 1px calc(var(--b) * 1px + 12px) 0;
 }
-.brand-name {
-  font-size: 11px; letter-spacing: .12em; padding-left: .12em; color: var(--c-main);
-  font-variation-settings: "wdth" 75, "wght" 700;
-  text-shadow: 0 0 6px var(--c-main-glow), 1px 0 0 var(--c-hot), -1px 0 0 var(--c-alt);
-}
-.brand-name span { color: var(--c-alt); text-shadow: 0 0 6px var(--c-alt-dim); }
-.hazard {
-  width: 56px; height: 4px; margin: 9px 0 4px; flex: none;
-  background: repeating-linear-gradient(-45deg, var(--c-main) 0 3px, transparent 3px 7px);
-  opacity: .45;
-}
 .apps {
   flex: 1; min-height: 0; width: 100%;
   display: flex; flex-direction: column; align-items: center; gap: 8px;
@@ -126,3 +115,7 @@
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
 }
 .left { padding-top: calc(var(--ia, 0) * 1px + 14px); padding-bottom: calc(var(--ib, 0) * 1px + 12px); }
+
+/* Ikonnév mutatása kikapcsolva: csak az ikonok (a név a súgóban) */
+.left.no-labels .label { display: none; }
+.left.no-labels.horiz .app { width: 56px; }

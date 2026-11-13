@@ -123,15 +123,20 @@ pub(crate) fn emergency_cleanup() {
 pub(crate) fn default_config() -> Config {
     let mut c = Config::default();
     c.resolve_language();
+    c.normalize_edges();
     c.resolve_scheme();
-    c.apps = vec![config::AppEntry {
-        name: "Fájlok".into(),
-        path: "explorer.exe".into(),
-        icon: "folder".into(),
-        match_title: String::new(),
-        maximize: Some(false),
-        ..Default::default()
-    }];
+    // Az alap ikonlista (assets/default-apps.json, az exe-be építve). Ami ezen a gépen máshol
+    // van, azt az indításkori ellenőrzés megkeresi; ami nincs telepítve, az rejtve marad.
+    c.apps = serde_json::from_str(include_str!("../assets/default-apps.json")).unwrap_or_default();
+    if c.apps.is_empty() {
+        c.apps = vec![config::AppEntry {
+            name: "Fájlok".into(),
+            path: "explorer.exe".into(),
+            icon: "folder".into(),
+            maximize: Some(false),
+            ..Default::default()
+        }];
+    }
     c
 }
 

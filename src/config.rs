@@ -26,10 +26,17 @@ pub struct Config {
     pub swap_sides: bool,
     /// Az ikonsáv helye: "left", "right", "top" vagy "bottom".
     pub icons_edge: String,
-    /// Az információs panel helye (nem lehet ugyanott, ahol az ikonsáv).
+    /// Az információs panel helye (nem lehet ugyanott, ahol az ikonsáv). "auto" (alapérték):
+    /// laptopon (akkumulátoros gépen) lent, mert oldalt a kisebb képernyőn nem fér ki minden,
+    /// asztali gépen jobbra.
     pub info_edge: String,
+    /// Igaz, ha a fájlban "auto" áll: a mentéskor "auto" kerül vissza.
+    #[serde(skip)]
+    pub info_edge_auto: bool,
     /// Minden képernyőn megjelenjen-e a hub (különben csak az elsődlegesen).
     pub all_monitors: bool,
+    /// Látszódjon-e a programok neve az ikonjuk alatt.
+    pub icon_labels: bool,
     pub frame: Frame,
     pub activity: Activity,
     /// Mutassa-e a Claude 5 órás és heti használatát.
@@ -72,6 +79,8 @@ pub struct Frame {
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Sections {
+    /// Eszköztár: Számológép, Jegyzettömb, Keresés, Képmetsző.
+    pub tools: bool,
     pub claude: bool,
     pub activity: bool,
     pub clock: bool,
@@ -82,23 +91,30 @@ pub struct Sections {
     pub music: bool,
     /// A hangerő szekció.
     pub volume: bool,
+    /// A Főkapcsoló szekció (alapból a panel végén, a MENÜ előtt).
+    pub power: bool,
     /// A szekciók sorrendje az információs panelen (a Keresés/Indítás és a Főkapcsoló között;
     /// a laptop szekció mindig az időjárás előtt van).
     pub order: Vec<String>,
 }
 
-pub const SECTION_KEYS: [&str; 7] = ["claude", "activity", "date", "clock", "weather", "music", "volume"];
+pub const SECTION_KEYS: [&str; 9] = ["tools", "claude", "activity", "date", "clock", "weather", "music", "volume", "power"];
 
 impl Default for Sections {
     fn default() -> Self {
+        // Laptopon (kisebb képernyő) alapból csak az Eszköztár, az Idő, az Időjárás, a Hangerő és
+        // a Főkapcsoló látszik; asztali gépen minden, kivéve az Aktivitást.
+        let full = crate::sys::battery().is_none();
         Sections {
-            claude: true,
-            activity: true,
+            tools: true,
+            claude: full,
+            activity: false,
             clock: true,
-            date: true,
+            date: full,
             weather: true,
-            music: true,
+            music: full,
             volume: true,
+            power: true,
             // alapból az idő a dátum alatt van, alul az időjárás, a zene és a hangerő
             order: SECTION_KEYS.iter().map(|s| s.to_string()).collect(),
         }
@@ -116,7 +132,11 @@ impl Sections {
         }
         for k in SECTION_KEYS {
             if !order.iter().any(|o| o == k) {
-                order.push(k.to_string());
+                // az Eszköztár (v1.4-ben új) alapból a Claude fölé kerül
+                match order.iter().position(|o| o == "claude") {
+                    Some(i) if k == "tools" => order.insert(i, k.to_string()),
+                    _ => order.push(k.to_string()),
+                }
             }
         }
         self.order = order;
@@ -154,11 +174,13 @@ pub struct Weather {
     pub latitude: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub longitude: Option<f64>,
+    /// Mutassa-e a panel Időjárás szekciója a szél sebességét és irányát.
+    pub wind: bool,
 }
 
 impl Default for Weather {
     fn default() -> Self {
-        Weather { enabled: true, city: "Budapest".into(), latitude: None, longitude: None }
+        Weather { enabled: true, city: "Budapest".into(), latitude: None, longitude: None, wind: true }
     }
 }
 
@@ -239,8 +261,9 @@ pub struct AppEntry {
     /// Az ikon finom színe (pl. "#ff7139"), ami a programra utal.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub color: String,
-    /// Hol jelenjen meg: "left" (alapból, bal sáv) vagy "right" (jobb panel, az Indítás alatt).
-    #[serde(skip_serializing_if = "String::is_empty")]
+    /// Régi (v1.3-ig) beállítás: "right" esetén az információs panelen jelent meg. Mostantól
+    /// minden program az Ikonok között van; betöltéskor elfogadjuk, a fájlba már nem kerül vissza.
+    #[serde(skip_serializing)]
     pub place: String,
     /// A géppel együtt induljon-e (a CyberShell indítja el bejelentkezéskor).
     #[serde(skip_serializing_if = "is_false")]
@@ -262,8 +285,10 @@ impl Default for Config {
             right_width: 86,
             swap_sides: false,
             icons_edge: "left".into(),
-            info_edge: "right".into(),
+            info_edge: "auto".into(),
+            info_edge_auto: false,
             all_monitors: true,
+            icon_labels: true,
             frame: Frame::default(),
             activity: Activity::default(),
             claude_usage: true,
@@ -315,10 +340,6 @@ impl AppEntry {
 
     pub fn maximize(&self) -> bool {
         self.maximize.unwrap_or(true)
-    }
-
-    pub fn on_right(&self) -> bool {
-        self.place.eq_ignore_ascii_case("right")
     }
 
     /// Kisbetűs exe-nevek, amelyekhez az ablakokat párosítjuk.
@@ -391,6 +412,11 @@ impl Config {
         if !EDGE_NAMES.contains(&self.icons_edge.as_str()) {
             self.icons_edge = "left".into();
         }
+        if self.info_edge == "auto" || self.info_edge.is_empty() {
+            self.info_edge_auto = true;
+            let laptop = crate::sys::battery().is_some();
+            self.info_edge = if laptop && self.icons_edge != "bottom" { "bottom".into() } else { "right".into() };
+        }
         if !EDGE_NAMES.contains(&self.info_edge.as_str()) || self.info_edge == self.icons_edge {
             self.info_edge = if self.icons_edge == "right" { "left".into() } else { "right".into() };
         }
@@ -453,6 +479,9 @@ fn to_json(cfg: &Config) -> serde_json::Result<serde_json::Value> {
     let mut v = serde_json::to_value(cfg)?;
     if cfg.language_auto {
         v["language"] = serde_json::Value::from("auto");
+    }
+    if cfg.info_edge_auto {
+        v["infoEdge"] = serde_json::Value::from("auto");
     }
     Ok(v)
 }

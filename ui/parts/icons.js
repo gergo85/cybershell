@@ -6,8 +6,6 @@
     root.className = `left side-${side}${horiz ? ' horiz' : ''}`;
     root.innerHTML = `
       <div class="edge"></div>
-      <header class="brand"><div class="brand-name">CYBER<span>SHELL</span></div></header>
-      <div class="hazard"></div>
       <nav class="apps" id="apps"></nav>`;
 
     const appsEl = $('apps');
@@ -147,6 +145,17 @@
       peekSent = false;
       if (el) launch(el, e.shiftKey);
     });
+    // jobb gomb: kis menü a program ablakához (Teljes képernyőre, Ablak bezárása), ha
+    // pontosan egy ablaka van nyitva
+    appsEl.addEventListener('contextmenu', (e) => {
+      const el = e.target.closest('.app');
+      if (!el || demo) return;
+      clearTimeout(peekTimer);
+      // a menü az ikon mellett nyílik; ha az egér elhagyja az ikont és a menüt, bezárul
+      const r = el.querySelector('.tile').getBoundingClientRect();
+      peekSent = true;
+      post({ type: 'app-menu', ...target(el), y: Math.round(r.top + r.height / 2), x: Math.round(r.left + r.width / 2) });
+    });
     appsEl.addEventListener('auxclick', (e) => {
       const el = e.target.closest('.app');
       if (el && e.button === 1) launch(el, true);
@@ -157,7 +166,9 @@
     });
 
     const h = (msg) => {
-      if (msg.type === 'init') { apps = msg.apps || []; renderApps(); }
+      if (msg.type === 'init') { apps = msg.apps || []; renderApps(); root.classList.toggle('no-labels', msg.iconLabels === false); }
+      // Ikonnév mutatása (a beállításokból)
+      if (msg.type === 'icon-labels') root.classList.toggle('no-labels', msg.on === false);
       if (msg.type === 'state') { applyState(msg.running, msg.active, msg.multi); renderExtras(msg.extras, msg.activeExtra); }
       if (msg.type === 'peek-state') peekOpen = !!msg.open;
       if (msg.type === 'drag') onDrag(msg);

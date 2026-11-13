@@ -13,13 +13,19 @@ use crate::web::settings_url;
 use crate::{appbar, autostart, clipboard, config, keyhook, sys, wintrack};
 use serde_json::json;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 use tao::window::Window;
 use windows::Win32::Foundation::{HWND, RECT};
+use windows::Win32::Graphics::Gdi::{MONITOR_DEFAULTTONEAREST, MonitorFromWindow};
 use windows::Win32::UI::WindowsAndMessaging::{
     HWND_NOTOPMOST, HWND_TOPMOST, SW_HIDE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SetForegroundWindow, SetWindowPos,
     ShowWindow,
 };
 use wry::WebView;
+
+/// A CyberShell saját háttérképei (a `wallpapers` mappában); az Alapállapot ezeket hagyja meg.
+const DEFAULT_WALLPAPERS: [&str; 6] =
+    ["blue-hexagons.jpg", "circuit-lines.jpg", "dust-bridge.jpg", "hud-interface.jpg", "motherboard.jpg", "tech-plates.jpg"];
 
 /// A teljes képernyős beállítások ablaka.
 pub(crate) struct SettingsWin {
@@ -51,7 +57,6 @@ impl Hub {
                 j["path"] = json!(a.path);
                 j["args"] = json!(a.args);
                 j["rawIcon"] = json!(a.icon);
-                j["place"] = json!(if a.on_right() { "right" } else { "left" });
                 j["match"] = json!(a.match_exe);
                 j["available"] = json!(self.available.get(i).copied().unwrap_or(true));
                 j["canExeIcon"] = json!(a.resolved_path().to_lowercase().ends_with(".exe"));
@@ -93,6 +98,8 @@ impl Hub {
             "clipboard": self.cfg.start_menu.clipboard,
             "appearance": self.cfg.appearance,
             "health": self.health_json(),
+            "weather": { "city": self.cfg.weather.city, "wind": self.cfg.weather.wind },
+            "iconLabels": self.cfg.icon_labels,
             "sections": self.cfg.sections,
             "language": self.cfg.language,
             "version": version_label(),
@@ -128,7 +135,11 @@ impl Hub {
         if animate {
             self.settings_eval(&json!({ "type": "show" }));
         }
-        self.eval(self.info_edge(), &json!({ "type": "settings-open", "on": true }));
+        self.eval_info_at(
+            self.settings_bar,
+            &json!({ "type": "settings-open", "on": true }),
+            &json!({ "type": "settings-open", "on": false }),
+        );
     }
 
     /// Az elsődleges képernyő munkaterülete a sávok nélkül (ahogy az elrendezés kiszámolta;
@@ -180,6 +191,33 @@ impl Hub {
         }
     }
 
+    pub(crate) fn settings_visible(&self) -> bool {
+        self.settings.as_ref().is_some_and(|s| s.visible)
+    }
+
+    /// Ugyanazon a képernyőn van-e az ablak, mint a nyitott beállítások. Kis méretre tett
+    /// ablaknál a Windows a visszaállított helyét veszi alapul.
+    pub(crate) fn on_settings_monitor(&self, hwnd: HWND) -> bool {
+        let Some(s) = self.settings.as_ref().filter(|s| s.visible) else { return false };
+        unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) == MonitorFromWindow(s.hwnd, MONITOR_DEFAULTTONEAREST) }
+    }
+
+    /// Programikonra kattintás után: a beállítások csak akkor úsznak ki, ha az előhozott ablak
+    /// ugyanazon a képernyőn van (több monitornál a másik képernyőn nyíló program mellett nyitva
+    /// maradnak). Új indításnál (`hwnd` nincs) az első új ablakát figyeljük.
+    pub(crate) fn settings_dismiss_for(&mut self, hwnd: Option<HWND>, known: &[isize]) {
+        if !self.settings_visible() {
+            return;
+        }
+        match hwnd {
+            Some(h) if self.on_settings_monitor(h) => self.settings_dismiss(),
+            Some(_) => {}
+            None => {
+                self.settings_watch = Some((known.iter().copied().collect(), Instant::now() + Duration::from_secs(20)));
+            }
+        }
+    }
+
     /// Ha nyitva vannak a beállítások, kiúsznak (pl. egy programikonra kattintottak).
     pub(crate) fn settings_dismiss(&mut self) {
         if self.settings.as_ref().is_some_and(|s| s.visible) {
@@ -221,7 +259,6 @@ impl Hub {
             if let Some(s) = item["color"].as_str() {
                 a.color = s.to_string();
             }
-            a.place = if item["place"] == "right" { "right".into() } else { String::new() };
             a.autostart = item["autostart"].as_bool().unwrap_or(false);
             if !a.name.is_empty() && !a.path.is_empty() {
                 out.push(a);
@@ -297,6 +334,7 @@ impl Hub {
                     log(format!("panelek helye: ikonsáv {icons}, információs panel {info}"));
                     self.cfg.icons_edge = icons.to_string();
                     self.cfg.info_edge = info.to_string();
+                    self.cfg.info_edge_auto = false;
                     if self.save_config() {
                         self.reload();
                     }
@@ -324,6 +362,43 @@ impl Hub {
                     log(format!("egészség: {}, {minutes} perc", if enabled { "be" } else { "ki" }));
                     self.save_config();
                     self.health_restart();
+                }
+                self.send_settings();
+            }
+            // Ikonnév mutatása: a programok neve az ikonjuk alatt
+            "icon-labels" => {
+                let on = msg["on"].as_bool().unwrap_or(true);
+                if on != self.cfg.icon_labels {
+                    self.cfg.icon_labels = on;
+                    log(format!("ikonnevek: {}", if on { "be" } else { "ki" }));
+                    self.save_config();
+                    self.eval(self.icons_edge(), &json!({ "type": "icon-labels", "on": on }));
+                }
+                self.send_settings();
+            }
+            // Időjárás: a település (szabad szöveg) és a szél kijelzése a panelen
+            "weather" => {
+                let mut changed = false;
+                if let Some(city) = msg["city"].as_str().map(str::trim).filter(|c| !c.is_empty()) {
+                    let city: String = city.chars().take(80).collect();
+                    if city != self.cfg.weather.city {
+                        // a kézzel megadott koordináták a régi településhez tartoztak
+                        self.cfg.weather.city = city;
+                        self.cfg.weather.latitude = None;
+                        self.cfg.weather.longitude = None;
+                        changed = true;
+                    }
+                }
+                if let Some(wind) = msg["wind"].as_bool()
+                    && wind != self.cfg.weather.wind
+                {
+                    self.cfg.weather.wind = wind;
+                    changed = true;
+                }
+                if changed {
+                    log(format!("időjárás: {}, szél {}", self.cfg.weather.city, if self.cfg.weather.wind { "be" } else { "ki" }));
+                    self.save_config();
+                    self.eval(self.info_edge(), &json!({ "type": "weather", "weather": self.cfg.weather }));
                 }
                 self.send_settings();
             }
@@ -402,6 +477,32 @@ impl Hub {
                     }
                 }
             }
+            // Alapállapot: a később felvett képek a Lomtárba kerülnek, a CyberShell saját képei maradnak
+            "wall-reset" => {
+                let extra: Vec<PathBuf> = std::fs::read_dir(self.wallpaper_dir())
+                    .into_iter()
+                    .flatten()
+                    .flatten()
+                    .map(|e| e.path())
+                    .filter(|p| Self::is_wallpaper_file(p))
+                    .filter(|p| {
+                        let name = p.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
+                        !DEFAULT_WALLPAPERS.contains(&name.as_str())
+                    })
+                    .collect();
+                let n = extra.len();
+                if n > 0 {
+                    match sys::recycle(&extra) {
+                        Ok(()) => log(format!("háttérképek alapállapotban: {n} kép a Lomtárba")),
+                        Err(e) => {
+                            log(format!("háttérképek törlése sikertelen: {e}"));
+                            let t = self.tr("A képek nem törölhetők", "Couldn't remove the images");
+                            self.settings_eval(&json!({ "type": "toast", "text": format!("{t}: {e}") }));
+                        }
+                    }
+                }
+                self.send_settings();
+            }
             "wall-folder" => {
                 let d = self.wallpaper_dir();
                 let _ = std::fs::create_dir_all(&d);
@@ -473,8 +574,6 @@ impl Hub {
                     self.cfg.wallpaper = path.to_string();
                     self.save_config();
                 }
-                let t = self.tr("Háttérkép beállítva.", "Wallpaper set.");
-                self.toast(&t);
             }
             Err(e) => {
                 log(format!("háttérkép hiba: {e}"));
