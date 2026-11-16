@@ -10,18 +10,19 @@ A CyberShell neonfényes cyberpunk HUD-dá alakítja a Windows asztalát. Az egy
 
 ## Főbb jellemzők
 
-- **Megvan a hangulata.** A sötét téma a Cyberpunk 2077 neonfényeit idézi, a világos a Ghost in the Shell látványvilágát. Az *Auto* beállítás napkelte és napnyugta szerint vált köztük.
+- **Megvan a hangulata.** A sötét téma a Cyberpunk 2077 neonfényeit idézi, a világos a Ghost in the Shell látványvilágát. Az *Auto* beállítás napkelte és napnyugta szerint vált köztük, a *Windows* a Windows világos vagy sötét módját követi.
 - **Leváltja a gyári felületet.** Az Ikonok sáv élő ablakelőnézetet ad, a `Win` billentyű pedig a CyberShell saját Start menüjét és keresőjét nyitja. A kereső számol, parancsot futtat, őrzi a vágólap előzményeit, és ékezetek nélkül vagy betűszóval is megtalálja, amit keresel.
-- **Minden egy pillantásra.** Óra, naptár Google Naptár-támogatással, időjárás, Spotify-vezérlés, hangerő, főkapcsoló és a Claude használati korlátai.
+- **Minden egy pillantásra.** Óra, naptár Google Naptár-támogatással, időjárás, Spotify-vezérlés, hangerő, főkapcsoló, a Claude és a Codex használati korlátai, és piros jelzés, ha megszakad az internetkapcsolat.
+- **Összhangban a Windows-zal.** Kérésre a Windows sötét/világos módja, kiemelőszíne és a Windows Terminal színsémája is a témával vált, az aktív ablak körül pedig neonkeret fut.
 - **Hosszú munkanapokra.** A szünetemlékeztető és az aktivitás-visszaszámláló szól, ha ideje felállni.
-- **Átalakítható.** A panelek bármelyik képernyőszélre kerülhetnek, a szekciók sorrendje húzással állítható. A beállítások egyetlen `config.json`-ban vannak, a megjelenés komponensenként egy CSS-fájlban, a `Ctrl+Alt+R` pedig újratölti az eredményt.
+- **Átalakítható.** A panelek bármelyik képernyőszélre kerülhetnek, a szekciók sorrendje húzással állítható. A füles beállítási felületen szinte minden állítható, és minden egyetlen `config.json`-ba kerül; a megjelenés komponensenként egy CSS-fájlban, a `Ctrl+Alt+R` pedig újratölti az eredményt.
 - **Kicsi és biztonságos.** Rust nyelven íródott, telepítés nélkül, a saját mappájából fut. A `Ctrl+Alt+Q` kilép, és mindent visszaállít; ha a program összeomlik, egy figyelő folyamat visszaadja a tálcát.
 
 **Miben más?** A skinrendszerek widgeteket tesznek az asztalra, a tálcamódosítók a Windows meglévő sávját festik át, az indítók pedig csak keresnek. A CyberShell az egész réteget lefedi: a tálca, a Start menü, a kereső és az információs panel egy arculatot és egy beállításfájlt használ, minden monitoron.
 
 ## Gyors indítás
 
-1. Tedd a `CyberShell.exe`-t, a `config.json`-t és az `ui` mappát egy mappába, és indítsd el a `CyberShell.exe`-t.
+1. Tedd a `CyberShell.exe`-t egy mappába, és indítsd el. Első induláskor létrehozza maga mellett a `config.json`-t és a `wallpapers` mappát.
 2. Jobb alul a **// MENÜ** gombbal állíthatod a témát, a nyelvet, a programokat és a paneleket.
 3. A `Ctrl+Alt+Q`-val lépsz ki, és minden visszaáll.
 

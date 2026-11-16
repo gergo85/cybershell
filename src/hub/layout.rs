@@ -25,8 +25,8 @@ use tao::window::{Window, WindowBuilder};
 use windows::Win32::Foundation::{HWND, RECT};
 use windows::Win32::UI::Shell::SetWindowSubclass;
 use windows::Win32::UI::WindowsAndMessaging::{
-    HWND_BOTTOM, HWND_NOTOPMOST, HWND_TOPMOST, SPI_GETWORKAREA, SW_HIDE, SW_SHOWNOACTIVATE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE,
-    SWP_NOSIZE, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, SetWindowPos, ShowWindow, SystemParametersInfoW,
+    HWND_BOTTOM, HWND_NOTOPMOST, HWND_TOPMOST, IsWindowVisible, SPI_GETWORKAREA, SW_HIDE, SW_SHOWNOACTIVATE, SWP_FRAMECHANGED,
+    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, SetWindowPos, ShowWindow, SystemParametersInfoW,
 };
 use wry::http::Request;
 use wry::{WebContext, WebView, WebViewBuilder, WebViewBuilderExtWindows};
@@ -368,6 +368,12 @@ impl Hub {
                 bar.registered = appbar::register(bar.hwnd);
             }
             bar.rect = appbar::set(bar.hwnd, bar.edge, rc);
+            // ha korábban 0 vastag volt (és ezért elrejtettük), most újra megjelenik
+            unsafe {
+                if !IsWindowVisible(bar.hwnd).as_bool() {
+                    let _ = ShowWindow(bar.hwnd, SW_SHOWNOACTIVATE);
+                }
+            }
             log(format!(
                 "sáv {} #{}: {},{} – {},{}",
                 bar.edge.name(),

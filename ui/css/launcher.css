@@ -212,3 +212,8 @@
 
 /* a kereső nézetben nincs fiók-rész (csak a Start menüben) */
 .lx[data-mode="search"] .lx-userbox { display: none; }
+
+/* a felhasználó neve: a nagybetűs ékezetek (Ó, Ő) ne vágódjanak le a sor tetején */
+.lx-user span { line-height: 1.5; padding-top: 1px; }
+/* a találatok címe: a nagybetűs ékezetek (É, Á) ne vágódjanak le */
+.lx-txt b { line-height: 1.45; }

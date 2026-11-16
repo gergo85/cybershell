@@ -90,3 +90,14 @@
 .pm-item.danger:hover { color: var(--c-bg); background: var(--c-hot); }
 .pm-item.danger:hover svg { color: var(--c-bg); }
 html[data-scheme="light"] .pm-item { clip-path: none; border-radius: 7px; }
+
+/* ───────────── Összes bezárása (a jobb alsó sarokban) ───────────── */
+.pk-closeall {
+  position: absolute; right: 14px; bottom: 10px; height: 26px; display: flex; align-items: center; gap: 7px; padding: 0 12px;
+  font: 400 10.5px/1 var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--c-hot);
+  background: color-mix(in srgb, var(--c-hot) 10%, transparent); border: 1px solid color-mix(in srgb, var(--c-hot) 40%, transparent);
+  transition: background-color .12s, color .12s;
+}
+.pk-closeall svg { width: 12px; height: 12px; stroke-width: 2; }
+.pk-closeall:hover { color: var(--c-bg); background: var(--c-hot); }
+html[data-scheme="light"] .pk-closeall { border-radius: 6px; }

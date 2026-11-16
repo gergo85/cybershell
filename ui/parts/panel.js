@@ -12,10 +12,10 @@
       <section class="sec tools" id="toolsSec">
         <h3>${T('secTools')}</h3>
         <div class="tool-grid">
-          <button class="tool" data-tool="calc" title="${T('toolCalc')}" style="--app:#ffb02e">${svg('calc')}</button>
-          <button class="tool" data-tool="notepad" title="${T('toolNotepad')}" style="--app:#5b8def">${svg('notes')}</button>
-          <button class="tool" data-cmd="search" title="${T('search')}" style="--app:#4fd1c5">${svg('search')}</button>
-          <button class="tool" data-tool="snip" title="${T('toolSnip')}" style="--app:#ff4fa3">${svg('snip')}</button>
+          <button class="tool" data-k="calc" data-tool="calc" title="${T('toolCalc')}" style="--app:#ffb02e">${svg('calc')}</button>
+          <button class="tool" data-k="notepad" data-tool="notepad" title="${T('toolNotepad')}" style="--app:#5b8def">${svg('notes')}</button>
+          <button class="tool" data-k="search" data-cmd="search" title="${T('search')}" style="--app:#4fd1c5">${svg('search')}</button>
+          <button class="tool" data-k="snip" data-tool="snip" title="${T('toolSnip')}" style="--app:#ff4fa3">${svg('snip')}</button>
         </div>
       </section>
       <section class="sec" id="claudeSec">
@@ -24,6 +24,14 @@
         <div class="usage-foot">
           <button class="refresh" id="usageRefresh">${svg('reload')}<span id="usageTime">${T('refresh')}</span></button>
           <span class="plan" id="plan"></span>
+        </div>
+      </section>
+      <section class="sec" id="codexSec" style="display:none">
+        <h3>${T('secCodex')}</h3>
+        <div id="codexUsage"><div class="note">…</div></div>
+        <div class="usage-foot">
+          <button class="refresh" id="codexRefresh">${svg('reload')}<span id="codexTime">${T('refresh')}</span></button>
+          <span class="plan" id="codexPlan"></span>
         </div>
       </section>
       <section class="sec act" id="act">
@@ -73,6 +81,8 @@
         <div class="lap-grid">
           <button class="lap" id="lapWifi" data-cmd="wifi" style="--app:#4fd1c5">${svg('wifi')}<span>${T('wifi')}</span></button>
           <button class="lap" id="lapBat" data-cmd="battery" style="--app:#7ee787"><span class="bat" id="batIcon"></span><span id="batPct">--%</span></button>
+          <button class="lap" id="lapNet" data-cmd="network" style="--app:#6ea8ff" title="${T('networkHint')}">${svg('network')}<span>${T('network')}</span></button>
+          <button class="lap" id="lapBt" data-cmd="bluetooth" style="--app:#8b8cff" title="${T('bluetoothHint')}">${svg('bluetooth')}<span>${T('btShort')}</span></button>
         </div>
       </section>
       <section class="sec weather" id="weatherSec" title="${T('wDetails')}">
@@ -111,10 +121,10 @@
         <h3>${T('secPower')}</h3>
         <div class="pw-panes">
         <div class="pw-grid">
-          <button class="pw" data-act="lock" style="--app:#4fd1c5" title="${T('pwLockT')}">${svg('lock')}<span>${T('pwLock')}</span></button>
-          <button class="pw" data-act="sleep" style="--app:#8b6cff" title="${T('pwSleepT')}">${svg('moon')}<span>${T('pwSleep')}</span></button>
-          <button class="pw" data-act="shutdown" style="--app:#ff2a6d" title="${T('pwOffT')}">${svg('power')}<span>${T('pwOff')}</span></button>
-          <button class="pw" data-act="restart" style="--app:#ffb02e" title="${T('pwRestartT')}">${svg('reload')}<span>${T('pwRestart')}</span></button>
+          <button class="pw" data-k="lock" data-act="lock" style="--app:#4fd1c5" title="${T('pwLockT')}">${svg('lock')}<span>${T('pwLock')}</span></button>
+          <button class="pw" data-k="sleep" data-act="sleep" style="--app:#8b6cff" title="${T('pwSleepT')}">${svg('moon')}<span>${T('pwSleep')}</span></button>
+          <button class="pw" data-k="shutdown" data-act="shutdown" style="--app:#ff2a6d" title="${T('pwOffT')}">${svg('power')}<span>${T('pwOff')}</span></button>
+          <button class="pw" data-k="restart" data-act="restart" style="--app:#ffb02e" title="${T('pwRestartT')}">${svg('reload')}<span>${T('pwRestart')}</span></button>
         </div>
         <div class="pw-confirm" id="pwConfirm">
           <div class="pw-q" id="pwQ"></div>
@@ -236,12 +246,20 @@
     let claudeEnabled = true;
     let sections = { tools: true, claude: true, activity: true, clock: true, date: true, weather: true, music: true, volume: true,
       order: ['tools', 'claude', 'activity', 'date', 'clock', 'weather', 'music', 'volume', 'power'] };
-    const SECTION_EL = { tools: 'toolsSec', claude: 'claudeSec', activity: 'act', clock: 'clockSec', date: 'dateSec', weather: 'weatherSec', music: 'musicSec', volume: 'volSec', power: 'powerSec' };
+    const SECTION_EL = { tools: 'toolsSec', claude: 'claudeSec', codex: 'codexSec', activity: 'act', clock: 'clockSec', date: 'dateSec', weather: 'weatherSec', music: 'musicSec', volume: 'volSec', power: 'powerSec' };
     let weatherOn = true;
     const applySections = () => {
       $('toolsSec').style.display = sections.tools !== false ? '' : 'none';
       $('powerSec').style.display = sections.power !== false ? '' : 'none';
       $('claudeSec').style.display = claudeEnabled && sections.claude !== false ? '' : 'none';
+      // a Codex alapból rejtett
+      $('codexSec').style.display = sections.codex === true ? '' : 'none';
+      // kompakt nézet: a Claude és a Codex a nullázás ideje és a frissítés nélkül, az Idő a másodperc nélkül
+      const compact = sections.compact || [];
+      $('claudeSec').classList.toggle('compact', compact.includes('claude'));
+      $('codexSec').classList.toggle('compact', compact.includes('codex'));
+      $('clockSec').classList.toggle('compact', compact.includes('clock'));
+      $('dateSec').classList.toggle('compact', compact.includes('date'));
       $('act').style.display = sections.activity !== false ? '' : 'none';
       $('clockSec').style.display = sections.clock !== false ? '' : 'none';
       $('dateSec').style.display = sections.date !== false ? '' : 'none';
@@ -253,6 +271,8 @@
       const order = [...(sections.order || [])];
       // az Eszköztár (v1.4-ben új) alapból a Claude fölött van
       if (!order.includes('tools')) order.splice(Math.max(0, order.indexOf('claude')), 0, 'tools');
+      // a Codex (v1.5-ben új) alapból a Claude alatt van
+      if (!order.includes('codex') && order.includes('claude')) order.splice(order.indexOf('claude') + 1, 0, 'codex');
       for (const k of Object.keys(SECTION_EL)) if (!order.includes(k)) order.push(k);
       for (const k of order) {
         const el = $(SECTION_EL[k]);
@@ -260,6 +280,15 @@
       }
       // a laptop szekció (Wi-Fi, akkumulátor) mindig az időjárás előtt van
       root.insertBefore($('laptopSec'), $('weatherSec'));
+      // az Eszköztár és a Főkapcsoló gombjainak sorrendje (a beállításokból)
+      const reorder = (grid, keys) => {
+        for (const k of keys || []) {
+          const b = grid.querySelector(`[data-k="${k}"]`);
+          if (b) grid.appendChild(b);
+        }
+      };
+      reorder(root.querySelector('.tool-grid'), sections.toolsOrder);
+      reorder(root.querySelector('.pw-grid'), sections.powerOrder);
       fitPanel();
     };
 
@@ -284,7 +313,7 @@
       $('dmd').textContent = T('dateMonthDay', { m: pad(d.getMonth() + 1), d: pad(d.getDate()) });
       $('week').textContent = T('week', { n: isoWeek(d) });
       actTick();
-      if (s % 30 === 0) renderUsage();
+      if (s % 30 === 0) { renderUsage(); renderCodex(); }
       setTimeout(tick, 1000 - new Date().getMilliseconds() + 5);
     };
 
@@ -316,7 +345,11 @@
         $('claudeLogin').addEventListener('click', () => post({ type: 'cmd', name: 'claude-login' }));
         return;
       }
-      box.innerHTML = usage.limits.map((l) => {
+      box.innerHTML = limitsHtml(usage.limits);
+    };
+    // a korlátok sávjai (a Claude és a Codex szekció közös rajzolója)
+    const limitsHtml = (limits) => {
+      return limits.map((l) => {
         // ha az ablak azóta újraindult, az érték ismeretlen, amíg újra nem jön adat
         const known = typeof l.pct === 'number';
         const pct = known ? Math.max(0, Math.min(100, Math.round(l.pct))) : 0;
@@ -330,6 +363,26 @@
           </div>`;
       }).join('');
     };
+    // ── Codex-használat (a Codex munkamenet-naplóiból) ──
+    let codex = null;
+    const renderCodex = () => {
+      if (!codex) return;
+      $('codexPlan').textContent = (codex.plan || '').toUpperCase();
+      if (codex.status !== 'ok') {
+        $('codexUsage').innerHTML = `<div class="note">${T('codexNone')}</div>`;
+        return;
+      }
+      $('codexUsage').innerHTML = limitsHtml(codex.limits.map((l) => ({
+        ...l, label: l.key ? l.key : T('limitHours', { h: Math.round((l.minutes || 0) / 60) }),
+      })));
+    };
+    $('codexRefresh').addEventListener('click', () => {
+      $('codexTime').textContent = `${T('refresh')}…`;
+      if (demo) return setTimeout(() => h({ type: 'codex', status: 'ok', plan: 'plus', at: Date.now(), limits: [
+        { key: 'five_hour', minutes: 300, pct: 23, resetsAt: Date.now() + 2.6 * 3600e3 },
+        { key: 'seven_day', minutes: 10080, pct: 41, resetsAt: Date.now() + 3.2 * 86400e3 }] }), 300);
+      post({ type: 'codex-refresh' });
+    });
     $('usageRefresh').addEventListener('click', () => {
       $('usageTime').textContent = `${T('refresh')}…`;
       post({ type: 'usage-refresh' });
@@ -658,7 +711,7 @@
       post({ type: 'calendar-open', top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right) });
     });
 
-    // ── laptop: Wi-Fi és akkumulátor (a Windows saját felületét nyitják meg) ──
+    // ── laptop: Wi-Fi, akkumulátor, hálózat, Bluetooth (a Windows saját felületét nyitják meg) ──
     $('laptopSec').querySelector('.lap-grid').addEventListener('click', (e) => {
       const b = e.target.closest('.lap');
       if (!b) return;
@@ -683,7 +736,9 @@
       lap.classList.toggle('charging', !!m.charging);
       lap.classList.toggle('low', pct != null && pct <= 20 && !m.charging);
     };
-    const showOnline = () => $('lapWifi').classList.toggle('offline', !navigator.onLine);
+    const showOnline = () => {
+      for (const id of ['lapWifi', 'lapNet']) $(id).classList.toggle('offline', !navigator.onLine);
+    };
     window.addEventListener('online', showOnline);
     window.addEventListener('offline', showOnline);
     showOnline();
@@ -721,6 +776,13 @@
         $('weatherSec').classList.toggle('open', !!msg.open && msg.kind === 'weather');
         $('dateSec').classList.toggle('open', !!msg.open && msg.kind === 'calendar');
       }
+      if (msg.type === 'codex') {
+        codex = msg;
+        const t = new Date(msg.at || Date.now());
+        $('codexTime').textContent = msg.at ? `${pad(t.getHours())}:${pad(t.getMinutes())}` : T('refresh');
+        renderCodex();
+        fitPanel();
+      }
       if (msg.type === 'usage') {
         usage = msg;
         // az adat saját időbélyege (állapotsorból érkezve ez lehet régebbi is)
@@ -735,6 +797,7 @@
       h({ type: 'media', running: true, title: 'Neon Rain (Extended Mix)', artist: 'Night Runner', album: 'Afterglow', playing: true,
         shuffle: false, canSeek: true, pos: 74, dur: 246, at: Date.now(), art: '../wallpapers/dust-bridge.jpg' });
       const inH = (hrs) => new Date(Date.now() + hrs * 3600000).toISOString();
+      sections = { ...sections, codex: true }; applySections(); $('codexRefresh').click();
       h({ type: 'usage', status: 'ok', plan: 'pro', limits: [
         { key: 'five_hour', label: '5 órás', pct: 34, resetsAt: inH(2.3) },
         { key: 'seven_day', label: 'Heti', pct: 71, resetsAt: inH(76) },

@@ -96,7 +96,8 @@
 .right.horiz .act-alert .act-btns { grid-area: btns; }
 .right.horiz .date { width: 96px; margin: -4px; }
 .right.horiz .clock { width: 112px; }
-.right.horiz .laptop { width: 104px; }
+.right.horiz .laptop { width: 212px; }
+.right.horiz .lap-grid { grid-template-columns: repeat(4, 1fr); }
 .right.horiz .weather {
   width: 172px; margin: -4px;
   display: grid; grid-template-columns: auto 1fr; grid-template-areas: "h h" "main wind" "desc city";

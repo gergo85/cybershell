@@ -208,6 +208,30 @@ impl Hub {
         self.apps_refresh(false);
     }
 
+    /// Bezáruljon-e a Start menü (kereső), mert máshova került a fókusz: csak ha az új
+    /// előtérablak ugyanazon a képernyőn van, mint a menü. Az asztalnál (ami minden képernyőn
+    /// ott van) az egérmutató képernyője dönt. Több monitornál így a másik képernyőn indított
+    /// program vagy ott tett kattintás nem zárja be.
+    pub(crate) fn launcher_lost_to(&self, fg: HWND) -> bool {
+        use windows::Win32::Graphics::Gdi::{MONITOR_DEFAULTTONEAREST, MonitorFromPoint, MonitorFromWindow};
+        let Some(l) = self.launcher.as_ref() else { return false };
+        if fg.is_invalid() || fg == l.hwnd {
+            return false;
+        }
+        let cls = wintrack::class_name(fg);
+        unsafe {
+            let own = MonitorFromWindow(l.hwnd, MONITOR_DEFAULTTONEAREST);
+            let other = if cls == "Progman" || cls == "WorkerW" {
+                let mut pt = POINT::default();
+                let _ = GetCursorPos(&mut pt);
+                MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST)
+            } else {
+                MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST)
+            };
+            own == other
+        }
+    }
+
     pub(crate) fn launcher_hide(&mut self, lost_focus: bool) {
         let Some(l) = self.launcher.as_mut() else { return };
         if !l.visible {

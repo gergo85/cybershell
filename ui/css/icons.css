@@ -114,7 +114,10 @@
   white-space: normal; overflow-wrap: anywhere; text-align: center; line-height: 1.25;
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
 }
-.left { padding-top: calc(var(--ia, 0) * 1px + 14px); padding-bottom: calc(var(--ib, 0) * 1px + 12px); }
+/* Az első ikon teteje ugyanott van, ahol a másik oldali panel Start gombjáé (a sáv tetejétől
+   12 px), az utolsó alja pedig ugyanott, ahol a MENÜ gombé (10 px): a lista saját 8 px-es
+   belső margója is beleszámít. */
+.left { padding-top: calc(var(--ia, 0) * 1px + 4px); padding-bottom: calc(var(--ib, 0) * 1px + 2px); }
 
 /* Ikonnév mutatása kikapcsolva: csak az ikonok (a név a súgóban) */
 .left.no-labels .label { display: none; }

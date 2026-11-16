@@ -34,7 +34,7 @@ Mentés után nyomd meg a `Ctrl+Alt+R`-t.
 | `iconLabels` | `false` esetén az Ikonok sávján nem látszik a programok neve (alapból `true`). |
 | `allMonitors` | `false` esetén a CyberShell csak az elsődleges képernyőn jelenik meg (alapból mindegyiken). |
 | `calendar.feeds` | A csatolt naptárak (név, iCal-cím, szín). A naptárban is felvehetők és törölhetők. |
-| `sections` | Az információs panel szekcióinak láthatósága (`tools`, `claude`, `activity`, `date`, `clock`, `weather`, `music`, `volume`, `power`) és sorrendje (`order`). Ami a sorrendből hiányzik, a végére kerül (az Eszköztár a Claude elé). |
+| `sections` | Az információs panel szekcióinak láthatósága (`tools`, `claude`, `codex` – alapból `false` –, `activity`, `date`, `clock`, `weather`, `music`, `volume`, `power`) és sorrendje (`order`). Ami a sorrendből hiányzik, a végére kerül (az Eszköztár a Claude elé). |
 | `startMenu.winKey` | `true` (alapból): a `Win` billentyű a CyberShell Start menüjét, a `Win+S` a keresőjét nyitja meg. `false` esetén a Windows sajátja jön. |
 | `startMenu.pinned` | A Start menübe kitűzött programok azonosítói (a menüben jobb gombbal kitűzve kerülnek ide). |
 | `startMenu.webSearch` | A webes keresés címe, a `{q}` helyére kerül a keresett szöveg (alapból Google). |
@@ -49,11 +49,15 @@ Mentés után nyomd meg a `Ctrl+Alt+R`-t.
 | `activity.autoStart` | Induláskor magától elkezdjen-e számolni. |
 | `activity.sound` | Szóljon-e hanggal, amikor lejár. |
 | `claudeUsage` | Látszódjon-e a Claude-használat. |
-| `appearance` | A téma: `"dark"` (Cyberpunk 2077), `"light"` (Ghost in the Shell) vagy `"auto"` (nappal világos, éjszaka sötét, az Időjárás helyének napkeltéje és napnyugtája szerint). |
+| `appearance` | A téma: `"dark"` (Cyberpunk 2077), `"light"` (Ghost in the Shell) `"auto"` (nappal világos, éjszaka sötét, az Időjárás helyének napkeltéje és napnyugtája szerint) vagy `"windows"` (a Windows világos/sötét módját követi, váltáskor azonnal). |
 | `theme` | A sötét téma színei: fő (sárga), kiegészítő (cián), figyelmeztető (rózsaszín), háttér és szöveg (`text`). |
 | `themeLight` | A világos téma színei, ugyanezekkel a kulcsokkal (türkiz, acélkék, narancsvörös, papírfehér háttér, sötét szöveg). |
 | `health.enabled`, `health.minutes` | Az Egészség szünet-emlékeztető be- és kikapcsolása, illetve hossza percben (5–480, alapból 90). |
 | `wallpaper` | A beállításokban legutóbb választott háttérkép teljes útvonala. Ha a fájlban átírod, újratöltéskor a CyberShell beállítja a Windows háttérképének. |
+| `neonBorder` | Neonkeret: `"off"` (alapból), `"active"` (az előtérben lévő program körül a téma fő színével fénylő keret) vagy `"all"` (emellett a többi ablak kerete is a téma színét kapja, halványabban; Windows 11). |
+| `windowsSync.darkMode` | `true` esetén a Windows sötét/világos módja (alkalmazások és rendszer) a CyberShell témájával együtt vált. |
+| `windowsSync.accent` | `true` esetén a Windows kiemelőszíne a téma fő színe lesz. |
+| `windowsSync.terminal` | `true` esetén a Windows Terminal kap egy `CyberShell Dark` és `CyberShell Light` színsémát, és az alapprofil a témával együtt vált köztük. |
 | `hideTaskbar` | `false` esetén a Windows tálcája látható marad, és a keret fölötte helyezkedik el. |
 
 A megjelenés az `ui\css` mappában van, komponensenként egy fájlban (ezeket szabadon átírhatod; újratöltés után azonnal látszik):

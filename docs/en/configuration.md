@@ -34,7 +34,7 @@ Press `Ctrl+Alt+R` after saving.
 | `iconLabels` | With `false` the Icons bar shows no program names (`true` by default). |
 | `allMonitors` | With `false` CyberShell appears only on the primary screen (on every screen by default). |
 | `calendar.feeds` | The attached calendars (name, iCal address, color). They can also be added and removed in the calendar. |
-| `sections` | Visibility (`tools`, `claude`, `activity`, `date`, `clock`, `weather`, `music`, `volume`, `power`) and order (`order`) of the info panel sections. Anything missing from the order goes to the end (the Toolbar goes before Claude). |
+| `sections` | Visibility (`tools`, `claude`, `codex` – `false` by default –, `activity`, `date`, `clock`, `weather`, `music`, `volume`, `power`) and order (`order`) of the info panel sections. Anything missing from the order goes to the end (the Toolbar goes before Claude). |
 | `startMenu.winKey` | `true` (the default): the `Win` key opens the CyberShell Start menu and `Win+S` its search. With `false` the Windows ones open. |
 | `startMenu.pinned` | IDs of the programs pinned to the Start menu (added by pinning with right-click in the menu). |
 | `startMenu.webSearch` | The web search address; `{q}` is replaced by the search text (Google by default). |
@@ -49,11 +49,15 @@ Press `Ctrl+Alt+R` after saving.
 | `activity.autoStart` | Whether it starts counting by itself on start. |
 | `activity.sound` | Whether it plays a sound when it runs out. |
 | `claudeUsage` | Whether Claude usage is shown. |
-| `appearance` | The theme: `"dark"` (Cyberpunk 2077), `"light"` (Ghost in the Shell) or `"auto"` (light by day, dark at night, by sunrise and sunset at the Weather location). |
+| `appearance` | The theme: `"dark"` (Cyberpunk 2077), `"light"` (Ghost in the Shell) `"auto"` (light by day, dark at night, by sunrise and sunset at the Weather location) or `"windows"` (follows the Windows light/dark mode, switching right away). |
 | `theme` | Colors of the dark theme: main (yellow), accent (cyan), alert (pink), background and text (`text`). |
 | `themeLight` | Colors of the light theme with the same keys (teal, steel blue, orange-red, paper-white background, dark text). |
 | `health.enabled`, `health.minutes` | Turns the Health break reminder on or off, and its length in minutes (5–480, 90 by default). |
 | `wallpaper` | Full path of the wallpaper last chosen in the settings. If you change it in the file, CyberShell sets it as the Windows wallpaper on reload. |
+| `neonBorder` | Neon border: `"off"` (default), `"active"` (a frame glowing in the theme’s main color around the foreground program) or `"all"` (the other windows’ borders take the theme color too, dimmer; Windows 11). |
+| `windowsSync.darkMode` | When `true`, the Windows dark/light mode (apps and system) switches together with the CyberShell theme. |
+| `windowsSync.accent` | When `true`, the Windows accent color becomes the theme’s main color. |
+| `windowsSync.terminal` | When `true`, Windows Terminal gets a `CyberShell Dark` and a `CyberShell Light` color scheme, and the default profile switches between them with the theme. |
 | `hideTaskbar` | With `false` the Windows taskbar stays visible and the frame sits above it. |
 
 The look lives in the `ui\css` folder, one file per component (feel free to edit them; changes show right after a reload):

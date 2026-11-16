@@ -36,6 +36,8 @@ pub(crate) struct PeekWin {
     pub(crate) hovered: bool,
     pub(crate) hide_at: Option<Instant>,
     pub(crate) refresh_at: Option<Instant>,
+    /// Mikor kérték a megnyitást (a megjelenés idejét naplózzuk).
+    pub(crate) asked_at: Option<Instant>,
 }
 
 impl Hub {
@@ -75,7 +77,7 @@ impl Hub {
         mine.truncate(cols * max_rows);
         let rows = mine.len().div_ceil(cols);
         let w_css = 2.0 * peek::PAD + cols as f64 * peek::CARD_W + (cols - 1) as f64 * peek::GAP;
-        let h_css = 2.0 * peek::PAD + peek::HEADER + rows as f64 * card_h + (rows - 1) as f64 * peek::GAP;
+        let h_css = 2.0 * peek::PAD + peek::HEADER + rows as f64 * card_h + (rows - 1) as f64 * peek::GAP + peek::FOOTER;
         let (w, h) = ((w_css * scale).round() as i32, (h_css * scale).round() as i32);
 
         // az ikonhoz igazítva, a munkaterületen belül
@@ -142,6 +144,7 @@ impl Hub {
             peek::drop_thumb(id);
         }
         pk.seq += 1;
+        pk.asked_at = Some(Instant::now());
         pk.pending = pending;
         pk.hwnds = hwnds;
         pk.target = target;
@@ -202,6 +205,7 @@ impl Hub {
             peek::drop_thumb(id);
         }
         pk.seq += 1;
+        pk.asked_at = Some(Instant::now());
         pk.pending.clear();
         pk.hwnds = vec![win.hwnd.0 as isize];
         pk.target = json!({ "menu": true });
@@ -232,6 +236,9 @@ impl Hub {
             if let Some(id) = peek::show_thumb(pk.hwnd, src, rect, source) {
                 pk.thumbs.push((id, src));
             }
+        }
+        if let Some(t) = pk.asked_at.take() {
+            log(format!("előnézet: {} ms alatt kirajzolva", t.elapsed().as_millis()));
         }
         if !pk.visible {
             pk.visible = true;
@@ -318,6 +325,19 @@ impl Hub {
                 unsafe {
                     let _ = PostMessageW(Some(h), WM_CLOSE, WPARAM(0), LPARAM(0));
                 }
+            }
+            // az előnézet alján: a program összes ablakának bezárása
+            "peek-close-all" => {
+                let Some(pk) = self.peek.as_ref() else { return };
+                let all: Vec<isize> = pk.hwnds.clone();
+                log(format!("előnézet: összes ablak bezárása ({} db)", all.len()));
+                self.peek_hide();
+                for h in all {
+                    unsafe {
+                        let _ = PostMessageW(Some(HWND(h as *mut core::ffi::c_void)), WM_CLOSE, WPARAM(0), LPARAM(0));
+                    }
+                }
+                self.last_state.clear();
             }
             // az ikon menüje: Teljes képernyőre, Ablak bezárása
             "menu-pick" => {

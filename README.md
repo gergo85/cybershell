@@ -10,18 +10,19 @@ CyberShell turns the Windows desktop into a neon cyberpunk HUD: a program bar on
 
 ## Highlights
 
-- **Looks the part.** The dark theme is Cyberpunk 2077-style neon, the light theme draws on Ghost in the Shell. *Auto* switches between them at sunrise and sunset.
+- **Looks the part.** The dark theme is Cyberpunk 2077-style neon, the light theme draws on Ghost in the Shell. *Auto* switches between them at sunrise and sunset, *Windows* follows the Windows light or dark mode.
 - **Replaces the stock interface.** The Icons bar shows live window previews, and the `Win` key opens CyberShell's own Start menu and search. The search calculates, runs commands, keeps a clipboard history, and finds what you type even without accents or with just an acronym.
-- **Everything at a glance.** Clock, calendar with Google Calendar support, weather, Spotify controls, volume, power buttons and your Claude usage limits.
+- **Everything at a glance.** Clock, calendar with Google Calendar support, weather, Spotify controls, volume, power buttons, your Claude and Codex usage limits, and a red alert when the internet connection drops.
+- **In step with Windows.** On request the Windows dark/light mode, accent color and Windows Terminal color scheme switch with the theme, and a neon border runs around the active window.
 - **Built for long sessions.** A break reminder and an activity timer tell you when it is time to stand up.
-- **Yours to change.** Put the panels on any screen edge and reorder the sections by dragging. All settings live in one `config.json`, the look in one CSS file per component, and `Ctrl+Alt+R` reloads the result.
+- **Yours to change.** Put the panels on any screen edge and reorder the sections by dragging. Almost everything can be set in the tabbed settings, and it all lives in one `config.json`; the look in one CSS file per component, and `Ctrl+Alt+R` reloads the result.
 - **Small and safe.** Written in Rust, no installer, it runs from its own folder. `Ctrl+Alt+Q` quits and restores everything; if the program ever crashes, a watchdog gives the taskbar back.
 
 **What sets it apart.** Skin systems put widgets on the desktop, taskbar tweaks restyle the bar Windows already has, and launchers only search. CyberShell covers the whole layer in one design: taskbar, Start menu, search and info panel share one look and one settings file, on every monitor.
 
 ## Quick start
 
-1. Put `CyberShell.exe`, `config.json` and the `ui` folder in one folder and start `CyberShell.exe`.
+1. Put `CyberShell.exe` in a folder and start it. On first start it creates `config.json` and the `wallpapers` folder next to itself.
 2. Open **// MENU** at the bottom right to set the theme, language, programs and panels.
 3. Quit with `Ctrl+Alt+Q`; everything is restored.
 

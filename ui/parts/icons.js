@@ -128,7 +128,7 @@
         const r = el.querySelector('.tile').getBoundingClientRect();
         peekSent = true;
         post({ type: 'peek', ...target(el), y: Math.round(r.top + r.height / 2), x: Math.round(r.left + r.width / 2) });
-      }, peekOpen ? 80 : 450);
+      }, peekOpen ? 60 : 220);
     };
     appsEl.addEventListener('mouseover', (e) => peekHover(e.target.closest('.app')));
     // vízszintes sávon a görgő oldalra görget

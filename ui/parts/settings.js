@@ -1,11 +1,37 @@
 (() => {
-  const { $, part, side, lang, T, root, demo, post, setTheme, THEMES, svg, esc, pad, store, fetchJson } = window.HUB;
+  const { $, lang, T, root, demo, post, setTheme, THEMES, svg, esc, pad, store, fetchJson } = window.HUB;
 
-  // ───────────── beállítások (a munkaterületen, animálva) ─────────────
+  // ───────────── beállítások (a munkaterületen, animálva, fülekre bontva) ─────────────
+  // Bal oldalt a fülek sávja (Programok, Panelek, Megjelenés, Funkciók, Rendszer), alatta a
+  // gép terhelése és a készítő; jobbra az aktív fül kártyái. Minden változás azonnal életbe lép,
+  // kivéve az ikonlistát, amit a Mentés gomb ment el.
   function buildSettings() {
     root.className = 'settings';
     const ICON_CHOICES = ['browser', 'globe', 'code', 'folder', 'panels', 'terminal', 'doc', 'sheet', 'notes', 'music',
       'photo', 'enhance', 'design', 'picker', 'video', 'mail', 'chat', 'game', 'rocket', 'spark', 'calendar', 'cloud', 'settings', 'app'];
+    const TABS = [
+      { id: 'programs', icon: 'app' },
+      { id: 'panels', icon: 'panels' },
+      { id: 'look', icon: 'design' },
+      { id: 'features', icon: 'spark' },
+      { id: 'system', icon: 'pc' },
+    ];
+    const tabKey = (id) => `tab${id[0].toUpperCase()}${id.slice(1)}`;
+    const sw = (on) => (lang === 'hu' ? (on ? 'BE' : 'KI') : (on ? 'ON' : 'OFF'));
+    // egy be/ki kapcsoló: data-bool = az adat útvonala (és a programnak küldött kulcs)
+    const toggle = (path, icon, label, hint, extra = '') =>
+      `<button class="sbtn toggle" data-bool="${path}"${hint ? ` title="${esc(hint)}"` : ''}${extra}>${svg(icon)}<span>${label}</span><b class="switch">–</b></button>`;
+    // csúszka: data-range = a programnak küldött kulcs
+    const slider = (key, label, icon) =>
+      `<label class="rng" data-range="${key}">${svg(icon)}<span class="rng-name">${label}</span>` +
+      `<input type="range" step="1"><output>–</output></label>`;
+    const WEB_SEARCH = {
+      google: 'https://www.google.com/search?q={q}',
+      bing: 'https://www.bing.com/search?q={q}',
+      ddg: 'https://duckduckgo.com/?q={q}',
+    };
+    const COLOR_KEYS = ['main', 'alt', 'hot', 'bg', 'text'];
+
     root.innerHTML = `
       <div class="set-wrap">
         <header class="set-head">
@@ -14,115 +40,259 @@
           <button class="set-close" id="setClose">${svg('close')}<span id="setCloseText">${T('close')}</span></button>
         </header>
         <div class="set-body">
-          <aside class="set-side">
-            <section class="set-card">
-              <h2>${T('visibleSections')}</h2>
-              <div class="set-list" id="secList"></div>
-            </section>
-            <section class="set-card">
-              <h2>${T('system')}</h2>
-              <div class="set-grid">
-                <button class="sbtn toggle" data-toggle="autostart">${svg('power')}<span>${T('startWithWindows')}</span><b class="switch">–</b></button>
-                <button class="sbtn toggle wide" data-toggle="winKey" title="${T('winKeyHint')}">${svg('start')}<span>${T('winKey')}</span><b class="switch">–</b></button>
-                <button class="sbtn" data-cmd="config">${svg('notes')}<span>${T('configFile')}</span></button>
-                <button class="sbtn" data-cmd="reload" title="${T('reloadHint')}">${svg('reload')}<span>${T('reload')}</span></button>
-                <button class="sbtn danger wide" data-cmd="exit">${svg('close')}<span>${T('exit')}</span></button>
-              </div>
-            </section>
-            <section class="set-card load">
-              <h2>${T('systemLoad')}</h2>
-              <div class="meter" id="cpuMeter">
-                <div class="meter-head"><span>${T('cpu')}</span><b id="cpuVal">--<small>%</small></b></div>
-                <svg class="spark" viewBox="0 0 120 40" preserveAspectRatio="none"><path class="spark-area" id="cpuArea"/><path class="spark-line" id="cpuLine"/></svg>
-                <div class="meter-sub"><span id="cpuCores">&nbsp;</span><span id="cpuAvg">&nbsp;</span></div>
-              </div>
-              <div class="meter mem" id="memMeter">
-                <div class="meter-head"><span>${T('memory')}</span><b id="memVal">--<small>%</small></b></div>
-                <div class="mem-bar"><i id="memBar"></i></div>
-                <svg class="spark" viewBox="0 0 120 40" preserveAspectRatio="none"><path class="spark-area" id="memArea"/><path class="spark-line" id="memLine"/></svg>
-                <div class="meter-sub"><span id="memSub">&nbsp;</span><span id="memFree">&nbsp;</span></div>
-              </div>
-            </section>
-            <section class="set-card credit">
+          <nav class="set-rail">
+            <div class="rail-tabs" id="railTabs" role="tablist" aria-orientation="vertical">
+              <i class="rail-glow" id="railGlow"></i>
+              ${TABS.map((t, i) => `
+                <button class="rail-tab" role="tab" data-tab="${t.id}" id="tab-${t.id}" title="Ctrl+${i + 1}">
+                  ${svg(t.icon)}
+                  <span class="rt-text"><b>${T(tabKey(t.id))}</b><small>${T(`${tabKey(t.id)}Sub`)}</small></span>
+                  <em class="rt-badge" id="badge-${t.id}"></em>
+                </button>`).join('')}
+            </div>
+            <div class="rail-keys">${T('tabKeys')}</div>
+            <div class="rail-load" id="railLoad" title="${T('systemLoad').replace(/^\/\/\s*/, '')}">
+              <div class="rl" id="rlCpu"><span>${T('cpuShort')}</span><i><b></b></i><em>--%</em></div>
+              <div class="rl mem" id="rlMem"><span>${T('memShort')}</span><i><b></b></i><em>--%</em></div>
+            </div>
+            <section class="rail-credit">
               <div class="credit-by"><span>${T('madeBy')}</span><b>Szabó Gergő</b></div>
-              <div class="credit-by credit-ver"><span>${T('version')}</span><b id="appVer">v1.4</b></div>
-              <button class="sbtn mini" data-cmd="github">${svg('github')}<span>GitHub</span></button>
-              <button class="sbtn mini icon" data-cmd="website" title="${T('website')}">${svg('globe')}</button>
+              <div class="credit-by credit-ver"><span>${T('version')}</span><b id="appVer">v1.5</b></div>
+              <div class="credit-btns">
+                <button class="sbtn mini" data-cmd="website" title="${T('website')}">${svg('photo')}<span>${T('photoSite')}</span></button>
+                <button class="sbtn mini" data-cmd="github">${svg('github')}<span>GitHub</span></button>
+              </div>
             </section>
-          </aside>
-          <div class="set-col">
-          <main class="set-card set-main">
-            <h2>${T('icons')}</h2>
-            <div class="ed-head"><span></span><span></span><span>${T('colName')}</span><span>${T('colProgram')}</span><span>${T('colIcon')}</span><span>${T('colColor')}</span><span>${T('colAuto')}</span><span></span></div>
-            <div class="ed-list" id="edList"></div>
-            <!-- egy tördelődő sor: hozzáadás, futó programok, a végén a mentés (a sor jobb szélén) -->
-            <div class="ed-add">
-              <button class="sbtn" id="edBrowse">${svg('plus')}<span>${T('addProgram')}</span></button>
-              <div class="ed-chips" id="edRunning"></div>
-              <footer class="ed-foot">
-                <span class="ed-dirty" id="edDirty"></span>
-                <button class="sbtn" id="edCancel">${svg('close')}<span>${T('discard')}</span></button>
-                <button class="sbtn primary" id="edSave">${svg('check')}<span>${T('save')}</span></button>
-              </footer>
-            </div>
-          </main>
-          <div class="set-pair">
-          <section class="set-card set-look">
-            <h2>${T('look')}</h2>
-            <div class="set-grid">
+          </nav>
+
+          <div class="set-stage" id="stage">
+            <!-- 01 PROGRAMOK -->
+            <section class="set-pane" data-pane="programs" role="tabpanel">
+              <main class="set-card set-main">
+                <h2>${T('icons')}</h2>
+                <div class="ed-head"><span></span><span>${T('colName')}</span><span>${T('colProgram')}</span><span>${T('colIcon')}</span><span>${T('colColor')}</span><span>${T('colAuto')}</span><span></span></div>
+                <div class="ed-list" id="edList"></div>
+                <div class="ed-add">
+                  <button class="sbtn" id="edBrowse">${svg('plus')}<span>${T('addProgram')}</span></button>
+                  <div class="ed-chips" id="edRunning" title="${esc(T('runningTitle').replace(/^\/\/\s*/, ''))}"></div>
+                  <footer class="ed-foot">
+                    <span class="ed-dirty" id="edDirty"></span>
+                    <button class="sbtn" id="edCancel">${svg('close')}<span>${T('discard')}</span></button>
+                    <button class="sbtn primary" id="edSave">${svg('check')}<span>${T('save')}</span></button>
+                  </footer>
+                </div>
+              </main>
+            </section>
+
+            <!-- 02 PANELEK -->
+            <section class="set-pane pane-panels" data-pane="panels" role="tabpanel">
+              <div class="pane-col">
+              <section class="set-card c-layout">
+                <h2>${T('layoutCard')}</h2>
+                <div class="lay-split">
+                  <div class="set-grid">
+                    <div class="lang-row pos-row">${svg('panels')}<span>${T('iconsPlace')}</span><div class="seg" id="posIcons"></div></div>
+                    <div class="lang-row pos-row">${svg('swap')}<span>${T('infoPlace')}</span><div class="seg" id="posInfo"></div></div>
+                    <div class="lang-row" title="${T('iconLabelsHint')}">${svg('text')}<span>${T('iconLabels')}</span>
+                      <div class="seg" id="labelSeg"><button data-labels="show">${T('lblShow')}</button><button data-labels="hide">${T('lblHide')}</button></div>
+                    </div>
+                    ${toggle('allMonitors', 'pc', T('allMonitors'), T('allMonitorsHint'))}
+                    ${toggle('hideTaskbar', 'bar', T('hideTaskbar'), T('hideTaskbarHint'))}
+                  </div>
+                  <div class="lay-pv" id="layPv" aria-hidden="true"></div>
+                </div>
+              </section>
+              <section class="set-card c-sizes">
+                <h2>${T('sizesCard')}<button class="sbtn mini card-reset" id="sizesReset" title="${T('sizesResetHint')}">${svg('reload')}<span>${T('wallReset')}</span></button></h2>
+                <div class="rng-grid">
+                  ${slider('iconsWidth', T('iconsWidth'), 'panels')}
+                  ${slider('infoWidth', T('infoWidth'), 'swap')}
+                  ${slider('frame.top', T('frameTop'), 'up')}
+                  ${slider('frame.bottom', T('frameBottom'), 'down')}
+                  ${slider('frame.left', T('frameLeft'), 'left')}
+                  ${slider('frame.right', T('frameRight'), 'right')}
+                </div>
+              </section>
+              <section class="set-card c-order">
+                <h2>${T('orderCard')}<button class="sbtn mini card-reset" id="orderReset" title="${T('orderResetHint')}">${svg('reload')}<span>${T('wallReset')}</span></button></h2>
+                <div class="ord-pair">
+                  <div><h3 class="ord-title">${svg('calc')}<span>${T('sTools')}</span></h3><div class="set-list ord-list" id="ordTools"></div></div>
+                  <div><h3 class="ord-title">${svg('power')}<span>${T('sPower')}</span></h3><div class="set-list ord-list" id="ordPower"></div></div>
+                </div>
+              </section>
+              </div>
+              <div class="pane-col">
+              <section class="set-card c-sections">
+                <h2>${T('visibleSections')}</h2>
+                <div class="set-list" id="secList"></div>
+              </section>
+              <section class="set-card c-view">
+                <h2>${T('viewCard')}</h2>
+                <div class="set-grid" id="viewList"></div>
+              </section>
+              </div>
+            </section>
+
+            <!-- 03 MEGJELENÉS -->
+            <section class="set-pane pane-look" data-pane="look" role="tabpanel">
+              <section class="set-card c-theme">
+                <h2>${T('themeCard')}</h2>
                 <div class="lang-row theme-row" title="${T('apHint')}">${svg('moon')}<span>${T('appearance')}</span>
-                  <div class="seg" id="themeSeg"><button data-appearance="dark">${T('apDark')}</button><button data-appearance="light">${T('apLight')}</button><button data-appearance="auto" title="${T('apAutoHint')}">${T('apAuto')}</button></div>
+                  <div class="seg" id="themeSeg">
+                    <button data-appearance="dark">${T('apDark')}</button><button data-appearance="light">${T('apLight')}</button><button data-appearance="auto" title="${T('apAutoHint')}">${T('apAuto')}</button><button data-appearance="windows" title="${T('apWindowsHint')}">${T('apWindows')}</button>
+                  </div>
                 </div>
-                <div class="lang-row">${svg('globe')}<span>${T('language')}</span>
-                  <div class="seg" id="langSeg"><button data-lang="hu">HU</button><button data-lang="en">EN</button></div>
+                <div class="pal-pair">
+                  ${['dark', 'light'].map((sc) => `
+                    <div class="pal" data-scheme="${sc}" id="pal-${sc}">
+                      <div class="pal-head"><b>${T(sc === 'dark' ? 'schemeDark' : 'schemeLight')}</b><em class="pal-on">${T('inUse')}</em>
+                        <button class="sbtn mini pal-reset" data-reset="${sc}" title="${T('themeResetHint')}">${svg('reload')}<span>${T('themeResetBtn')}</span></button></div>
+                      <div class="pal-demo"><i class="pd-bar"></i><span class="pd-t">CYBER<b>SHELL</b></span><span class="pd-l"></span><span class="pd-l short"></span><em class="pd-hot">!</em></div>
+                      <div class="pal-sw">
+                        ${COLOR_KEYS.map((k) => `<label class="sw" data-color="${k}"><input type="color"><i></i><span>${T(`c_${k}`)}</span><code>#------</code></label>`).join('')}
+                      </div>
+                    </div>`).join('')}
                 </div>
-                <div class="lang-row pos-row">${svg('panels')}<span>${T('iconsPlace')}</span><div class="seg" id="posIcons"></div></div>
-                <div class="lang-row pos-row">${svg('swap')}<span>${T('infoPlace')}</span><div class="seg" id="posInfo"></div></div>
-                <div class="lang-row" title="${T('iconLabelsHint')}">${svg('text')}<span>${T('iconLabels')}</span>
-                  <div class="seg" id="labelSeg"><button data-labels="show">${T('lblShow')}</button><button data-labels="hide">${T('lblHide')}</button></div>
+              </section>
+              <section class="set-card c-win">
+                <h2>${T('winCard')}</h2>
+                <div class="set-grid">
+                  <div class="lang-row nb-row" title="${T('neonBorderHint')}">${svg('maximize')}<span>${T('neonBorder')}</span>
+                    <div class="seg" id="nbSeg"><button data-nb="off">${T('nbOff')}</button><button data-nb="active">${T('nbActive')}</button><button data-nb="all">${T('nbAll')}</button></div>
+                  </div>
+                  ${toggle('windowsSync.darkMode', 'moon', T('syncMode'), T('syncModeHint'))}
+                  <div class="lang-row acc-row" title="${T('syncAccentHint')}">${svg('picker')}<span>${T('syncAccent')}</span>
+                    <div class="seg" id="accSeg"><button data-acc="off">${T('nbOff')}</button><button data-acc="main">${T('accMain')}</button><button data-acc="alt">${T('accAlt')}</button><button data-acc="hot">${T('accHot')}</button></div>
+                  </div>
+                  ${toggle('windowsSync.terminal', 'terminal', T('syncTerminal'), T('syncTerminalHint'))}
                 </div>
-            </div>
-          </section>
-          <div class="set-stack">
-          <section class="set-card health" id="hlCard">
-            <h2>${T('health')}<small title="${T('hHint')}">${T('hHint')}</small></h2>
-            <div class="hl-row">
-              <button class="sbtn toggle" id="hlToggle">${svg('heart')}<span>${T('hBreak')}</span><b class="switch">–</b></button>
-              <label class="hl-min"><span>${T('hEvery')}</span><input id="hlMin" type="number" min="5" max="480" step="5" inputmode="numeric"><span>${T('hMinutes')}</span></label>
-              <div class="hl-count"><span>${T('hNext')}</span><b id="hlCount">—</b></div>
-              <button class="sbtn mini icon" id="hlReset" title="${T('hRestartHint')}">${svg('reload')}</button>
-            </div>
-          </section>
-          <section class="set-card wset" id="wsCard">
-            <h2>${T('wsTitle')}<small id="wsFound" title=""></small></h2>
-            <div class="ws-row">
-              <label class="ws-city" title="${T('wsCityHint')}">${svg('place')}<span class="ws-field"><input id="wsCity" type="text" maxlength="80" spellcheck="false" autocomplete="off" placeholder="${T('wsCityPh')}"><button class="ws-go" id="wsGo" title="${T('wsGo')}">${svg('enter')}</button></span></label>
-              <button class="sbtn toggle" id="wsWind" title="${T('wsWindHint')}">${svg('wind')}<span>${T('wsWind')}</span><b class="switch">–</b></button>
-            </div>
-          </section>
-          </div>
-          </div>
-          <section class="set-card wall">
-            <h2>${T('wallpaper')}
-              <span class="wall-tools">
-                <button class="sbtn mini" id="wallAdd">${svg('plus')}<span>${T('addImage')}</span></button>
-                <button class="sbtn mini" id="wallFolder">${svg('folder')}<span>${T('openFolder')}</span></button>
-                <button class="sbtn mini" id="wallReset" title="${T('wallResetHint')}">${svg('reload')}<span>${T('wallReset')}</span></button>
-              </span>
-            </h2>
-            <div class="wall-list" id="wallList"></div>
-          </section>
+              </section>
+              <section class="set-card wall">
+                <h2>${T('wallpaper')}
+                  <span class="wall-tools">
+                    <button class="sbtn mini" id="wallAdd">${svg('plus')}<span>${T('addImage')}</span></button>
+                    <button class="sbtn mini" id="wallFolder">${svg('folder')}<span>${T('openFolder')}</span></button>
+                    <button class="sbtn mini" id="wallReset" title="${T('wallResetHint')}">${svg('reload')}<span>${T('wallReset')}</span></button>
+                  </span>
+                </h2>
+                <div class="wall-list" id="wallList"></div>
+              </section>
+            </section>
+
+            <!-- 04 FUNKCIÓK -->
+            <section class="set-pane pane-features" data-pane="features" role="tabpanel">
+              <div class="pane-col">
+              <section class="set-card wset" id="wsCard">
+                <h2>${T('wsTitle')}</h2>
+                <div class="ws-row">
+                  <label class="ws-city" title="${T('wsCityHint')}">${svg('place')}<span class="ws-field"><input id="wsCity" type="text" maxlength="80" spellcheck="false" autocomplete="off" placeholder="${T('wsCityPh')}"><button class="ws-go" id="wsGo" title="${T('wsGo')}">${svg('enter')}</button></span></label>
+                  <button class="sbtn toggle" id="wsWind" title="${T('wsWindHint')}">${svg('wind')}<span>${T('wsWind')}</span><b class="switch">–</b></button>
+                </div>
+                <div class="ws-found" id="wsFound"></div>
+              </section>
+              <section class="set-card c-start">
+                <h2>${T('startCard')}</h2>
+                <div class="set-grid">
+                  <button class="sbtn toggle" data-toggle="winKey" title="${T('winKeyHint')}">${svg('start')}<span>${T('winKey')}</span><b class="switch">–</b></button>
+                  <button class="sbtn toggle" data-toggle="clipboard" title="${T('clipHistHint')}">${svg('clipboard')}<span>${T('clipHist')}</span><b class="switch">–</b></button>
+                  <div class="lang-row ws-engine">${svg('search')}<span>${T('webSearch')}</span>
+                    <div class="seg" id="engSeg"><button data-eng="google">Google</button><button data-eng="bing">Bing</button><button data-eng="ddg">DuckDuckGo</button><button data-eng="custom">${T('wsCustom')}</button></div>
+                  </div>
+                  <label class="ws-city url-row" id="engCustom">${svg('globe')}<span class="ws-field"><input id="engUrl" type="text" spellcheck="false" autocomplete="off" placeholder="https://…?q={q}"><button class="ws-go" id="engGo" title="${T('save')}">${svg('enter')}</button></span></label>
+                </div>
+              </section>
+              </div>
+              <div class="pane-col">
+              <section class="set-card health" id="hlCard">
+                <h2>${T('health')}</h2>
+                <div class="hl-row">
+                  <button class="sbtn toggle" id="hlToggle">${svg('heart')}<span>${T('hBreak')}</span><b class="switch">–</b></button>
+                  <label class="hl-min"><span>${T('hEvery')}</span><input id="hlMin" type="number" min="5" max="480" step="5" inputmode="numeric"><span>${T('hMinutes')}</span></label>
+                  <div class="hl-count"><span>${T('hNext')}</span><b id="hlCount">—</b></div>
+                  <button class="sbtn mini icon" id="hlReset" title="${T('hRestartHint')}">${svg('reload')}</button>
+                </div>
+              </section>
+              <section class="set-card c-act">
+                <h2>${T('activityCard')}</h2>
+                <div class="set-grid two">
+                  ${toggle('activity.autoStart', 'play', T('actAuto'), T('actAutoHint'))}
+                  ${toggle('activity.sound', 'volume', T('actSound'), T('actSoundHint'))}
+                </div>
+              </section>
+              <section class="set-card c-cal">
+                <h2>${T('calCard')}</h2>
+                <div class="cal-list" id="calList"></div>
+                <div class="cal-add">
+                  <label class="ws-city">${svg('calendar')}<span class="ws-field"><input id="calUrl" type="text" spellcheck="false" autocomplete="off" placeholder="${T('calAddPh')}"><button class="ws-go" id="calGo" title="${T('calConnect')}">${svg('enter')}</button></span></label>
+                  <button class="sbtn mini" id="calHelp" title="${T('calOpenGoogle')}">${svg('globe')}<span>${T('calHelp')}</span></button>
+                </div>
+              </section>
+              </div>
+            </section>
+
+            <!-- 05 RENDSZER -->
+            <section class="set-pane pane-system" data-pane="system" role="tabpanel">
+              <section class="set-card c-general">
+                <h2>${T('generalCard')}</h2>
+                <div class="set-grid">
+                  <button class="sbtn toggle" data-toggle="autostart">${svg('power')}<span>${T('startWithWindows')}</span><b class="switch">–</b></button>
+                  <div class="lang-row">${svg('globe')}<span>${T('language')}</span>
+                    <div class="seg" id="langSeg"><button data-lang="en">English</button><button data-lang="hu">Magyar</button></div>
+                  </div>
+                </div>
+              </section>
+              <section class="set-card c-config">
+                <h2>${T('configCard')}</h2>
+                <div class="set-grid two">
+                  <button class="sbtn" data-cmd="config">${svg('notes')}<span>${T('configFile')}</span></button>
+                  <button class="sbtn" data-cmd="reload" title="${T('reloadHint')}">${svg('reload')}<span>${T('reload')}</span></button>
+                  <button class="sbtn danger" id="resetAll" title="${T('resetAllHint')}">${svg('reload')}<span>${T('resetAll')}</span></button>
+                  <button class="sbtn danger" data-cmd="exit">${svg('close')}<span>${T('exit')}</span></button>
+                </div>
+              </section>
+              <section class="set-card c-hw">
+                <h2>${T('hwCard')}</h2>
+                <div class="hw-list" id="hwList"><div class="ed-none">${T('hwLoading')}</div></div>
+              </section>
+              <section class="set-card load">
+                <h2>${T('systemLoad')}</h2>
+                <div class="load-pair">
+                  <div class="meter" id="cpuMeter">
+                    <div class="meter-head"><span>${T('cpu')}</span><b id="cpuVal">--<small>%</small></b></div>
+                    <svg class="spark" viewBox="0 0 120 40" preserveAspectRatio="none"><path class="spark-area" id="cpuArea"/><path class="spark-line" id="cpuLine"/></svg>
+                    <div class="meter-sub"><span id="cpuCores">&nbsp;</span><span id="cpuAvg">&nbsp;</span></div>
+                  </div>
+                  <div class="meter mem" id="memMeter">
+                    <div class="meter-head"><span>${T('memory')}</span><b id="memVal">--<small>%</small></b></div>
+                    <svg class="spark" viewBox="0 0 120 40" preserveAspectRatio="none"><path class="spark-area" id="memArea"/><path class="spark-line" id="memLine"/></svg>
+                    <div class="meter-sub"><span id="memSub">&nbsp;</span><span id="memFree">&nbsp;</span></div>
+                  </div>
+                </div>
+              </section>
+            </section>
           </div>
         </div>
       </div>
       `;
 
     let data = null;      // a programtól kapott legutóbbi állapot
+    const sortableLater = []; // a húzható listák (a sortable a lenti definíció után kapcsolódik be)
     let draft = [];       // a szerkesztett ikonlista
     let original = '[]';
-    const SECTION_NAMES = { tools: T('sTools'), power: T('sPower'), claude: T('sClaude'), activity: T('sActivity'), date: T('sDate'), clock: T('sClock'),
+    const SECTION_NAMES = { tools: T('sTools'), power: T('sPower'), claude: T('sClaude'), codex: T('sCodex'), activity: T('sActivity'), date: T('sDate'), clock: T('sClock'),
       weather: T('sWeather'), music: T('sMusic'), volume: T('sVolume') };
     const SECTION_HINT = { music: T('sMusicHint'), weather: T('sWeatherHint') };
+    const get = (path) => path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), data);
+    const setLocal = (path, v) => {
+      const keys = path.split('.');
+      let o = data;
+      for (const k of keys.slice(0, -1)) o = o[k] = o[k] || {};
+      o[keys[keys.length - 1]] = v;
+    };
+    const setValue = (key, value) => {
+      if (demo) return;
+      post({ type: 'set', key, value });
+    };
 
     const toast = (text) => {
       const t = $('toast');
@@ -132,9 +302,57 @@
       toast.timer = setTimeout(() => t.classList.remove('show'), 3500);
     };
 
+    // ── fülek ──
+    const TAB_STORE = 'cybershell.settings.tab';
+    let tab = '';
+    const placeGlow = () => {
+      const b = $(`tab-${tab}`);
+      if (!b) return;
+      $('railGlow').style.transform = `translateY(${b.offsetTop}px)`;
+      $('railGlow').style.height = `${b.offsetHeight}px`;
+    };
+    const selectTab = (id, opts = {}) => {
+      if (!TABS.some((t) => t.id === id)) id = TABS[0].id;
+      const changed = id !== tab;
+      tab = id;
+      store.set(TAB_STORE, id);
+      for (const b of root.querySelectorAll('.rail-tab')) {
+        const on = b.dataset.tab === id;
+        b.classList.toggle('on', on);
+        b.setAttribute('aria-selected', on);
+        b.tabIndex = on ? 0 : -1;
+      }
+      for (const p of root.querySelectorAll('.set-pane')) {
+        const on = p.dataset.pane === id;
+        p.classList.toggle('on', on);
+        if (on && changed && !opts.instant) {
+          p.classList.remove('enter');
+          void p.offsetWidth;
+          p.classList.add('enter');
+        }
+      }
+      $('stage').scrollTop = 0;
+      placeGlow();
+      if (id === 'panels') renderPreview();
+      if (opts.focus) $(`tab-${id}`).focus();
+    };
+    $('railTabs').addEventListener('click', (e) => {
+      const b = e.target.closest('.rail-tab');
+      if (b) selectTab(b.dataset.tab);
+    });
+    // nyilakkal a fülek között (ha a fülsáv a fókuszban van)
+    $('railTabs').addEventListener('keydown', (e) => {
+      const i = TABS.findIndex((t) => t.id === tab);
+      const next = { ArrowDown: i + 1, ArrowUp: i - 1, Home: 0, End: TABS.length - 1 }[e.key];
+      if (next == null) return;
+      e.preventDefault();
+      selectTab(TABS[(next + TABS.length) % TABS.length].id, { focus: true });
+    });
+    window.addEventListener('resize', placeGlow);
+
     // ── megjelenés és eltűnés animációval ──
     // A beúszó animáció közben a tartalom egy pillanatra lejjebb csúszik: ilyenkor a görgetősáv
-    // ne villanjon fel a jobb szélen (sárga függőleges csík volt).
+    // ne villanjon fel a jobb szélen.
     let animTimer = 0;
     const noScrollFor = (ms) => {
       clearTimeout(animTimer);
@@ -147,6 +365,7 @@
       if (!instant) noScrollFor(650);
       root.classList.add('shown');
       if (instant) root.classList.add('instant');
+      requestAnimationFrame(placeGlow);
     };
     let closing = false;
     const hide = () => {
@@ -178,16 +397,407 @@
       return svg(hit ? hit[1] : 'app');
     };
 
-    const renderToggles = () => {
-      for (const b of root.querySelectorAll('[data-toggle]')) {
-        const on = !!data[b.dataset.toggle];
-        b.classList.toggle('on', on);
-        b.querySelector('.switch').textContent = on ? 'ON' : 'OFF';
-        if (lang === 'hu') b.querySelector('.switch').textContent = on ? 'BE' : 'KI';
+    const setSwitch = (b, on) => {
+      b.classList.toggle('on', on);
+      b.querySelector('.switch').textContent = sw(on);
+    };
+
+    // ── a panelek elrendezésének élő előnézete (a képernyő kicsiben) ──
+    let pvLive = null; // húzás közbeni értékek (még nincs elküldve)
+    const renderPreview = () => {
+      if (!data) return;
+      const lay = data.layout || { icons: 'left', info: 'right' };
+      const bars = { ...(data.bars || {}), frame: { ...((data.bars || {}).frame || {}) } };
+      if (pvLive) {
+        if (pvLive.key === 'iconsWidth') bars.icons = pvLive.v;
+        else if (pvLive.key === 'infoWidth') bars.info = pvLive.v;
+        else bars.frame[pvLive.key.split('.')[1]] = pvLive.v;
       }
+      const scr = data.screen || { w: 1920, h: 1080 };
+      const thick = (e) => (e === lay.icons ? bars.icons || 86 : e === lay.info ? bars.info || 86 : bars.frame[e] || 0);
+      const el = $('layPv');
+      const W = el.clientWidth || 300;
+      const k = W / scr.w;
+      el.style.height = `${Math.round(scr.h * k)}px`;
+      // a két panel teljes hosszban, a keretek közöttük
+      const order = [lay.icons, lay.info, ...['left', 'right', 'top', 'bottom'].filter((e) => e !== lay.icons && e !== lay.info)];
+      const inset = { left: 0, right: 0, top: 0, bottom: 0 };
+      const parts = order.map((e) => {
+        const t = thick(e);
+        const px = t > 0 ? Math.max(1, Math.round(t * k)) : 0;
+        const vert = e === 'left' || e === 'right';
+        const st = vert
+          ? `${e}:${inset[e]}px;top:${inset.top}px;bottom:${inset.bottom}px;width:${px}px`
+          : `${e}:${inset[e]}px;left:${inset.left}px;right:${inset.right}px;height:${px}px`;
+        const kind = e === lay.icons ? 'icons' : e === lay.info ? 'info' : 'frame';
+        const label = kind === 'frame' ? '' : `<span>${T(kind === 'icons' ? 'pvIcons' : 'pvInfo')}</span>`;
+        const html = `<i class="pv-bar ${kind}${vert ? ' v' : ''}" style="${st}">${label}</i>`;
+        inset[e] += px;
+        return { e, t, html };
+      });
+      const sum = (a, b) => thick(a) + thick(b);
+      el.innerHTML = parts.map((p) => p.html).join('') +
+        `<div class="pv-work" style="left:${inset.left}px;right:${inset.right}px;top:${inset.top}px;bottom:${inset.bottom}px">` +
+        `<b>${T('pvWork')}</b><span>${Math.max(0, scr.w - sum('left', 'right'))} × ${Math.max(0, scr.h - sum('top', 'bottom'))}</span></div>`;
+      // a csúszkák: ahol panel van, ott a keret nem látszik
+      for (const r of root.querySelectorAll('[data-range^="frame."]')) {
+        const e = r.dataset.range.split('.')[1];
+        const taken = e === lay.icons || e === lay.info;
+        r.classList.toggle('off', taken);
+        r.querySelector('input').disabled = taken;
+        r.title = taken ? T('frameTaken') : '';
+      }
+    };
+    const renderRanges = () => {
+      const bars = data.bars || {};
+      const RANGES = { iconsWidth: [64, 96], infoWidth: [80, 128], 'frame.top': [0, 32], 'frame.bottom': [0, 32], 'frame.left': [0, 40], 'frame.right': [0, 40] };
+      const rangeOf = (k) => (bars.ranges || {})[k] || RANGES[k];
+      for (const r of root.querySelectorAll('[data-range]')) {
+        const key = r.dataset.range;
+        const input = r.querySelector('input');
+        if (document.activeElement === input && pvLive) continue;
+        const isFrame = key.startsWith('frame.');
+        [input.min, input.max] = rangeOf(key);
+        const v = isFrame ? (bars.frame || {})[key.split('.')[1]] : bars[key === 'iconsWidth' ? 'icons' : 'info'];
+        input.value = v ?? 0;
+        r.querySelector('output').textContent = `${v ?? 0} px`;
+        r.style.setProperty('--p', `${((input.value - input.min) / (input.max - input.min || 1)) * 100}%`);
+      }
+    };
+    for (const r of root.querySelectorAll('[data-range]')) {
+      const input = r.querySelector('input');
+      input.addEventListener('input', () => {
+        pvLive = { key: r.dataset.range, v: Number(input.value) };
+        r.querySelector('output').textContent = `${input.value} px`;
+        r.style.setProperty('--p', `${((input.value - input.min) / (input.max - input.min || 1)) * 100}%`);
+        renderPreview();
+      });
+      input.addEventListener('change', () => {
+        const key = r.dataset.range;
+        const v = Number(input.value);
+        pvLive = null;
+        const bars = data.bars || (data.bars = {});
+        if (key === 'iconsWidth') bars.icons = v;
+        else if (key === 'infoWidth') bars.info = v;
+        else (bars.frame = bars.frame || {})[key.split('.')[1]] = v;
+        renderPreview();
+        $('sizesReset').disabled = sizesDefault();
+        if (demo) return toast(T('posDemo'));
+        setValue(key, v);
+      });
+    }
+
+    // ── téma: a két séma színei ──
+    const renderPalettes = () => {
+      const th = data.themes || { dark: THEMES.dark, light: THEMES.light };
+      for (const sc of ['dark', 'light']) {
+        const t = th[sc] || {};
+        const pal = $(`pal-${sc}`);
+        pal.classList.toggle('active', (data.scheme || 'dark') === sc);
+        for (const k of COLOR_KEYS) pal.style.setProperty(`--p-${k}`, t[k]);
+        for (const l of pal.querySelectorAll('.sw')) {
+          const v = t[l.dataset.color] || '#000000';
+          const input = l.querySelector('input');
+          if (document.activeElement !== input) input.value = v;
+          l.querySelector('i').style.background = v;
+          l.querySelector('code').textContent = v.toLowerCase();
+        }
+        const def = th[sc === 'dark' ? 'defaultDark' : 'defaultLight'];
+        const same = def && COLOR_KEYS.every((k) => String(def[k]).toLowerCase() === String(t[k]).toLowerCase());
+        pal.querySelector('.pal-reset').disabled = !!same;
+      }
+    };
+    for (const pal of root.querySelectorAll('.pal')) {
+      const sc = pal.dataset.scheme;
+      pal.addEventListener('input', (e) => {
+        const l = e.target.closest('.sw');
+        if (!l) return;
+        const v = e.target.value;
+        l.querySelector('i').style.background = v;
+        l.querySelector('code').textContent = v;
+        pal.style.setProperty(`--p-${l.dataset.color}`, v);
+        // az épp használt séma színe a beállításokban azonnal látszik
+        if ((data.scheme || 'dark') === sc) setTheme({ [l.dataset.color]: v });
+      });
+      pal.addEventListener('change', (e) => {
+        const l = e.target.closest('.sw');
+        if (!l || !data) return;
+        const key = l.dataset.color;
+        data.themes = data.themes || {};
+        data.themes[sc] = { ...(data.themes[sc] || {}), [key]: e.target.value };
+        renderPalettes();
+        setValue(`${sc === 'dark' ? 'theme' : 'themeLight'}.${key}`, e.target.value);
+      });
+      pal.querySelector('.pal-reset').addEventListener('click', () => {
+        if (!data) return;
+        const def = (data.themes || {})[sc === 'dark' ? 'defaultDark' : 'defaultLight'] || THEMES[sc];
+        data.themes[sc] = { ...def };
+        renderPalettes();
+        if ((data.scheme || 'dark') === sc) setTheme(def);
+        setValue('themeReset', sc);
+      });
+    }
+
+    // ── naptárak (a titkos címet a program nem küldi el, csak a kiszolgáló nevét) ──
+    let calArm = -1;
+    let calArmTimer = 0;
+    const renderCalendars = () => {
+      const list = data.calendars || [];
+      $('calList').innerHTML = list.length
+        ? list.map((c, i) => `
+          <div class="cal-row" data-i="${i}">
+            <input class="ed-color cal-color" type="color" value="${/^#[0-9a-f]{6}$/i.test(c.color) ? c.color : '#00e1ff'}">
+            <input class="ed-name cal-name" value="${esc(c.name)}" maxlength="40" spellcheck="false">
+            <span class="cal-host">${esc(c.host || '')}</span>
+            <button class="ib danger cal-del${calArm === i ? ' armed' : ''}" title="${T('calRemove')}">${calArm === i ? `<span>${T('calRemoveSure')}</span>` : svg('trash')}</button>
+          </div>`).join('')
+        : `<div class="ed-none">${T('calNone')}</div>`;
+    };
+    $('calList').addEventListener('change', (e) => {
+      const row = e.target.closest('.cal-row');
+      if (!row || demo) return;
+      const i = Number(row.dataset.i);
+      if (e.target.classList.contains('cal-name')) post({ type: 'cal-edit', i, name: e.target.value });
+      if (e.target.classList.contains('cal-color')) post({ type: 'cal-edit', i, color: e.target.value });
+    });
+    $('calList').addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches('input')) e.target.blur(); });
+    $('calList').addEventListener('click', (e) => {
+      const b = e.target.closest('.cal-del');
+      if (!b) return;
+      const i = Number(b.closest('.cal-row').dataset.i);
+      clearTimeout(calArmTimer);
+      if (calArm !== i) {
+        calArm = i;
+        calArmTimer = setTimeout(() => { calArm = -1; renderCalendars(); }, 3500);
+        return renderCalendars();
+      }
+      calArm = -1;
+      if (demo) { data.calendars.splice(i, 1); return renderCalendars(); }
+      post({ type: 'cal-remove', i });
+    });
+    const calAdd = () => {
+      const url = $('calUrl').value.trim();
+      if (!url) return;
+      $('calUrl').value = '';
+      if (demo) return toast('Demo: calendar');
+      post({ type: 'cal-add', url });
+    };
+    $('calGo').addEventListener('mousedown', (e) => e.preventDefault());
+    $('calGo').addEventListener('click', calAdd);
+    $('calUrl').addEventListener('keydown', (e) => { if (e.key === 'Enter') calAdd(); });
+    $('calHelp').addEventListener('click', () => (demo ? toast('Demo: Google') : post({ type: 'cal-help' })));
+
+    // ── webes kereső ──
+    const engineOf = (url) => Object.keys(WEB_SEARCH).find((k) => WEB_SEARCH[k] === url) || 'custom';
+    let engCustomOpen = false;
+    const renderEngine = () => {
+      const url = data.webSearch || WEB_SEARCH.google;
+      const eng = engCustomOpen ? 'custom' : engineOf(url);
+      for (const b of $('engSeg').children) b.classList.toggle('on', b.dataset.eng === eng);
+      $('engCustom').classList.toggle('shown', eng === 'custom');
+      if (document.activeElement !== $('engUrl')) $('engUrl').value = url;
+    };
+    $('engSeg').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-eng]');
+      if (!b || !data) return;
+      if (b.dataset.eng === 'custom') {
+        engCustomOpen = true;
+        renderEngine();
+        $('engUrl').focus();
+        return;
+      }
+      engCustomOpen = false;
+      data.webSearch = WEB_SEARCH[b.dataset.eng];
+      renderEngine();
+      setValue('webSearch', data.webSearch);
+    });
+    const engCommit = () => {
+      const v = $('engUrl').value.trim();
+      if (!v || v === data.webSearch) return;
+      if (!/^https?:\/\//i.test(v) || !v.includes('{q}')) return toast(T('webSearchBad'));
+      data.webSearch = v;
+      engCustomOpen = engineOf(v) === 'custom';
+      renderEngine();
+      setValue('webSearch', v);
+    };
+    $('engGo').addEventListener('mousedown', (e) => e.preventDefault());
+    $('engGo').addEventListener('click', engCommit);
+    $('engUrl').addEventListener('keydown', (e) => { if (e.key === 'Enter') { engCommit(); $('engUrl').blur(); } });
+
+    // ── az Eszköztár és a Főkapcsoló gombjainak sorrendje (húzással, azonnal életbe lép) ──
+    const ORDER_ITEMS = {
+      toolsOrder: { calc: ['calc', T('toolCalc')], notepad: ['notes', T('toolNotepad')], search: ['search', T('search')], snip: ['snip', T('toolSnip')] },
+      powerOrder: { lock: ['lock', T('pwLockT')], sleep: ['moon', T('pwSleepT')], shutdown: ['power', T('pwOffT')], restart: ['reload', T('pwRestartT')] },
+    };
+    const orderOf = (key) => {
+      const all = Object.keys(ORDER_ITEMS[key]);
+      const cur = ((data.sections || {})[key] || []).filter((k) => all.includes(k));
+      return [...cur, ...all.filter((k) => !cur.includes(k))];
+    };
+    // ── Megjelenés: kompakt vagy normál nézet szekciónként ──
+    const VIEW_KEYS = [['claude', 'spark'], ['codex', 'code'], ['clock', 'clock'], ['date', 'calendar']];
+    const renderView = () => {
+      const compact = (data.sections || {}).compact || [];
+      $('viewList').innerHTML = VIEW_KEYS.map(([k, icon]) => `
+        <div class="lang-row">${svg(icon)}<span>${SECTION_NAMES[k]}</span>
+          <div class="seg"><button data-view="${k}" data-mode="compact" class="${compact.includes(k) ? 'on' : ''}">${T('viewCompact')}</button><button data-view="${k}" data-mode="normal" class="${compact.includes(k) ? '' : 'on'}">${T('viewNormal')}</button></div>
+        </div>`).join('');
+    };
+    $('viewList').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-view]');
+      if (!b || !data || b.classList.contains('on')) return;
+      const k = b.dataset.view;
+      const compact = ((data.sections || {}).compact || []).filter((x) => x !== k);
+      if (b.dataset.mode === 'compact') compact.push(k);
+      data.sections = { ...data.sections, compact };
+      renderView();
+      if (!demo) post({ type: 'sections', sections: data.sections });
+    });
+    // Méretek és Sorrend: vissza az alapállapotba
+    const sizesDefault = () => {
+      const b = data.bars || {};
+      const d = b.defaults || { icons: 86, info: 86, frame: { top: 10, bottom: 10, left: 10, right: 10 } };
+      return b.icons === d.icons && b.info === d.info && ['top', 'bottom', 'left', 'right'].every((k) => (b.frame || {})[k] === d.frame[k]);
+    };
+    $('sizesReset').addEventListener('click', () => {
+      if (!data || sizesDefault()) return;
+      const d = (data.bars || {}).defaults || { icons: 86, info: 86, frame: { top: 10, bottom: 10, left: 10, right: 10 } };
+      data.bars = { ...data.bars, icons: d.icons, info: d.info, frame: { ...d.frame } };
+      renderRanges();
+      renderPreview();
+      $('sizesReset').disabled = true;
+      setValue('sizesReset', true);
+    });
+    $('orderReset').addEventListener('click', () => {
+      if (!data) return;
+      data.sections = { ...data.sections, toolsOrder: Object.keys(ORDER_ITEMS.toolsOrder), powerOrder: Object.keys(ORDER_ITEMS.powerOrder) };
+      renderOrder();
+      if (!demo) post({ type: 'sections', sections: data.sections });
+    });
+
+    const renderOrder = () => {
+      const isDefault = ['toolsOrder', 'powerOrder'].every((key) => orderOf(key).join() === Object.keys(ORDER_ITEMS[key]).join());
+      $('orderReset').disabled = isDefault;
+      for (const [id, key] of [['ordTools', 'toolsOrder'], ['ordPower', 'powerOrder']]) {
+        $(id).innerHTML = orderOf(key).map((k) => {
+          const [icon, name] = ORDER_ITEMS[key][k];
+          return `<div class="sec-row" data-key="${k}"><span class="grip" title="${T('dragHint')}">${svg('grip')}</span>` +
+            `<div class="sbtn ord-item">${svg(icon)}<span>${name}</span></div></div>`;
+        }).join('');
+      }
+    };
+    for (const [id, key] of [['ordTools', 'toolsOrder'], ['ordPower', 'powerOrder']]) {
+      sortableLater.push(() => sortable($(id), '.sec-row', (from, to, rows) => {
+        const order = rows.map((r) => r.dataset.key);
+        order.splice(to, 0, ...order.splice(from, 1));
+        for (const k of order) $(id).appendChild(rows.find((r) => r.dataset.key === k));
+        data.sections = { ...data.sections, [key]: order };
+        $('orderReset').disabled = ['toolsOrder', 'powerOrder'].every((k) => orderOf(k).join() === Object.keys(ORDER_ITEMS[k]).join());
+        if (!demo) post({ type: 'sections', sections: data.sections });
+      }));
+    }
+
+    // ── rendszerkomponensek (a program háttérben kérdezi le, az első megnyitáskor) ──
+    const renderHardware = () => {
+      const hw = data.hardware;
+      if (!hw) return;
+      const join = (...xs) => xs.filter(Boolean).join(' · ');
+      const row = (icon, label, value, subs = [], extra = '', cls = '') => `
+        <div class="hw-row${cls}">${svg(icon)}<span class="hw-label">${label}</span>
+          <div class="hw-val"><b>${esc(value || '—')}</b>${extra}${subs.filter(Boolean).map((x) => `<small>${esc(x)}</small>`).join('')}</div></div>`;
+      const num = (v, d = 1) => Number(v).toFixed(d).replace(/\.0+$/, '').replace('.', T('gbSep'));
+      // alaplap
+      const b = typeof hw.board === 'object' && hw.board ? hw.board : { name: hw.board };
+      const boardSub = join(
+        b.bios && `BIOS ${b.bios}${b.biosDate ? ` (${b.biosDate})` : ''}`,
+        b.slots && T('hwSlotsMax', { n: b.slots, m: b.maxMem || '?' }));
+      // processzor
+      const c = hw.cpu || {};
+      const cpuSub = c.cores ? T('hwCores', { c: c.cores, t: c.threads || c.cores, g: c.mhz ? num(c.mhz / 1000) : '?' }) : '';
+      // memória szövegesen: azonos moduloknál „4 × 8 GB”, eltérőknél csoportonként
+      // („2 × 8 GB + 1 × 4 GB”), alatta csoportonként a gyártó, a típusszám és a sebesség
+      const mem = hw.mem || {};
+      const mods = mem.modules || [];
+      const groups = [];
+      for (const m of mods) {
+        const key = [m.size, m.type, m.speed, m.maker, m.part].join('|');
+        const g = groups.find((x) => x.key === key);
+        if (g) g.n++; else groups.push({ key, n: 1, m });
+      }
+      const speeds = new Set(mods.map((m) => m.speed));
+      const empty = Math.max(0, (mem.slots || 0) - mods.length);
+      const sizes = groups.map((g) => `${g.n} × ${g.m.size}`).join(' + ');
+      const memMain = join(mem.total, sizes, mem.type || (mods.length ? T('hwMixedType') : ''), mem.speed ? `${mem.speed} MT/s` : '');
+      const memSubs = groups.map((g) => join(groups.length > 1 ? `${g.n} × ${g.m.size}` : '', g.m.maker, g.m.part,
+        speeds.size > 1 && g.m.speed ? `${g.m.speed} MT/s` : ''));
+      if (empty) memSubs.push(T('hwEmptySlots', { n: empty }));
+      // videókártya
+      const gpus = hw.gpus || [];
+      const gpuRow = (g, i) => row('gpu', i ? '' : T('hwGpu'), g.name, [join(
+        join(g.vram, g.memType).replace(' · ', ' '),
+        g.bus && `${g.bus} bit`,
+        g.gbps && `${num(g.gbps)} Gbps`)]);
+      // háttértárak: meghajtónként a típus, a méret és a rajta lévő meghajtók szabad helye
+      const disks = hw.disks || [];
+      const lvl = (p) => (p >= 90 ? ' hot' : p >= 75 ? ' warn' : '');
+      const diskRows = disks.flatMap((d) => {
+        const vols = d.volumes && d.volumes.length ? d.volumes : [null];
+        return vols.map((v, i) => `
+          <span class="hd-name"${i ? '' : ` title="${esc(d.name)}"`}>${i ? '' : esc(d.name)}</span>
+          <span>${i ? '' : esc(d.bus || '—')}</span><span>${i ? '' : esc(d.media || '—')}</span><span class="hd-num">${i ? '' : esc(d.size)}</span>
+          <span class="hd-vol">${v ? esc(v.letter) : '—'}${v && v.label ? ` <em>${esc(v.label)}</em>` : ''}</span>
+          <span class="hd-num">${v ? `${esc(v.free)} / ${esc(v.total)}` : ''}</span>
+          <span class="hd-use${v && typeof v.pct === 'number' ? lvl(v.pct) : ''}">${v && typeof v.pct === 'number' ? `<i><b style="width:${v.pct}%"></b></i><em>${v.pct}%</em>` : ''}</span>`);
+      }).join('');
+      const diskTable = disks.length ? `<div class="hd-table">
+          <span class="hd-h">${T('hdName')}</span><span class="hd-h">${T('hdBus')}</span><span class="hd-h">${T('hdType')}</span><span class="hd-h hd-num">${T('hdSize')}</span>
+          <span class="hd-h">${T('hdVol')}</span><span class="hd-h hd-num">${T('hdFree')}</span><span class="hd-h">${T('hdUse')}</span>${diskRows}</div>` : '';
+      $('hwList').innerHTML =
+        row('board', T('hwBoard'), b.name, [boardSub]) +
+        row('chip', T('hwCpu'), c.name, [cpuSub]) +
+        row('ram', T('hwMem'), memMain, memSubs) +
+        (gpus.length ? gpus.map(gpuRow).join('') : row('gpu', T('hwGpu'), '')) +
+        (disks.length ? `<div class="hw-row wide">${svg('disk')}<span class="hw-label">${T('hwStorage')}</span>${diskTable}</div>` : '');
+    };
+
+    // Minden alaphelyzetbe: második kattintásra
+    let resetAllArm = 0;
+    const disarmResetAll = () => {
+      clearTimeout(resetAllArm);
+      resetAllArm = 0;
+      $('resetAll').classList.remove('armed');
+      $('resetAll').querySelector('span').textContent = T('resetAll');
+    };
+    $('resetAll').addEventListener('click', () => {
+      if (!resetAllArm) {
+        $('resetAll').classList.add('armed');
+        $('resetAll').querySelector('span').textContent = T('resetAllSure');
+        resetAllArm = setTimeout(disarmResetAll, 4000);
+        return;
+      }
+      disarmResetAll();
+      if (demo) return toast('Demo: reset all');
+      post({ type: 'cmd', name: 'reset-all' });
+    });
+
+    const renderToggles = () => {
+      for (const b of root.querySelectorAll('[data-toggle]')) setSwitch(b, !!data[b.dataset.toggle]);
+      for (const b of root.querySelectorAll('[data-bool]')) setSwitch(b, !!get(b.dataset.bool));
       for (const b of $('langSeg').children) b.classList.toggle('on', b.dataset.lang === (data.language || lang));
       for (const b of $('labelSeg').children) b.classList.toggle('on', (b.dataset.labels === 'show') === (data.iconLabels !== false));
       for (const b of $('themeSeg').children) b.classList.toggle('on', b.dataset.appearance === (data.appearance || 'dark'));
+      for (const b of $('nbSeg').children) b.classList.toggle('on', b.dataset.nb === (data.neonBorder || 'off'));
+      const ws = data.windowsSync || {};
+      const acc = ws.accent ? (ws.accentColor || 'hot') : 'off';
+      for (const b of $('accSeg').children) b.classList.toggle('on', b.dataset.acc === acc);
+      // Windows: ha a téma épp a Windowst követi, a mód visszaírása értelmetlen
+      const follow = data.appearance === 'windows';
+      const modeBtn = root.querySelector('[data-bool="windowsSync.darkMode"]');
+      modeBtn.disabled = follow;
+      modeBtn.title = follow ? T('syncModeFollow') : T('syncModeHint');
+      const termBtn = root.querySelector('[data-bool="windowsSync.terminal"]');
+      termBtn.disabled = data.terminalFound === false && !get('windowsSync.terminal');
+      termBtn.title = termBtn.disabled ? T('terminalMissing') : T('syncTerminalHint');
       // a panelek helye: ahol a másik panel áll, az a mező szürke (nem választható)
       const lay = data.layout || { icons: 'left', info: 'right' };
       const posButtons = (which, other) => ['left', 'right', 'top', 'bottom'].map((e) =>
@@ -196,15 +806,25 @@
       $('posInfo').innerHTML = posButtons('info', 'icons');
       const order = [...((data.sections.order && data.sections.order.length) ? data.sections.order : [])];
       if (!order.includes('tools')) order.splice(Math.max(0, order.indexOf('claude')), 0, 'tools');
+      // a Codex (v1.5-ben új) alapból a Claude alatt van
+      if (!order.includes('codex') && order.includes('claude')) order.splice(order.indexOf('claude') + 1, 0, 'codex');
       for (const k of Object.keys(SECTION_NAMES)) if (!order.includes(k)) order.push(k);
       $('secList').innerHTML = order.filter((k) => SECTION_NAMES[k]).map((k) => {
         const on = data.sections[k] !== false;
-        const sw = lang === 'hu' ? (on ? 'BE' : 'KI') : (on ? 'ON' : 'OFF');
         return `<div class="sec-row" data-key="${k}">
             <span class="grip" title="${T('dragHint')}">${svg('grip')}</span>
-            <button class="sbtn toggle row ${on ? 'on' : ''}" data-section="${k}"${SECTION_HINT[k] ? ` title="${SECTION_HINT[k]}"` : ''}><span>${SECTION_NAMES[k]}</span><b class="switch">${sw}</b></button>
+            <button class="sbtn toggle row ${on ? 'on' : ''}" data-section="${k}"${SECTION_HINT[k] ? ` title="${SECTION_HINT[k]}"` : ''}><span>${SECTION_NAMES[k]}</span><b class="switch">${sw(on)}</b></button>
           </div>`;
       }).join('');
+      renderOrder();
+      renderView();
+      renderHardware();
+      $('sizesReset').disabled = sizesDefault();
+      renderRanges();
+      renderPreview();
+      renderPalettes();
+      renderCalendars();
+      renderEngine();
     };
 
     // ── sorrend húzással (Látható szekciók és Ikonok): a sor elején lévő jellel ──
@@ -271,6 +891,7 @@
       list.addEventListener('pointerup', end);
       list.addEventListener('pointercancel', end);
     };
+    for (const f of sortableLater) f();
     // Látható szekciók: azonnal életbe lép
     sortable($('secList'), '.sec-row', (from, to, rows) => {
       const order = rows.map((r) => r.dataset.key);
@@ -320,6 +941,9 @@
       $('edDirty').textContent = d ? T('unsaved') : '';
       $('edSave').disabled = !d;
       $('edCancel').disabled = !d;
+      // a Programok fülön jelzés, ha mentetlen változás van
+      $('badge-programs').classList.toggle('on', d);
+      $('badge-programs').title = d ? T('unsaved') : '';
     };
 
     // háttérképek: kattintásra a program beállítja a Windows háttérképének
@@ -331,6 +955,8 @@
         ? list.map((w, i) => `<button class="wall-tile${normPath(w.path) === cur ? ' on' : ''}" data-wall="${i}">
             <img src="${esc(w.url)}" alt="" draggable="false"><b>${T('wallCurrent')}</b></button>`).join('')
         : `<span class="ed-none">${T('noWallpapers')}</span>`;
+      // csak a beépített képek vannak: nincs mit visszaállítani
+      if (!resetArm) $('wallReset').disabled = !list.some((w) => w.builtin === false);
     };
     $('wallList').addEventListener('click', (e) => {
       const b = e.target.closest('[data-wall]');
@@ -380,9 +1006,7 @@
       el.textContent = hms(Math.max(0, Math.round((hlDue - Date.now()) / 1000)));
     };
     const renderHealth = () => {
-      const on = !!health.enabled;
-      $('hlToggle').classList.toggle('on', on);
-      $('hlToggle').querySelector('.switch').textContent = lang === 'hu' ? (on ? 'BE' : 'KI') : (on ? 'ON' : 'OFF');
+      setSwitch($('hlToggle'), !!health.enabled);
       if (document.activeElement !== $('hlMin')) $('hlMin').value = health.minutes;
       hlTick();
     };
@@ -413,15 +1037,13 @@
     // ── Időjárás: a település (szabad szöveg) és a szél kijelzése a panelen ──
     let weather = null;
     const renderWeather = () => {
-      const on = weather.wind !== false;
-      $('wsWind').classList.toggle('on', on);
-      $('wsWind').querySelector('.switch').textContent = lang === 'hu' ? (on ? 'BE' : 'KI') : (on ? 'ON' : 'OFF');
+      setSwitch($('wsWind'), weather.wind !== false);
       if (document.activeElement !== $('wsCity')) $('wsCity').value = weather.city || '';
     };
     // a cím mellett a megtalált hely teljes neve (település, megye, ország)
-    const setFound = (text, bad) => {
+    const setFound = (text, bad, ok) => {
       const f = $('wsFound');
-      f.textContent = text;
+      f.innerHTML = ok ? `${T('wsSetTo')} <b>${esc(text)}</b>` : esc(text);
       f.title = text;
       f.classList.toggle('bad', !!bad);
     };
@@ -440,7 +1062,7 @@
       setFound(T('wsSearching'));
       try {
         const label = await lookup(city);
-        if (seq === wsSeq) setFound(label || T('unknownPlace', { p: city }), !label);
+        if (seq === wsSeq) setFound(label || T('unknownPlace', { p: city }), !label, !!label);
         return label ? 'ok' : 'none';
       } catch (_) {
         if (seq === wsSeq) setFound(T('wsOffline'), true);
@@ -478,6 +1100,7 @@
       if (!demo) post({ type: 'weather', wind: weather.wind });
     });
 
+    let firstLoad = true;
     const load = (msg) => {
       data = msg;
       if (msg.weather) {
@@ -502,6 +1125,10 @@
         renderList();
       } else {
         renderRunning();
+      }
+      if (firstLoad) {
+        firstLoad = false;
+        selectTab(store.get(TAB_STORE) || 'programs', { instant: true });
       }
     };
 
@@ -582,11 +1209,11 @@
       renderList();
     });
 
-    // rendszergombok, kapcsolók és nyelv
-    // a bal oszlop és a Megjelenés kártya gombjai
-    for (const host of root.querySelectorAll('.set-side, .set-look')) host.addEventListener('click', (e) => {
+    // rendszergombok, kapcsolók, szegmensek (minden fülön, kivéve az ikonlistát és a saját
+    // kezelővel rendelkező kártyákat)
+    root.querySelector('.set-body').addEventListener('click', (e) => {
       const b = e.target.closest('button');
-      if (!b || !data) return;
+      if (!b || !data || b.disabled) return;
       if (b.dataset.cmd) {
         if (demo) return toast(`Demo: ${b.dataset.cmd}`);
         return post({ type: 'cmd', name: b.dataset.cmd });
@@ -600,13 +1227,43 @@
         if (demo) { data.autostart = !data.autostart; return renderToggles(); }
         return post({ type: 'cmd', name: 'autostart', on: !data.autostart });
       }
+      if (b.dataset.toggle === 'winKey') {
+        if (demo) { data.winKey = !data.winKey; return renderToggles(); }
+        return post({ type: 'winkey', on: !data.winKey });
+      }
+      if (b.dataset.toggle === 'clipboard') {
+        if (demo) { data.clipboard = !data.clipboard; return renderToggles(); }
+        return post({ type: 'clipboard', on: !data.clipboard });
+      }
+      if (b.dataset.bool) {
+        const v = !get(b.dataset.bool);
+        setLocal(b.dataset.bool, v);
+        renderToggles();
+        if (b.dataset.bool === 'windowsSync.accent' && v) toast(T('syncAccentOn'));
+        return setValue(b.dataset.bool, v);
+      }
+      if (b.dataset.acc) {
+        const v = b.dataset.acc;
+        data.windowsSync = { ...(data.windowsSync || {}), accent: v !== 'off', ...(v !== 'off' ? { accentColor: v } : {}) };
+        renderToggles();
+        if (v !== 'off') toast(T('syncAccentOn'));
+        return setValue('windowsSync.accentColor', v);
+      }
+      if (b.dataset.nb) {
+        if (b.dataset.nb === data.neonBorder) return;
+        data.neonBorder = b.dataset.nb;
+        renderToggles();
+        return setValue('neonBorder', b.dataset.nb);
+      }
       if (b.dataset.appearance) {
         const v = b.dataset.appearance;
         if (v === (data.appearance || 'dark')) return;
         data.appearance = v;
         renderToggles();
         if (demo) {
-          const light = v === 'light' || (v === 'auto' && matchMedia('(prefers-color-scheme: light)').matches);
+          const light = v === 'light' || ((v === 'auto' || v === 'windows') && matchMedia('(prefers-color-scheme: light)').matches);
+          data.scheme = light ? 'light' : 'dark';
+          renderPalettes();
           return setTheme(THEMES[light ? 'light' : 'dark']);
         }
         return post({ type: 'appearance', value: v });
@@ -627,10 +1284,6 @@
         if (!demo) post({ type: 'icon-labels', on: data.iconLabels });
         return;
       }
-      if (b.dataset.toggle === 'winKey') {
-        if (demo) { data.winKey = !data.winKey; return renderToggles(); }
-        return post({ type: 'winkey', on: !data.winKey });
-      }
       if (b.dataset.section) {
         const k = b.dataset.section;
         data.sections = { ...data.sections, [k]: data.sections[k] === false };
@@ -639,11 +1292,12 @@
       }
     });
 
-    // bezárás: mentetlen változásnál előbb figyelmeztet
+    // bezárás: mentetlen változásnál előbb figyelmeztet (és a Programok fülre vált)
     let closeArmed = false;
     const close = () => {
       if (dirty() && !closeArmed) {
         closeArmed = true;
+        selectTab('programs');
         $('setCloseText').textContent = T('discardQ');
         $('setClose').classList.add('armed');
         toast(T('unsavedWarn'));
@@ -662,10 +1316,18 @@
     };
     $('setClose').addEventListener('click', close);
     document.addEventListener('keydown', (e) => {
+      // Ctrl+1–5: fül; Ctrl+Tab / Ctrl+Shift+Tab, Ctrl+PageDown / PageUp: következő / előző fül
+      if (e.ctrlKey && !e.altKey) {
+        const n = Number(e.key);
+        if (n >= 1 && n <= TABS.length) { e.preventDefault(); return selectTab(TABS[n - 1].id); }
+        const i = TABS.findIndex((t) => t.id === tab);
+        const dir = e.key === 'Tab' ? (e.shiftKey ? -1 : 1) : e.key === 'PageDown' ? 1 : e.key === 'PageUp' ? -1 : 0;
+        if (dir) { e.preventDefault(); return selectTab(TABS[(i + dir + TABS.length) % TABS.length].id); }
+      }
       if (e.key === 'Escape' && !e.target.closest('input, select')) close();
     });
 
-    // ── rendszerterhelés: az utolsó 60 másodperc görbéje ──
+    // ── rendszerterhelés: az utolsó 60 másodperc görbéje (és kicsiben a fülsáv alján) ──
     const HIST = 60;
     const cpuHist = [];
     const memHist = [];
@@ -679,6 +1341,12 @@
       return [line, `${line} L120,40 L${x0.toFixed(2)},40 Z`];
     };
     const level = (v) => (v >= 85 ? 'hot' : v >= 60 ? 'warn' : '');
+    const mini = (id, v) => {
+      const el = $(id);
+      el.querySelector('b').style.width = `${v.toFixed(1)}%`;
+      el.querySelector('em').textContent = `${Math.round(v)}%`;
+      el.className = `rl ${id === 'rlMem' ? 'mem ' : ''}${level(v)}`;
+    };
     const showSys = (s) => {
       if (typeof s.cpu === 'number') {
         cpuHist.push(s.cpu);
@@ -690,6 +1358,7 @@
         $('cpuMeter').className = `meter ${level(s.cpu)}`;
         const avg = cpuHist.reduce((a, b) => a + b, 0) / cpuHist.length;
         $('cpuAvg').textContent = T('avg1m', { v: Math.round(avg) });
+        mini('rlCpu', s.cpu);
       }
       if (s.cores) $('cpuCores').textContent = T('threads', { n: s.cores });
       if (s.memTotal) {
@@ -700,10 +1369,10 @@
         $('memLine').setAttribute('d', line);
         $('memArea').setAttribute('d', area);
         $('memVal').innerHTML = `${Math.round(pct)}<small>%</small>`;
-        $('memBar').style.width = `${pct.toFixed(1)}%`;
         $('memMeter').className = `meter mem ${level(pct)}`;
         $('memSub').textContent = `${gb(s.memUsed)} / ${gb(s.memTotal)} GB`;
         $('memFree').textContent = T('free', { v: gb(s.memTotal - s.memUsed) });
+        mini('rlMem', pct);
       }
     };
 
@@ -718,19 +1387,41 @@
     };
     h.demo = () => {
       const C = ['#ff7139', '#ea4335', '#5b8def', '#d97757', '#22a6f2'];
+      const q = new URLSearchParams(location.search);
+      if (q.get('tab')) store.set(TAB_STORE, q.get('tab'));
       h({
-        type: 'settings', autostart: true, layout: { icons: 'left', info: 'right' }, winKey: true, iconLabels: true, language: lang, appearance: 'dark',
+        type: 'settings', autostart: true, layout: { icons: 'left', info: 'right' }, winKey: true, clipboard: true, iconLabels: true, language: lang, appearance: 'dark',
+        scheme: 'dark', monitors: 2, screen: { w: 1920, h: 1080 },
+        bars: { icons: 86, info: 86, frame: { top: 10, bottom: 10, left: 10, right: 10 }, range: [56, 160], frameRange: [0, 40] },
+        allMonitors: true, hideTaskbar: true, activity: { autoStart: false, sound: true },
+        neonBorder: 'active', windowsSync: { darkMode: false, accent: true, accentColor: 'hot', terminal: false }, terminalFound: true,
+        webSearch: 'https://www.google.com/search?q={q}',
+        calendars: [{ name: 'Google Naptár', color: '#00e1ff', host: 'calendar.google.com' }, { name: 'Ünnepek', color: '#ff2a6d', host: 'calendar.google.com' }],
+        themes: { dark: { ...THEMES.dark }, light: { ...THEMES.light }, defaultDark: { ...THEMES.dark }, defaultLight: { ...THEMES.light } },
         health: { enabled: true, minutes: 90, remaining: 3725, showing: false },
         weather: { city: 'Budapest', wind: true },
-        sections: { tools: true, claude: true, activity: true, clock: true, date: false, weather: true, music: true, volume: true,
-          order: ['tools', 'claude', 'activity', 'clock', 'date', 'weather', 'music', 'volume', 'power'] },
+        sections: { tools: true, claude: true, codex: false, activity: true, clock: true, date: false, weather: true, music: true, volume: true,
+          order: ['tools', 'claude', 'activity', 'clock', 'date', 'weather', 'music', 'volume', 'power'],
+          toolsOrder: ['calc', 'notepad', 'search', 'snip'], powerOrder: ['lock', 'sleep', 'shutdown', 'restart'] },
+        hardware: { cpu: { name: 'AMD Ryzen 5 3600 6-Core Processor', cores: 6, threads: 12, mhz: 3600 },
+          board: { name: 'ASRock B450M Pro4', chipset: 'AMD B450', bios: 'P10.08', biosDate: '2023-11-02', slots: 4, maxMem: '128 GB' },
+          mem: { total: '24 GB', type: 'DDR4', speed: 3200, slots: 4, same: false, modules: [
+            { size: '8 GB', type: 'DDR4', speed: 3200, maker: 'Kingston', part: 'KF3200C16D4/8GX', slot: 'DIMM 0' },
+            { size: '8 GB', type: 'DDR4', speed: 3200, maker: 'Kingston', part: 'KF3200C16D4/8GX', slot: 'DIMM 1' },
+            { size: '4 GB', type: 'DDR4', speed: 2666, maker: 'Corsair', part: 'CMK8GX4M2A2666C16', slot: 'DIMM 2' }] },
+          gpus: [{ name: 'AMD Radeon RX 6600', vram: '8 GB', memType: 'GDDR6', bus: 128, gbps: 14, boost: 2491 }], os: 'Windows 11 Pro (26300)',
+          disks: [{ name: 'Samsung SSD 970 EVO Plus 500GB', media: 'SSD', bus: 'NVMe', size: '500 GB', volumes: [{ letter: 'C:', label: '', free: '17 GB', total: '465 GB', pct: 96 }] },
+            { name: 'KINGSTON SA400S37480G', media: 'SSD', bus: 'SATA', size: '480 GB', volumes: [{ letter: 'D:', label: 'Fotók', free: '8,4 GB', total: '447 GB', pct: 98 }] },
+            { name: 'Hitachi HUA723020ALA641', media: 'HDD', bus: 'SATA', size: '2 TB', volumes: [{ letter: 'E:', label: 'Torrent', free: '65 GB', total: '1863 GB', pct: 96 }] },
+            { name: 'TOSHIBA HDWD120', media: 'HDD', bus: 'SATA', size: '2 TB', volumes: [{ letter: 'F:', label: 'Dolgaim', free: '120 GB', total: '1863 GB', pct: 94 }] }] },
         apps: [['Firefox', 'globe'], ['Chrome', 'browser'], ['Total Cmd', 'panels'], ['Claude', 'spark'], ['VS Code', 'code']]
           .map(([name, icon], id) => ({ id, name, rawIcon: icon, icon, color: C[id], path: `C:\\Program Files\\${name}\\${name}.exe`,
             available: id !== 2, canExeIcon: true, autostart: id === 3 }))
           .concat([{ id: 5, name: 'Cyberpunk', rawIcon: 'game', icon: 'game', color: '#ff3b5c', path: 'steam://rungameid/1091500', available: true }]),
-        running: [{ name: 'Notepad', path: 'C:\\Windows\\notepad.exe', img: '' }],
+        running: ['Jegyzettömb', 'Számológép', 'Windows Intéző', 'Paint', 'Microsoft Edge', 'Discord', 'Steam', 'OBS Studio', 'GIMP', 'Thunderbird', 'Telegram', 'Blender', 'Audacity', 'VLC']
+          .map((name) => ({ name, path: `C:\\Apps\\${name}.exe`, img: '' })),
         wallpapers: ['blue-hexagons', 'circuit-lines', 'dust-bridge', 'hud-interface', 'motherboard', 'tech-plates']
-          .map((n) => ({ path: `C:\\CyberShell\\wallpapers\\${n}.jpg`, url: `../wallpapers/${n}.jpg` })),
+          .map((n) => ({ path: `C:\\CyberShell\\wallpapers\\${n}.jpg`, url: `../wallpapers/${n}.jpg`, builtin: true })),
         wallpaper: 'C:\\CyberShell\\wallpapers\\dust-bridge.jpg',
       });
       show();

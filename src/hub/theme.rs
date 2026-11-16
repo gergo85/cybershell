@@ -22,9 +22,12 @@ impl Hub {
         views.extend(self.fly.as_ref().map(|w| &w.webview));
         views.extend(self.launcher.as_ref().map(|w| &w.webview));
         views.extend(self.health.as_ref().map(|w| &w.webview));
+        views.extend(self.net.as_ref().map(|w| &w.webview));
         for v in views {
             let _ = v.set_background_color(bg);
             push(v, &payload);
         }
+        // a Windows és a Windows Terminal is vált (ha be van kapcsolva)
+        self.sync_windows();
     }
 }

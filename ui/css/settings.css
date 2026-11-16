@@ -1,16 +1,21 @@
-/* Beállítások (a munkaterületen): kártyák, kapcsolók, ikonszerkesztő, rendszerterhelés, háttérkép, Megjelenés, Egészség. */
+/* Beállítások (a munkaterületen): fejléc, bal oldali fülsáv (fülek, terhelés, készítő) és a
+   fülek kártyái – ikonszerkesztő, elrendezés-előnézet, csúszkák, színpaletták, Windows-
+   integráció, háttérkép, időjárás, Egészség, Start menü, naptárak, rendszerterhelés. */
 
-/* ───────────── Teljes képernyős beállítások ───────────── */
+/* ───────────── váz ───────────── */
 .settings {
-  position: absolute; inset: 0; overflow: auto;
+  position: absolute; inset: 0; overflow: hidden;
   background:
     repeating-linear-gradient(0deg, rgba(255,255,255,.015) 0 1px, transparent 1px 3px),
     radial-gradient(ellipse at 15% 0%, color-mix(in srgb, var(--c-main) 7%, transparent), transparent 55%),
     radial-gradient(ellipse at 100% 100%, color-mix(in srgb, var(--c-alt) 6%, transparent), transparent 50%),
     var(--c-bg);
 }
-.set-wrap { max-width: 1500px; margin: 0 auto; display: flex; flex-direction: column; min-height: 100%; }
-.set-head { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--c-main-dim); }
+.set-wrap {
+  max-width: 1560px; height: 100%; margin: 0 auto; padding: 24px 36px 26px;
+  display: flex; flex-direction: column; gap: 18px;
+}
+.set-head { flex: none; display: flex; align-items: center; justify-content: space-between; padding-bottom: 12px; border-bottom: 1px solid var(--c-main-dim); }
 .set-title {
   font-size: 30px; letter-spacing: .06em; color: var(--c-main);
   font-variation-settings: "wdth" 75, "wght" 700;
@@ -24,14 +29,151 @@
   font-variation-settings: "wdth" 85, "wght" 600;
   background: color-mix(in srgb, var(--c-main) 8%, transparent);
   clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+  transition: background-color .12s ease, color .12s ease;
 }
 .set-close svg { width: 16px; height: 16px; }
 .set-close:hover { background: var(--c-main); color: var(--c-bg); }
 .set-close.armed { background: var(--c-hot); color: var(--c-bg); }
-.set-body { display: grid; grid-template-columns: 360px minmax(0, 1fr); flex: 1; }
-.set-side { display: flex; flex-direction: column; }
+/* a visszajelzés a Bezárás gomb bal oldalán (a gombot sosem takarja) */
+.set-head .set-toast {
+  position: static; inset: auto; width: auto; max-width: min(640px, 55%); margin: 0 14px 0 auto;
+  padding: 9px 14px; font-size: 13px; line-height: 1.35; z-index: 5;
+  transform: translateX(10px); transition: opacity .2s, transform .2s;
+}
+.set-head .set-toast.show { transform: none; }
+
+.set-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 22px; }
+
+/* ───────────── fülsáv ───────────── */
+.set-rail {
+  position: relative; min-height: 0; display: flex; flex-direction: column; gap: 14px; padding: 12px; overflow: hidden auto; scrollbar-width: none;
+  background:
+    repeating-linear-gradient(0deg, color-mix(in srgb, var(--c-main) 3%, transparent) 0 1px, transparent 1px 4px),
+    linear-gradient(180deg, color-mix(in srgb, var(--c-main) 5%, var(--c-bg)), color-mix(in srgb, var(--c-alt) 3%, var(--c-bg)));
+  border: 1px solid color-mix(in srgb, var(--c-main) 14%, transparent);
+}
+.set-rail::before {
+  content: ""; position: absolute; left: -1px; top: -1px; width: 46px; height: 3px; background: var(--c-main);
+  box-shadow: 0 0 8px var(--c-main-glow);
+}
+.set-rail::-webkit-scrollbar { display: none; }
+.rail-tabs { position: relative; display: flex; flex-direction: column; gap: 6px; }
+/* a kijelölés fénye: a fülek között csúszik */
+.rail-glow {
+  position: absolute; left: 0; right: 0; top: 0; height: 0; pointer-events: none; z-index: 0;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--c-main) 26%, transparent), color-mix(in srgb, var(--c-main) 6%, transparent) 70%, transparent);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%);
+  transition: transform .32s cubic-bezier(.2, .9, .25, 1.15), height .2s;
+}
+.rail-glow::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: var(--c-main); box-shadow: 0 0 10px var(--c-main), 0 0 2px var(--c-main);
+}
+.rail-glow::after {
+  content: ""; position: absolute; right: 0; top: 0; width: 22px; height: 2px; background: var(--c-main);
+}
+.rail-tab {
+  position: relative; z-index: 1; display: grid; grid-template-columns: 22px minmax(0, 1fr) 10px; align-items: center; gap: 12px;
+  min-height: 62px; padding: 8px 12px 8px 14px; text-align: left; color: var(--c-text-dim);
+  background: color-mix(in srgb, var(--c-main) 4%, transparent);
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%);
+  outline: none; transition: background-color .15s, color .15s;
+}
+.rail-tab:hover { background: color-mix(in srgb, var(--c-main) 10%, transparent); color: var(--c-text); }
+.rail-tab:focus-visible { box-shadow: inset 0 0 0 1px var(--c-alt); }
+.rail-tab > svg { width: 21px; height: 21px; transition: color .15s, filter .15s; }
+.rt-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.rt-text b {
+  font-size: 15px; letter-spacing: .1em; text-transform: uppercase; color: var(--c-text);
+  font-variation-settings: "wdth" 80, "wght" 650;
+}
+.rt-text small {
+  font-size: 11px; line-height: 1.3; color: var(--c-text-dim);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+.rt-badge {
+  width: 8px; height: 8px; justify-self: end; background: var(--c-hot); box-shadow: 0 0 8px var(--c-hot);
+  transform: scale(0); transition: transform .2s cubic-bezier(.3, 1.6, .5, 1);
+}
+.rt-badge.on { transform: scale(1); animation: alertBlink 1.2s steps(2) infinite; }
+.rail-tab.on { background: transparent; color: var(--c-main); }
+.rail-tab.on .rt-text b { color: var(--c-main); text-shadow: 0 0 10px var(--c-main-glow); }
+.rail-tab.on > svg { color: var(--c-main); filter: drop-shadow(0 0 4px var(--c-main-glow)); }
+.rail-tab.on > svg { animation: glitch .3s steps(2) 1; }
+.rail-keys { padding-left: 2px; font: 400 10px/1 var(--f-mono); letter-spacing: .12em; color: color-mix(in srgb, var(--c-text) 35%, transparent); }
+
+/* kis terhelésjelző a fülsáv alján */
+.rail-load {
+  margin-top: auto; display: flex; flex-direction: column; gap: 8px; padding: 12px 14px;
+  border-top: 1px dashed color-mix(in srgb, var(--c-main) 22%, transparent);
+}
+.rl { --m: var(--c-alt); display: grid; grid-template-columns: 34px 1fr 38px; align-items: center; gap: 10px; }
+.rl.mem { --m: var(--c-main); }
+.rl.warn { --m: #ffb02e; }
+.rl.hot { --m: var(--c-hot); }
+.rl span { font: 400 10px/1 var(--f-mono); letter-spacing: .14em; color: var(--c-text-dim); }
+.rl i { position: relative; height: 6px; background: color-mix(in srgb, var(--m) 14%, transparent); }
+.rl i b {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--m);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--m) 60%, transparent); transition: width .6s ease, background-color .3s;
+  -webkit-mask: repeating-linear-gradient(90deg, #000 0 5px, transparent 5px 7px);
+          mask: repeating-linear-gradient(90deg, #000 0 5px, transparent 5px 7px);
+}
+.rl em { font: 600 13px/1 var(--f-display); font-style: normal; text-align: right; color: var(--m); font-variant-numeric: tabular-nums; }
+
+.rail-credit {
+  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px 12px; padding: 12px 14px 4px;
+  border-top: 1px dashed color-mix(in srgb, var(--c-main) 22%, transparent);
+}
+.credit-by { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.credit-by span { font: 400 10px/1 var(--f-mono); letter-spacing: .14em; color: var(--c-text-dim); text-transform: uppercase; }
+.credit-by b { font-size: 15px; letter-spacing: .04em; color: var(--c-text); font-variation-settings: "wdth" 85, "wght" 600; white-space: nowrap; }
+.credit-ver { align-items: flex-end; }
+.credit-ver b { font-variant-numeric: tabular-nums; }
+.credit-btns { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: 6px; }
+.credit-btns .sbtn { flex: none; width: auto; }
+
+/* ───────────── a fülek tartalma ───────────── */
+.set-stage { min-height: 0; overflow: hidden auto; padding-right: 4px; }
+.set-pane { display: none; gap: 20px; min-height: 100%; }
+.set-pane.on { display: grid; align-content: start; }
+.set-pane.enter { animation: paneIn .38s cubic-bezier(.2, .8, .2, 1) both; }
+.set-pane.enter > .set-card, .set-pane.enter > .pane-col > .set-card { animation: cardIn .45s cubic-bezier(.2, .8, .2, 1) both; }
+.set-pane.enter > .pane-col > .set-card + .set-card { animation-delay: .06s; }
+.set-pane.enter > .set-card:nth-child(2) { animation-delay: .04s; }
+.set-pane.enter > .set-card:nth-child(3) { animation-delay: .08s; }
+.set-pane.enter > .set-card:nth-child(4) { animation-delay: .12s; }
+.set-pane.enter > .set-card:nth-child(5) { animation-delay: .16s; }
+@keyframes paneIn {
+  0% { opacity: 0; transform: translateX(14px); clip-path: inset(0 0 0 100%); }
+  60% { opacity: 1; clip-path: inset(0 0 0 0); }
+  100% { opacity: 1; transform: none; clip-path: none; }
+}
+
+/* 01 Programok: az ikonlista kitölti a magasságot */
+.set-pane[data-pane="programs"].on { grid-template-rows: minmax(0, 1fr); height: 100%; }
+/* 02 Panelek: elrendezés és méretek balra, a szekciók listája jobbra */
+.pane-panels.on { grid-template-columns: minmax(0, 1fr) minmax(280px, 340px); align-items: start; }
+/* 03 Megjelenés */
+.pane-look.on { grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); grid-template-areas: "theme win" "wall wall"; }
+.c-theme { grid-area: theme; }
+.c-win { grid-area: win; }
+.pane-look .wall { grid-area: wall; }
+/* 04 Funkciók */
+.pane-features.on { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+/* két önálló oszlop: a kártyák a saját tartalmukhoz igazodnak, nem egymáshoz */
+.pane-col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+/* 05 Rendszer */
+.pane-system.on { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "general config" "hw hw" "load load"; }
+.c-hw { grid-area: hw; }
+.c-general { grid-area: general; }
+.c-config { grid-area: config; }
+.pane-system .load { grid-area: load; }
+
+/* ───────────── kártyák és közös elemek ───────────── */
 .set-card {
-  position: relative;
+  position: relative; min-width: 0; padding: 16px 18px 18px;
   background: color-mix(in srgb, var(--c-main) 3%, var(--c-bg));
   border: 1px solid color-mix(in srgb, var(--c-main) 18%, transparent);
 }
@@ -40,12 +182,18 @@
   box-shadow: 0 0 8px var(--c-main-glow);
 }
 .set-card h2 {
-  margin: 0 0 16px; font: 400 12px/1 var(--f-mono); letter-spacing: .16em; color: var(--c-hot);
-  display: flex; align-items: baseline; gap: 14px;
+  margin: 0 0 14px; font: 400 12px/1 var(--f-mono); letter-spacing: .16em; color: var(--c-hot);
+  display: flex; align-items: baseline; gap: 14px; white-space: nowrap;
 }
-.set-card h2 small { font-size: 11px; letter-spacing: .04em; color: var(--c-text-dim); }
+.set-card h2 small { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 11px; letter-spacing: .04em; color: var(--c-text-dim); }
+.card-note { margin: 12px 0 0; font-size: 11.5px; line-height: 1.4; color: var(--c-text-dim); }
+.set-grid { display: flex; flex-direction: column; gap: 6px; }
+.set-grid.two { display: grid; grid-template-columns: 1fr 1fr; }
+.set-grid.two > .wide { grid-column: 1 / -1; }
+.set-list { display: flex; flex-direction: column; gap: 6px; }
+
 .sbtn {
-  display: flex; align-items: center; gap: 10px; padding: 0 14px;
+  display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 0 14px;
   font-size: 13px; letter-spacing: .04em; color: var(--c-text); text-align: left;
   font-variation-settings: "wdth" 90, "wght" 500;
   background: color-mix(in srgb, var(--c-main) 7%, transparent);
@@ -67,28 +215,50 @@
 .sbtn.primary:disabled:hover { background: var(--c-main); }
 .sbtn .switch { margin: 0; }
 .sbtn.toggle.on .switch { color: var(--c-bg); background: var(--c-main); border-color: var(--c-main); }
-.set-grid { display: flex; flex-direction: column; gap: 8px; }
-.set-list { display: flex; flex-direction: column; gap: 8px; }
+.sbtn.mini {
+  min-height: 28px; height: 28px; padding: 0 12px 0 10px; gap: 7px;
+  font: 400 11px/1 var(--f-display); letter-spacing: .06em; color: var(--c-text);
+}
+.sbtn.mini svg { width: 14px; height: 14px; }
+.sbtn.mini.icon { width: 30px; padding: 0; justify-content: center; }
 
-/* ikonszerkesztő */
-.set-main { display: flex; flex-direction: column; }
-.ed-head, .ed-row {
-  display: grid; align-items: center; gap: 12px;
+.seg { display: flex; }
+.seg button {
+  flex: 1; height: 32px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--c-text-dim);
+  border: 1px solid color-mix(in srgb, var(--c-main) 22%, transparent);
 }
-.ed-head { font: 400 10px/1 var(--f-mono); letter-spacing: .14em; color: var(--c-text-dim); text-transform: uppercase; }
-.ed-list { display: flex; flex-direction: column; gap: 6px; overflow: auto; }
-.ed-row {
-  padding: 7px 10px; background: color-mix(in srgb, var(--c-main) 4%, transparent);
-  border-left: 2px solid color-mix(in srgb, var(--c-main) 30%, transparent);
+.seg button + button { border-left: 0; }
+.seg button:hover:not(.on):not(:disabled) { color: var(--c-text); background: color-mix(in srgb, var(--c-main) 10%, transparent); }
+.seg button.on { color: var(--c-bg); background: var(--c-main); border-color: var(--c-main); }
+.seg button:disabled {
+  cursor: not-allowed; color: color-mix(in srgb, var(--c-text) 28%, transparent);
+  background: repeating-linear-gradient(-45deg, color-mix(in srgb, var(--c-text) 10%, transparent) 0 2px, transparent 2px 6px);
 }
+/* felirat + szegmensválasztó egy sorban */
+.lang-row {
+  display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 0 12px 0 14px;
+  font-size: 13px; color: var(--c-text);
+  background: color-mix(in srgb, var(--c-main) 7%, transparent);
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+}
+.lang-row > svg { width: 17px; height: 17px; color: var(--c-main); flex: none; }
+.lang-row > span { flex: 1; min-width: 0; }
+.lang-row .seg button { flex: 0 0 auto; min-width: 46px; height: 26px; padding: 0 10px; font-size: 11px; }
+.pos-row .seg button { min-width: 48px; padding: 0 6px; font-size: 10.5px; letter-spacing: .04em; }
+
+/* ───────────── 01 Programok: ikonszerkesztő ───────────── */
+.set-main { display: flex; flex-direction: column; min-height: 0; }
+.ed-head, .ed-row { display: grid; align-items: center; gap: 12px; grid-template-columns: 40px minmax(140px, 200px) minmax(120px, 1fr) 160px 42px 40px 34px; }
+.ed-head {
+  padding: 0 28px 8px 42px;
+  font: 400 10px/1 var(--f-mono); letter-spacing: .14em; color: var(--c-text-dim); text-transform: uppercase;
+}
+.ed-head > span { text-align: center; white-space: nowrap; }
+.ed-list { flex: 1 1 auto; height: 0; min-height: 180px; display: flex; flex-direction: column; gap: 6px; overflow: auto; padding-right: 8px; scrollbar-gutter: stable; }
+.ed-row { flex: 1; min-width: 0; padding: 7px 10px; background: color-mix(in srgb, var(--c-main) 4%, transparent); }
 .ed-row:hover { background: color-mix(in srgb, var(--c-main) 8%, transparent); }
-.ed-row.missing { border-left-color: var(--c-hot); }
+.ed-row.missing { box-shadow: inset 2px 0 0 var(--c-hot); }
 .ed-row.missing .ed-icon, .ed-row.missing .ed-name { opacity: .55; }
-.ed-move { display: flex; flex-direction: column; gap: 2px; }
-.ed-move .ib { height: 16px; flex: none; }
-.ed-move .ib svg { width: 12px; height: 12px; }
-.ed-move .ib:disabled { opacity: .25; cursor: default; }
-.ed-move .ib:disabled:hover { background: color-mix(in srgb, var(--c-main) 8%, transparent); color: var(--c-text); }
 .ed-icon {
   width: 40px; height: 34px; display: flex; align-items: center; justify-content: center;
   color: color-mix(in srgb, var(--app, var(--c-text)) 80%, var(--c-text));
@@ -108,185 +278,28 @@
 .ed-path { min-width: 0; font: 400 11px/1.3 var(--f-mono); color: var(--c-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ed-path b { margin-left: 10px; color: var(--c-hot); font-weight: 700; letter-spacing: .08em; }
 .ed-color { width: 42px; height: 32px; padding: 2px; background: var(--c-bg); border: 1px solid color-mix(in srgb, var(--c-main) 22%, transparent); cursor: pointer; }
-.seg { display: flex; }
-.seg button {
-  flex: 1; height: 32px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--c-text-dim);
-  border: 1px solid color-mix(in srgb, var(--c-main) 22%, transparent);
-}
-.seg button + button { border-left: 0; }
-.seg button.on { color: var(--c-bg); background: var(--c-main); border-color: var(--c-main); }
 .ed-row > .ib { height: 32px; }
 .ed-row > .ib svg { width: 15px; height: 15px; }
-.ed-none { padding: 18px 10px; font-size: 13px; color: var(--c-text-dim); }
-/* hozzáadás, futó programok és mentés egy tördelődő sorban: a futó programok a következő sor
-   elejétől folytatódnak, a mentés mindig a sor jobb szélén marad */
-.ed-add {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
-  border-top: 1px dashed color-mix(in srgb, var(--c-main) 20%, transparent);
-}
-.ed-add > .sbtn { flex: none; margin-right: 6px; }
-.ed-chips { display: contents; }
-.ed-foot { display: flex; align-items: center; gap: 10px; margin-left: auto; padding-left: 8px; }
-.ed-dirty { font: 400 11px/1 var(--f-mono); letter-spacing: .1em; color: var(--c-hot); text-transform: uppercase; white-space: nowrap; }
-
-/* ───────────── Beállítások: rendszerterhelés ───────────── */
-.load { display: flex; flex-direction: column; }
-.meter { --m: var(--c-alt); display: flex; flex-direction: column; gap: 6px; }
-.meter.mem { --m: var(--c-main); }
-.meter.warn { --m: #ffb02e; }
-.meter.hot { --m: var(--c-hot); }
-.meter-head { display: flex; align-items: baseline; justify-content: space-between; }
-.meter-head span {
-  font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--c-text);
-  font-variation-settings: "wdth" 85, "wght" 600;
-}
-.meter-head b {
-  line-height: 1; color: var(--m);
-  font-variation-settings: "wdth" 75, "wght" 650;
-  font-variant-numeric: tabular-nums;
-  text-shadow: 0 0 12px color-mix(in srgb, var(--m) 50%, transparent);
-  transition: color .3s;
-}
-.meter-head b small { margin-left: 2px; opacity: .8; }
-.spark {
-  display: block; width: 100%;
-  background:
-    repeating-linear-gradient(0deg, color-mix(in srgb, var(--m) 10%, transparent) 0 1px, transparent 1px 16px),
-    repeating-linear-gradient(90deg, color-mix(in srgb, var(--m) 7%, transparent) 0 1px, transparent 1px 24px),
-    color-mix(in srgb, var(--m) 3%, var(--c-bg));
-  border: 1px solid color-mix(in srgb, var(--m) 22%, transparent);
-}
-.spark-line { fill: none; stroke: var(--m); stroke-width: 1.4; vector-effect: non-scaling-stroke; filter: drop-shadow(0 0 3px var(--m)); }
-.spark-area { fill: color-mix(in srgb, var(--m) 16%, transparent); stroke: none; }
-.meter-sub { display: flex; justify-content: space-between; font: 400 10px/1 var(--f-mono); letter-spacing: .08em; color: var(--c-text-dim); }
-.mem-bar { position: relative; height: 10px; background: color-mix(in srgb, var(--m) 12%, transparent); }
-.mem-bar i {
-  position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--m);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--m) 55%, transparent);
-  -webkit-mask: repeating-linear-gradient(90deg, #000 0 7px, transparent 7px 9px);
-          mask: repeating-linear-gradient(90deg, #000 0 7px, transparent 7px 9px);
-  transition: width .6s ease;
-}
-
-/* ───────────── Egyedi görgetősávok (programlista, beállítások) ───────────── */
-.ed-list, .settings { scrollbar-width: auto; }
-.ed-list::-webkit-scrollbar, .settings::-webkit-scrollbar { width: 10px; }
-.ed-list::-webkit-scrollbar-track, .settings::-webkit-scrollbar-track {
-  background:
-    repeating-linear-gradient(0deg, color-mix(in srgb, var(--c-main) 10%, transparent) 0 1px, transparent 1px 12px),
-    color-mix(in srgb, var(--c-main) 5%, var(--c-bg));
-  border-left: 1px solid color-mix(in srgb, var(--c-main) 18%, transparent);
-}
-.ed-list::-webkit-scrollbar-thumb, .settings::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, var(--c-main), color-mix(in srgb, var(--c-main) 55%, var(--c-hot)));
-  border: 2px solid transparent; background-clip: padding-box;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-bg) 40%, transparent);
-}
-.ed-list::-webkit-scrollbar-thumb:hover, .settings::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, var(--c-alt), color-mix(in srgb, var(--c-alt) 55%, var(--c-main)));
-  border: 2px solid transparent; background-clip: padding-box;
-}
-.ed-list::-webkit-scrollbar-button, .settings::-webkit-scrollbar-button { display: none; height: 0; }
-.ed-list { padding-right: 8px; }
-
-/* ───────────── Beállítások: tömörebb bal oszlop, hogy görgetés nélkül elférjen ───────────── */
-.set-wrap { padding: 24px 36px 26px; gap: 18px; }
-.set-head { padding-bottom: 12px; }
-.set-body { gap: 20px; }
-.set-side { gap: 18px; }
-.set-card { padding: 16px 18px 18px; }
-.set-card h2 { margin-bottom: 12px; }
-.set-grid, .set-list { gap: 6px; }
-.sbtn { min-height: 36px; }
-.load { gap: 14px; }
-.spark { height: 50px; }
-
-/* ───────────── Beállítások: animált megjelenés és eltűnés ───────────── */
-.set-wrap { opacity: 0; }
-.settings.shown .set-wrap { animation: setIn .42s cubic-bezier(.2, .8, .2, 1) both; }
-.settings.shown .set-card { animation: cardIn .5s cubic-bezier(.2, .8, .2, 1) both; }
-.settings.shown .set-side .set-card:nth-child(2) { animation-delay: .05s; }
-.settings.shown .set-side .set-card:nth-child(3) { animation-delay: .1s; }
-.settings.shown .set-main { animation-delay: .08s; }
-.settings.instant .set-wrap, .settings.instant .set-card { animation: none; opacity: 1; }
-.settings.leaving .set-wrap { animation: setOut .23s ease-in both; }
-.settings.anim { overflow: hidden; }
-.settings::after {
-  content: ""; position: fixed; left: 0; right: 0; top: 0; height: 2px; pointer-events: none; opacity: 0;
-  background: linear-gradient(90deg, transparent, var(--c-alt), #fff, var(--c-alt), transparent);
-  box-shadow: 0 0 14px var(--c-alt);
-}
-.settings.shown:not(.instant)::after { animation: setSweep .55s ease-out; }
-.settings.leaving::after { animation: setSweepOut .23s ease-in; }
-@keyframes setIn {
-  0% { opacity: 0; transform: translateY(16px) scale(.985); clip-path: inset(0 0 100% 0); filter: brightness(1.8); }
-  55% { opacity: 1; clip-path: inset(0 0 0 0); }
-  100% { opacity: 1; transform: none; clip-path: inset(0); filter: none; }
-}
-@keyframes cardIn {
-  0% { opacity: 0; transform: translateX(-10px); }
-  100% { opacity: 1; transform: none; }
-}
-@keyframes setOut {
-  0% { opacity: 1; transform: none; clip-path: inset(0); }
-  100% { opacity: 0; transform: scale(.99); clip-path: inset(48% 0 48% 0); filter: brightness(1.6); }
-}
-@keyframes setSweep { 0% { top: 0; opacity: 1; } 100% { top: 100%; opacity: 0; } }
-@keyframes setSweepOut { 0% { top: 50%; opacity: 1; } 100% { top: 50%; opacity: 0; } }
-
-/* ───────────── Beállítások: apróságok ───────────── */
-.load h2 { margin-bottom: -6px; }
-.lang-row {
-  display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 0 6px 0 14px;
-  font-size: 13px; color: var(--c-text);
-  background: color-mix(in srgb, var(--c-main) 7%, transparent);
-  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
-}
-.lang-row > svg { width: 17px; height: 17px; color: var(--c-main); flex: none; }
-.lang-row > span { flex: 1; }
-.lang-row .seg button { width: 44px; height: 26px; font-size: 11px; }
-
-/* szekciósorok: bal oldalt húzható jel, a többi rész kapcsoló */
-:is(.sec-row, .ed-item) { display: flex; align-items: stretch; gap: 4px; }
-:is(.sec-row, .ed-item) > .grip {
-  flex: none; width: 26px; display: flex; align-items: center; justify-content: center;
-  color: var(--c-text-dim); cursor: grab; touch-action: none;
-  background: color-mix(in srgb, var(--c-main) 5%, transparent);
-}
-:is(.sec-row, .ed-item) > .grip svg { width: 16px; height: 16px; }
-:is(.sec-row, .ed-item) > .grip:hover { color: var(--c-main); background: color-mix(in srgb, var(--c-main) 14%, transparent); }
-.sec-row .sbtn { flex: 1; }
-:is(.sec-row, .ed-item) { position: relative; }
-.set-list.sorting .sec-row { transition: transform .18s cubic-bezier(.2, .8, .2, 1); }
-.set-list.sorting .sec-row.dragging { transition: none; z-index: 2; }
-.set-list.sorting .sec-row.settling { z-index: 2; transition: transform .16s cubic-bezier(.2, .8, .2, 1); }
-.sec-row.dragging .sbtn, .sec-row.settling .sbtn { box-shadow: 0 6px 18px rgba(0, 0, 0, .55), 0 0 10px var(--c-alt-dim); }
-.sec-row.dragging .sbtn { background: color-mix(in srgb, var(--c-alt) 12%, var(--c-bg)); }
-:is(.sec-row, .ed-item).dragging > .grip { cursor: grabbing; color: var(--c-bg); background: var(--c-alt); }
-.sec-row.dragging .sbtn { outline: 1px solid var(--c-alt); }
-
-/* ikonlista: plusz oszlop az automatikus indításhoz */
-.ed-head, .ed-row { grid-template-columns: 34px 40px minmax(140px, 200px) minmax(120px, 1fr) 160px 42px 40px 34px; }
 .ib.auto { color: var(--c-text-dim); }
 .ib.auto.on { color: var(--c-bg); background: var(--c-alt); box-shadow: 0 0 8px var(--c-alt-dim); }
 .ib.auto:hover { background: color-mix(in srgb, var(--c-alt) 35%, transparent); color: var(--c-text); }
 .ib.auto.on:hover { background: var(--c-alt); color: var(--c-bg); }
-.set-close {
-  transition: background-color .12s ease, color .12s ease;
+.ed-none { padding: 18px 10px; font-size: 13px; color: var(--c-text-dim); }
+/* hozzáadás, futó programok és mentés egy tördelődő sorban */
+.ed-add {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; padding-top: 12px;
+  border-top: 1px dashed color-mix(in srgb, var(--c-main) 20%, transparent);
 }
-.set-close:hover { transition-delay: var(--close-delay); }
-.set-close.armed { transition-delay: 0s; }
-
-/* ───────────── Ikonlista: az oszlopcímek a saját oszlopuk közepén ─────────────
-   A lista görgetősávja mindig helyet foglal, a fejléc ugyanennyivel beljebb kezdődik,
-   így a fejléc és a sorok oszlopai pontosan egymás alá esnek. */
-.ed-list { scrollbar-gutter: stable; }
-.ed-head { padding: 0 28px 8px 12px; }
-.ed-head > span { text-align: center; white-space: nowrap; }
-
-/* ───────────── Futó programok listája (hozzáadáshoz) ───────────── */
+.ed-add > .sbtn { flex: none; margin-right: 6px; }
+.ed-chips {
+  flex: 1 1 320px; min-width: 0; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 6px;
+  max-height: 70px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--c-alt) transparent;
+}
+.ed-chips .ed-none { display: flex; align-items: center; min-height: 32px; padding: 0; font-size: 12px; }
+.ed-foot { display: flex; align-items: center; gap: 10px; margin-left: auto; padding-left: 8px; }
+.ed-dirty { font: 400 11px/1 var(--f-mono); letter-spacing: .1em; color: var(--c-hot); text-transform: uppercase; white-space: nowrap; }
 .run-chip {
-  flex: none; display: flex; align-items: center; gap: 9px; height: 36px; max-width: 280px; padding: 0 12px 0 9px;
+  flex: none; display: flex; align-items: center; gap: 9px; height: 32px; max-width: 280px; padding: 0 12px 0 9px;
   font-size: 12px; color: var(--c-text);
   background: color-mix(in srgb, var(--c-alt) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--c-alt) 30%, transparent);
@@ -296,23 +309,134 @@
 .run-chip svg { flex: none; width: 14px; height: 14px; color: var(--c-alt); }
 .run-chip:hover { background: color-mix(in srgb, var(--c-alt) 20%, transparent); }
 
-/* ───────────── Beállítások: jobb oszlop (ikonok + háttérkép) ───────────── */
-.set-col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
-.set-main { min-height: 0; }
-.ed-list { max-height: calc(100vh - 545px); min-height: 150px; }
-.settings.shown .wall { animation-delay: .12s; }
+/* sorrend húzással (Ikonok és Látható szekciók): bal oldalt a fogantyú */
+:is(.sec-row, .ed-item) { position: relative; display: flex; align-items: stretch; gap: 4px; }
+:is(.sec-row, .ed-item) > .grip {
+  flex: none; width: 26px; min-height: 36px; display: flex; align-items: center; justify-content: center;
+  color: var(--c-text-dim); cursor: grab; touch-action: none;
+  background: color-mix(in srgb, var(--c-main) 5%, transparent);
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+}
+:is(.sec-row, .ed-item) > .grip svg { width: 16px; height: 16px; }
+:is(.sec-row, .ed-item) > .grip:hover { color: var(--c-main); background: color-mix(in srgb, var(--c-main) 14%, transparent); }
+:is(.sec-row, .ed-item).dragging > .grip { cursor: grabbing; color: var(--c-bg); background: var(--c-alt); }
+.sec-row .sbtn { flex: 1; }
+.set-list.sorting .sec-row, .ed-list.sorting .ed-item { transition: transform .18s cubic-bezier(.2, .8, .2, 1); }
+.set-list.sorting .sec-row.dragging, .ed-list.sorting .ed-item.dragging { transition: none; z-index: 2; }
+.set-list.sorting .sec-row.settling, .ed-list.sorting .ed-item.settling { z-index: 2; transition: transform .16s cubic-bezier(.2, .8, .2, 1); }
+:is(.sec-row.dragging .sbtn, .sec-row.settling .sbtn, .ed-item.dragging > .ed-row, .ed-item.settling > .ed-row) { box-shadow: 0 6px 18px rgba(0, 0, 0, .55), 0 0 10px var(--c-alt-dim); }
+:is(.sec-row.dragging .sbtn, .ed-item.dragging > .ed-row) { background: color-mix(in srgb, var(--c-alt) 12%, var(--c-bg)); outline: 1px solid var(--c-alt); }
+
+/* ───────────── 02 Panelek ───────────── */
+.lay-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 52%); gap: 20px; align-items: center; }
+/* a képernyő kicsiben: a két panel, a keretek és a munkaterület */
+.lay-pv {
+  position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden;
+  background:
+    repeating-linear-gradient(0deg, color-mix(in srgb, var(--c-text) 5%, transparent) 0 1px, transparent 1px 12px),
+    repeating-linear-gradient(90deg, color-mix(in srgb, var(--c-text) 5%, transparent) 0 1px, transparent 1px 12px),
+    color-mix(in srgb, var(--c-text) 3%, var(--c-bg));
+  outline: 1px solid color-mix(in srgb, var(--c-main) 30%, transparent); outline-offset: 3px;
+}
+.pv-bar {
+  position: absolute; display: flex; align-items: center; justify-content: center; overflow: hidden;
+  background: color-mix(in srgb, var(--c-hot) 45%, var(--c-bg));
+  transition: all .2s ease;
+}
+.pv-bar.icons { background: color-mix(in srgb, var(--c-main) 40%, var(--c-bg)); box-shadow: 0 0 10px color-mix(in srgb, var(--c-main) 35%, transparent); z-index: 2; }
+.pv-bar.info { background: color-mix(in srgb, var(--c-alt) 38%, var(--c-bg)); box-shadow: 0 0 10px color-mix(in srgb, var(--c-alt) 35%, transparent); z-index: 1; }
+.pv-bar span { font: 700 8.5px/1 var(--f-mono); letter-spacing: .16em; color: var(--c-text); white-space: nowrap; }
+.pv-bar.v span { writing-mode: vertical-rl; transform: rotate(180deg); }
+.pv-work {
+  position: absolute; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+  border: 1px dashed color-mix(in srgb, var(--c-text) 22%, transparent); transition: all .2s ease;
+}
+.pv-work b { font: 400 9px/1 var(--f-mono); letter-spacing: .2em; color: var(--c-text-dim); }
+.pv-work span { font-size: 15px; color: var(--c-text); font-variation-settings: "wdth" 80, "wght" 600; font-variant-numeric: tabular-nums; }
+
+/* csúszkák (méretek és keret) */
+.rng-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px; }
+.rng {
+  --p: 50%;
+  display: grid; grid-template-columns: 18px minmax(0, 1fr) minmax(90px, 1.2fr) 52px; align-items: center; gap: 10px;
+  min-height: 38px; padding: 0 12px 0 14px; font-size: 13px; color: var(--c-text);
+  background: color-mix(in srgb, var(--c-main) 6%, transparent);
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+}
+.rng > svg { width: 17px; height: 17px; color: var(--c-main); }
+.rng-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rng output { text-align: right; font: 600 14px/1 var(--f-display); color: var(--c-main); font-variant-numeric: tabular-nums; }
+.rng input { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; margin: 0; background: transparent; cursor: pointer; }
+.rng input::-webkit-slider-runnable-track {
+  height: 4px;
+  background: linear-gradient(90deg, var(--c-main) 0 var(--p), color-mix(in srgb, var(--c-main) 18%, transparent) var(--p));
+  box-shadow: 0 0 6px color-mix(in srgb, var(--c-main) 30%, transparent);
+}
+.rng input::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 12px; height: 18px; margin-top: -7px; background: var(--c-main); border: 0;
+  clip-path: polygon(0 0, 100% 0, 100% 70%, 50% 100%, 0 70%);
+  box-shadow: 0 0 8px var(--c-main-glow);
+}
+.rng input:focus { outline: none; }
+.rng input:focus-visible::-webkit-slider-thumb { background: var(--c-alt); }
+.rng.off { opacity: .4; }
+.rng.off input { cursor: not-allowed; }
+.rng.off output { color: var(--c-text-dim); }
+
+/* ───────────── 03 Megjelenés ───────────── */
+.c-theme .theme-row { margin-bottom: 14px; }
+.pal-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+.pal {
+  --p-main: #f3e600; --p-alt: #00e1ff; --p-hot: #ff2a6d; --p-bg: #06070b; --p-text: #c9ccd6;
+  display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--c-text) 14%, transparent);
+  transition: border-color .2s, box-shadow .2s;
+}
+.pal.active { border-color: var(--c-main); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-main) 30%, transparent), 0 0 14px color-mix(in srgb, var(--c-main) 14%, transparent); }
+.pal-head { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 28px; }
+.pal-head .pal-reset { flex: none; }
+.pal-head b { font: 400 11px/1.5 var(--f-mono); letter-spacing: .12em; color: var(--c-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pal-on { display: none; padding: 3px 7px 2px; font: 700 9px/1 var(--f-mono); font-style: normal; letter-spacing: .14em; color: var(--c-bg); background: var(--c-main); }
+.pal.active .pal-on { display: block; }
+.pal-reset { margin-left: auto; }
+/* a séma kicsiben, a saját színeivel */
+.pal-demo {
+  position: relative; height: 66px; overflow: hidden; display: flex; flex-direction: column; justify-content: center; gap: 6px; padding: 0 14px 0 30px;
+  background: repeating-linear-gradient(0deg, color-mix(in srgb, var(--p-text) 5%, transparent) 0 1px, transparent 1px 3px), var(--p-bg);
+  border: 1px solid color-mix(in srgb, var(--p-main) 35%, transparent);
+}
+.pd-bar { position: absolute; left: 0; top: 0; bottom: 0; width: 16px; background: color-mix(in srgb, var(--p-main) 12%, var(--p-bg)); border-right: 1px solid var(--p-main); box-shadow: 0 0 6px var(--p-main); }
+.pd-t { font-size: 15px; letter-spacing: .06em; color: var(--p-main); font-variation-settings: "wdth" 75, "wght" 700; }
+.pd-t b { color: var(--p-alt); }
+.pd-l { display: block; width: 70%; height: 4px; background: color-mix(in srgb, var(--p-text) 70%, transparent); }
+.pd-l.short { width: 45%; background: color-mix(in srgb, var(--p-text) 40%, transparent); }
+.pd-hot {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%); width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;
+  font: 700 14px/1 var(--f-mono); font-style: normal; color: var(--p-bg); background: var(--p-hot);
+  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+}
+.pal-sw { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.sw {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 8px 2px 7px; cursor: pointer;
+  background: color-mix(in srgb, var(--c-main) 5%, transparent); transition: background-color .15s;
+}
+.sw:hover { background: color-mix(in srgb, var(--c-main) 14%, transparent); }
+.sw input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.sw i {
+  width: 30px; height: 30px; border: 1px solid color-mix(in srgb, var(--c-text) 35%, transparent);
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  box-shadow: inset 0 0 0 2px var(--c-bg);
+}
+.sw span { max-width: 100%; font-size: 10.5px; letter-spacing: .04em; color: var(--c-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sw code { font: 400 9.5px/1 var(--f-mono); color: var(--c-text-dim); text-transform: lowercase; }
+
+.c-win .nb-row .seg button { min-width: 52px; }
+.c-win .sbtn.toggle svg { color: var(--c-alt); }
+
+/* háttérkép */
 .wall h2 { align-items: center; }
 .wall-tools { margin-left: auto; display: flex; gap: 6px; }
-.sbtn.mini {
-  min-height: 28px; height: 28px; padding: 0 12px 0 10px; gap: 7px;
-  font: 400 11px/1 var(--f-display); letter-spacing: .06em; color: var(--c-text);
-}
-.sbtn.mini svg { width: 14px; height: 14px; }
-.wall-list {
-  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(150px, calc((100% - 60px) / 6)); gap: 12px;
-  overflow-x: auto; overflow-y: hidden; padding: 2px 2px 8px;
-  scrollbar-width: thin; scrollbar-color: var(--c-main) color-mix(in srgb, var(--c-main) 8%, var(--c-bg));
-}
+.wall-list { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; padding: 2px; }
 .wall-tile {
   position: relative; display: block; aspect-ratio: 16 / 9; padding: 0; overflow: hidden;
   background: color-mix(in srgb, var(--c-main) 6%, var(--c-bg));
@@ -340,70 +464,14 @@
 }
 .wall-tile.on b { opacity: 1; transform: none; }
 .wall .ed-none { padding: 10px 0; }
+#wallReset.armed { color: var(--c-bg); background: var(--c-hot); }
+#wallReset.armed svg { color: var(--c-bg); }
 
-/* ───────────── Beállítások: készítő és weboldal ───────────── */
-.set-card.credit { display: flex; align-items: center; gap: 12px; padding: 12px 18px; }
-.credit-by { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.credit-by span { font: 400 10px/1 var(--f-mono); letter-spacing: .14em; color: var(--c-text-dim); text-transform: uppercase; }
-.credit-by b { font-size: 15px; letter-spacing: .04em; color: var(--c-text); font-variation-settings: "wdth" 85, "wght" 600; white-space: nowrap; }
-.settings.shown .set-side .set-card:nth-child(4) { animation-delay: .15s; }
-
-/* ───────────── beállítások – a két oszlop egyforma magas ───────────── */
-.set-body { align-items: stretch; }
-.set-side > .load { flex: 1; }
-.set-col > .set-main { flex: 1; }
-
-/* készítő: verziószám */
-.set-card.credit { justify-content: flex-start; }
-.set-card.credit > .sbtn { margin-left: auto; }
-
-/* ───────────── beállítások – a verzió ugyanúgy, mint a „Készítette:” ───────────── */
-.credit-by.credit-ver { margin-left: 22px; }
-.credit-by.credit-ver b { font-variant-numeric: tabular-nums; }
-
-/* ───────────── keskenyebb programhozzáadó sáv ─────────────
-   A futó programok legfeljebb két sorban látszanak (a többi görgethető), a magyarázó
-   címsor helyett a gombok súgója mondja el, mit csinálnak. */
-.ed-add { margin-top: 12px; padding-top: 12px; }
-.ed-chips .run-chip { height: 32px; }
-.ed-chips .ed-none { display: flex; align-items: center; min-height: 36px; padding: 0; font-size: 12px; }
-
-/* Az ikonlista tölti ki a kártya szabad magasságát (a kártya a bal oszlophoz igazodik),
-   így a hozzáadó sáv alatt nem marad üres hely – a gombok közvetlenül alatta vannak. */
-/* ikonszerkesztő: legalább kilenc sor görgetés nélkül (9 × 48 px + 8 × 6 px köz); ha a
-   munkaterület magasabb, a lista kitölti a helyet */
-.set-main .ed-list { flex: 1 1 auto; height: 0; min-height: 480px; max-height: none; }
-
-/* ───────────── beállítások – a visszajelzés a Bezárás gomb mellett ─────────────
-   A fejlécben, a gomb bal oldalán jelenik meg (a gombot sosem takarja), hosszabb szövegnél
-   a gombtól balra nő. */
-.set-head .set-toast {
-  position: static; inset: auto; width: auto; max-width: min(620px, 55%); margin: 0 14px 0 auto;
-  padding: 9px 14px; font-size: 13px; line-height: 1.35; z-index: 5;
-  transform: translateX(10px); transition: opacity .2s, transform .2s;
-}
-.set-head .set-toast.show { transform: none; }
-
-/* öt sor is elférjen görgetés nélkül 1060 px magas munkaterületen */
-.sec-row .sbtn.row { min-height: 30px; }
-:is(.sec-row, .ed-item) > .grip { min-height: 30px; }
-
-/* ───────────── beállítások – GitHub gomb, a panelek helye ───────────── */
-/* a GitHub és a Weboldal gomb szorosan egymás mellett (a kártya 12 px-es réséből 6 px marad) */
-.set-card.credit > .sbtn + .sbtn { margin-left: -6px; }
-.sbtn.mini.icon { width: 30px; padding: 0; justify-content: center; }
-.pos-row .seg button { width: 46px; height: 26px; font-size: 10.5px; letter-spacing: .04em; }
-.seg button:disabled {
-  cursor: not-allowed; color: color-mix(in srgb, var(--c-text) 28%, transparent);
-  background: repeating-linear-gradient(-45deg, color-mix(in srgb, var(--c-text) 10%, transparent) 0 2px, transparent 2px 6px);
-}
-
-/* ───────────── beállítások – téma-választó, Egészség ───────────── */
-.theme-row .seg button { min-width: 44px; }
-.set-card.health { padding-top: 14px; padding-bottom: 14px; }
-.set-card.health h2 { margin-bottom: 10px; }
-.hl-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-.hl-row > .sbtn.toggle { flex: none; min-width: 240px; }
+/* ───────────── 04 Funkciók ───────────── */
+/* Egészség */
+.set-card.health { display: flex; flex-direction: column; }
+.hl-row { flex: 1; display: flex; align-items: center; align-content: center; gap: 10px 14px; flex-wrap: wrap; }
+.hl-row > .sbtn.toggle { flex: 1 1 100%; min-width: 0; }
 .hl-row > .sbtn.toggle svg { color: var(--c-hot); }
 .hl-min { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--c-text-dim); }
 .hl-min input {
@@ -416,92 +484,34 @@
 .hl-count { display: flex; align-items: baseline; gap: 10px; margin-left: auto; }
 .hl-count span { font: 400 10px/1 var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--c-text-dim); }
 .hl-count b {
-  min-width: 96px; text-align: right; font-size: 28px; line-height: 1; color: var(--c-alt);
+  text-align: right; font-size: 26px; line-height: 1; color: var(--c-alt);
   font-variation-settings: "wdth" 75, "wght" 650; font-variant-numeric: tabular-nums;
 }
 .set-card.health.off .hl-count b { color: var(--c-text-dim); }
 .set-card.health.off :is(.hl-min, #hlReset) { opacity: .45; }
 .set-card.health.due .hl-count b { color: var(--c-hot); animation: alertBlink 1s steps(2) infinite; }
-.settings.shown .set-card.health { animation-delay: .1s; }
 
-/* Megjelenés és Egészség egymás mellett a jobb oszlopban (a bal oszlop így elfér görgetés nélkül) */
-.set-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
-.set-pair > .set-card { min-width: 0; }
-.set-look .lang-row { min-height: 34px; }
-.set-pair .hl-row { gap: 10px 14px; }
-.set-pair .hl-row > .sbtn.toggle { flex: 1 1 100%; min-width: 0; }
-.set-pair .hl-count { margin-left: auto; }
-.set-pair .hl-count b { font-size: 26px; min-width: 0; }
-.settings.shown .set-look { animation-delay: .1s; }
-
-/* ───────────── beállítások – apró javítások ───────────── */
-/* a sor jobb alsó sarka le van vágva: a gombok ne érjenek bele (Világos, EN) */
-.lang-row { padding-right: 12px; }
-
-/* a gombok a saját feliratukhoz méretezve (egyforma szélességre nyújtva a „Világos” nem fért el) */
-.theme-row .seg button { flex: 0 0 auto; width: auto; padding: 0 10px; }
-
-/* ikonszerkesztő: a Hely gombok (Ikonok / Panel) kisebb betűvel */
-.ed-row .seg button { font-size: 10px; letter-spacing: .02em; }
-
-/* Egészség: a cím egy sorban, a magyarázat szükség esetén levágva (teljes szöveg a súgóban) */
-.set-card.health h2 { white-space: nowrap; }
-.set-card.health h2 small { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-
-/* Látható szekciók: a sorok ugyanolyan magasak, mint a többi kapcsoló (36 px) */
-#secList { gap: 6px; }
-.sec-row .sbtn.row, :is(.sec-row, .ed-item) > .grip { min-height: 36px; }
-
-/* Rendszerterhelés: kisebb százalékok */
-.meter-head b { font-size: 24px; }
-.meter-head b small { font-size: 13px; }
-
-/* Rendszerterhelés: a bal oszlop maradék magasságát a két grafikon tölti ki, így a két fő
-   oszlop alja egy vonalba kerül */
-.set-side > .load .meter { flex: 1 1 0; min-height: 0; }
-.set-side > .load .spark { flex: 1 1 auto; height: auto; min-height: 50px; }
-
-/* ───────────── beállítások – Egészség és Időjárás egymás alatt a Megjelenés mellett ─────────────
-   Az Egészség tömörebb lett (nincs alatta üres hely), alatta az Időjárás: a település szabad
-   szöveggel, mellette a Szél kapcsoló. A Megjelenés sorai szokásos sűrűségűek; ha a kártya
-   magasabb, az Egészség nyúlik vele, a tartalma középen. */
-.set-stack { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
-.set-stack > .set-card { min-width: 0; }
-.set-stack > .health { flex: 1; display: flex; flex-direction: column; }
-.set-stack > .health > .hl-row { flex: 1; align-content: center; }
-.set-card.wset { padding-top: 14px; padding-bottom: 14px; }
-.set-card.wset h2 { margin-bottom: 10px; white-space: nowrap; }
-.set-card.wset h2 small { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: color-mix(in srgb, var(--c-alt) 75%, var(--c-text)); }
+/* Időjárás és a szöveges mezők (település, keresőcím, naptár) */
+.set-card.wset h2 small { color: color-mix(in srgb, var(--c-alt) 75%, var(--c-text)); }
 .set-card.wset h2 small.bad { color: var(--c-hot); }
-.settings.shown .set-card.wset { animation-delay: .14s; }
 .ws-row { display: flex; align-items: center; gap: 10px; }
+.ws-row > .sbtn.toggle { flex: none; min-width: 130px; }
+.ws-row > .sbtn.toggle svg { color: var(--c-alt); }
 .ws-city {
   flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 5px 0 14px;
   background: color-mix(in srgb, var(--c-main) 7%, transparent);
   clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
 }
 .ws-city > svg { flex: none; width: 17px; height: 17px; color: var(--c-alt); }
-.ws-city input {
-  flex: 1; min-width: 0; height: 28px; padding: 0 10px; font: inherit; font-size: 14px; color: var(--c-text);
+.ws-field { position: relative; flex: 1; min-width: 0; display: flex; }
+.ws-field input {
+  width: 100%; min-width: 0; height: 28px; padding: 0 34px 0 10px; font: inherit; font-size: 14px; color: var(--c-text);
   font-variation-settings: "wdth" 90, "wght" 550;
   background: var(--c-bg); border: 1px solid color-mix(in srgb, var(--c-main) 30%, transparent); border-radius: 0; outline: none;
   user-select: text; -webkit-user-select: text;
 }
-.ws-city input::placeholder { color: var(--c-text-dim); }
-.ws-city input:focus { border-color: var(--c-main); box-shadow: 0 0 6px var(--c-main-glow); }
-.ws-row > .sbtn.toggle { flex: none; min-width: 130px; }
-.ws-row > .sbtn.toggle svg { color: var(--c-alt); }
-html[data-scheme="light"] .ws-city { clip-path: none; border-radius: 7px; }
-html[data-scheme="light"] .ws-city input { border-radius: 5px; }
-
-
-/* Háttérkép: Alapállapot gomb, megerősítésre várva piros */
-#wallReset.armed { color: var(--c-bg); background: var(--c-hot); }
-#wallReset.armed svg { color: var(--c-bg); }
-
-/* Időjárás: Enter gomb a mező jobb oldalán, a mezőn belül */
-.ws-field { position: relative; flex: 1; min-width: 0; display: flex; }
-.ws-field input { width: 100%; padding-right: 34px; }
+.ws-field input::placeholder { color: var(--c-text-dim); }
+.ws-field input:focus { border-color: var(--c-main); box-shadow: 0 0 6px var(--c-main-glow); }
 .ws-go {
   position: absolute; right: 3px; top: 3px; bottom: 3px; width: 28px;
   display: flex; align-items: center; justify-content: center; color: var(--c-text-dim);
@@ -509,37 +519,258 @@ html[data-scheme="light"] .ws-city input { border-radius: 5px; }
 }
 .ws-go svg { width: 14px; height: 14px; }
 .ws-go:hover { color: var(--c-bg); background: var(--c-main); }
-html[data-scheme="light"] .ws-go { border-radius: 4px; }
 
+/* Start menü: webes kereső */
+.ws-engine .seg button { min-width: 0; padding: 0 9px; font-size: 10.5px; letter-spacing: .03em; }
+.url-row { display: none; }
+.url-row.shown { display: flex; }
+.url-row .ws-field input { font: 400 12px/1 var(--f-mono); }
 
-/* ───────────── beállítások – a bal oszlop a jobbhoz igazodik ─────────────
-   A bal oszlop nem növeli a sor magasságát (a sor magasságát a jobb oszlop adja), a
-   maradék helyet a Rendszerterhelés két grafikonja tölti ki, egyforma magasan: a memória
-   mérője a sávja (10 px + 6 px rés) miatt ennyivel nagyobb alapot kap. */
-.set-body > .set-side { height: 0; min-height: 100%; }
-.set-side > .load { flex: 1 1 0; min-height: 0; }
-.set-side > .load .meter { flex: 1 1 0; min-height: 0; }
-.set-side > .load .meter.mem { flex-basis: 16px; }
-.set-side > .load .spark { flex: 1 1 0; height: auto; min-height: 24px; }
+/* Naptárak */
+.cal-list { display: flex; flex-direction: column; gap: 6px; }
+.cal-row {
+  display: grid; grid-template-columns: 42px minmax(0, 1fr) minmax(0, auto) 34px; align-items: center; gap: 10px;
+  padding: 6px 8px; background: color-mix(in srgb, var(--c-main) 4%, transparent);
+}
+.cal-row .ed-name { min-width: 0; }
+.cal-host { min-width: 0; font: 400 11px/1.5 var(--f-mono); color: var(--c-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-row .ib { height: 32px; }
+.cal-row .ib svg { width: 15px; height: 15px; }
+.cal-del.armed { width: auto; padding: 0 8px; color: var(--c-bg); background: var(--c-hot); font-size: 11px; }
+.cal-row:has(.cal-del.armed) { grid-template-columns: 42px minmax(0, 1fr) minmax(0, auto) auto; }
+.cal-list .ed-none { padding: 8px 2px; }
+.cal-add { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.cal-add .ws-field input { font: 400 12px/1 var(--f-mono); }
 
-/* a sorrend-fogantyúk sarka olyan, mint a többi gombé (sötét témában levágott, világosban kerek) */
-:is(.sec-row, .ed-item) > .grip { clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px); }
+/* ───────────── 05 Rendszer: terhelés ───────────── */
+.load-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.meter { --m: var(--c-alt); display: flex; flex-direction: column; gap: 8px; }
+.meter.mem { --m: var(--c-main); }
+.meter.warn { --m: #ffb02e; }
+.meter.hot { --m: var(--c-hot); }
+.meter-head { display: flex; align-items: baseline; justify-content: space-between; }
+.meter-head span {
+  font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--c-text);
+  font-variation-settings: "wdth" 85, "wght" 600;
+}
+.meter-head b {
+  font-size: 30px; line-height: 1; color: var(--m);
+  font-variation-settings: "wdth" 75, "wght" 650; font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 12px color-mix(in srgb, var(--m) 50%, transparent);
+  transition: color .3s;
+}
+.meter-head b small { margin-left: 2px; font-size: 15px; opacity: .8; }
+.spark {
+  display: block; width: 100%; height: 110px;
+  background:
+    repeating-linear-gradient(0deg, color-mix(in srgb, var(--m) 10%, transparent) 0 1px, transparent 1px 16px),
+    repeating-linear-gradient(90deg, color-mix(in srgb, var(--m) 7%, transparent) 0 1px, transparent 1px 24px),
+    color-mix(in srgb, var(--m) 3%, var(--c-bg));
+  border: 1px solid color-mix(in srgb, var(--m) 22%, transparent);
+}
+.meter.mem .spark { height: 94px; }
+.spark-line { fill: none; stroke: var(--m); stroke-width: 1.4; vector-effect: non-scaling-stroke; filter: drop-shadow(0 0 3px var(--m)); }
+.spark-area { fill: color-mix(in srgb, var(--m) 16%, transparent); stroke: none; }
+.meter-sub { display: flex; justify-content: space-between; font: 400 10px/1 var(--f-mono); letter-spacing: .08em; color: var(--c-text-dim); }
+.mem-bar { position: relative; height: 10px; background: color-mix(in srgb, var(--m) 12%, transparent); }
+.mem-bar i {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--m);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--m) 55%, transparent);
+  -webkit-mask: repeating-linear-gradient(90deg, #000 0 7px, transparent 7px 9px);
+          mask: repeating-linear-gradient(90deg, #000 0 7px, transparent 7px 9px);
+  transition: width .6s ease;
+}
+
+/* ───────────── görgetősávok ───────────── */
+.ed-list, .set-stage { scrollbar-width: auto; }
+.ed-list::-webkit-scrollbar, .set-stage::-webkit-scrollbar { width: 10px; }
+.ed-list::-webkit-scrollbar-track, .set-stage::-webkit-scrollbar-track {
+  background:
+    repeating-linear-gradient(0deg, color-mix(in srgb, var(--c-main) 10%, transparent) 0 1px, transparent 1px 12px),
+    color-mix(in srgb, var(--c-main) 5%, var(--c-bg));
+  border-left: 1px solid color-mix(in srgb, var(--c-main) 18%, transparent);
+}
+.ed-list::-webkit-scrollbar-thumb, .set-stage::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--c-main), color-mix(in srgb, var(--c-main) 55%, var(--c-hot)));
+  border: 2px solid transparent; background-clip: padding-box;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-bg) 40%, transparent);
+}
+.ed-list::-webkit-scrollbar-thumb:hover, .set-stage::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, var(--c-alt), color-mix(in srgb, var(--c-alt) 55%, var(--c-main)));
+  border: 2px solid transparent; background-clip: padding-box;
+}
+.ed-list::-webkit-scrollbar-button, .set-stage::-webkit-scrollbar-button { display: none; height: 0; }
+
+/* ───────────── megjelenés és eltűnés animációval ───────────── */
+.set-wrap { opacity: 0; }
+.settings.shown .set-wrap { animation: setIn .42s cubic-bezier(.2, .8, .2, 1) both; }
+.settings.shown .rail-tab { animation: cardIn .45s cubic-bezier(.2, .8, .2, 1) both; }
+.settings.shown .rail-tab:nth-child(3) { animation-delay: .03s; }
+.settings.shown .rail-tab:nth-child(4) { animation-delay: .06s; }
+.settings.shown .rail-tab:nth-child(5) { animation-delay: .09s; }
+.settings.shown .rail-tab:nth-child(6) { animation-delay: .12s; }
+.settings.shown .set-pane.on > .set-card { animation: cardIn .5s cubic-bezier(.2, .8, .2, 1) both; }
+.settings.shown .set-pane.on > .set-card:nth-child(2) { animation-delay: .05s; }
+.settings.shown .set-pane.on > .set-card:nth-child(3) { animation-delay: .1s; }
+.settings.shown .set-pane.on > .set-card:nth-child(4) { animation-delay: .15s; }
+.settings.shown .set-pane.on > .set-card:nth-child(5) { animation-delay: .2s; }
+.settings.instant :is(.set-wrap, .set-card, .rail-tab) { animation: none; opacity: 1; }
+.settings.leaving .set-wrap { animation: setOut .23s ease-in both; }
+.settings.anim .set-stage { overflow: hidden; }
+.settings::after {
+  content: ""; position: fixed; left: 0; right: 0; top: 0; height: 2px; pointer-events: none; opacity: 0;
+  background: linear-gradient(90deg, transparent, var(--c-alt), #fff, var(--c-alt), transparent);
+  box-shadow: 0 0 14px var(--c-alt);
+}
+.settings.shown:not(.instant)::after { animation: setSweep .55s ease-out; }
+.settings.leaving::after { animation: setSweepOut .23s ease-in; }
+@keyframes setIn {
+  0% { opacity: 0; transform: translateY(16px) scale(.985); clip-path: inset(0 0 100% 0); filter: brightness(1.8); }
+  55% { opacity: 1; clip-path: inset(0 0 0 0); }
+  100% { opacity: 1; transform: none; clip-path: inset(0); filter: none; }
+}
+@keyframes cardIn {
+  0% { opacity: 0; transform: translateX(-10px); }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes setOut {
+  0% { opacity: 1; transform: none; clip-path: inset(0); }
+  100% { opacity: 0; transform: scale(.99); clip-path: inset(48% 0 48% 0); filter: brightness(1.6); }
+}
+@keyframes setSweep { 0% { top: 0; opacity: 1; } 100% { top: 100%; opacity: 0; } }
+@keyframes setSweepOut { 0% { top: 50%; opacity: 1; } 100% { top: 50%; opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .set-pane.enter, .set-pane.enter > .set-card, .rail-tab.on > svg { animation: none; }
+  .rail-glow { transition: none; }
+}
+
+/* ───────────── kisebb munkaterület (pl. laptop): egy oszlopba rendezve ───────────── */
+@media (max-width: 1400px) {
+  .pane-panels.on { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 1180px) {
+  .set-wrap { padding: 18px 20px 20px; }
+  .set-body { grid-template-columns: 220px minmax(0, 1fr); gap: 16px; }
+  .rt-text small { display: none; }
+  .rail-tab { min-height: 48px; }
+  .pane-panels.on { grid-template-columns: minmax(0, 1fr); }
+  .pane-look.on, .pane-features.on, .pane-system.on { grid-template-columns: minmax(0, 1fr); grid-template-areas: none; }
+  .pane-look.on > *, .pane-features.on > *, .pane-system.on > * { grid-area: auto; }
+  .ed-head, .ed-row { grid-template-columns: 40px minmax(110px, 160px) minmax(80px, 1fr) 130px 42px 40px 34px; }
+}
+@media (max-height: 820px) {
+  .rt-text small { display: none; }
+  .rail-tab { min-height: 46px; }
+  .spark { height: 90px; }
+  .meter.mem .spark { height: 76px; }
+}
+
+/* ───────────── világos téma: kerek sarkok a levágottak helyett ───────────── */
+html[data-scheme="light"] :is(.rail-tab, .rail-glow, .rng, .sw i, .pd-hot) { clip-path: none; border-radius: 7px; }
+html[data-scheme="light"] .rail-glow::before { border-radius: 3px; }
 html[data-scheme="light"] :is(.sec-row, .ed-item) > .grip { clip-path: none; border-radius: 7px; }
+html[data-scheme="light"] :is(.ws-city) { clip-path: none; border-radius: 7px; }
+html[data-scheme="light"] :is(.ws-field input) { border-radius: 5px; }
+html[data-scheme="light"] .ws-go { border-radius: 4px; }
+html[data-scheme="light"] :is(.pal, .pal-demo, .lay-pv, .rail-load, .rail-credit, .cal-row, .sw) { border-radius: 6px; }
+html[data-scheme="light"] .rail-tab.on .rt-text b { text-shadow: none; }
 
+/* ───────────── Panelek: az Eszköztár és a Főkapcsoló gombjainak sorrendje ───────────── */
+.ord-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; }
+.ord-title {
+  display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font: 400 10px/1 var(--f-mono); letter-spacing: .14em;
+  text-transform: uppercase; color: var(--c-text-dim);
+}
+.ord-title svg { width: 14px; height: 14px; color: var(--c-alt); }
+.ord-item { flex: 1; cursor: default; }
+.ord-item:hover { background: color-mix(in srgb, var(--c-main) 7%, transparent); }
+.ord-list .sec-row.dragging .ord-item { background: color-mix(in srgb, var(--c-alt) 12%, var(--c-bg)); outline: 1px solid var(--c-alt); }
 
-/* ───────────── Ikonok: a sor ugyanúgy épül, mint a Látható szekcióknál ─────────────
-   A fogantyú a sor mellett külön doboz (ugyanazokkal a szabályokkal, mint a szekcióknál),
-   a sor maga a fogantyútól jobbra kezdődik. */
-.ed-item > .ed-row { flex: 1; min-width: 0; }
-.ed-head, .ed-row { grid-template-columns: 40px minmax(140px, 200px) minmax(120px, 1fr) 160px 42px 40px 34px; }
-.ed-head { padding-left: 42px; }
-.ed-list.sorting .ed-item { transition: transform .18s cubic-bezier(.2, .8, .2, 1); }
-.ed-list.sorting .ed-item.dragging { transition: none; z-index: 2; }
-.ed-list.sorting .ed-item.settling { z-index: 2; transition: transform .16s cubic-bezier(.2, .8, .2, 1); }
-.ed-item.dragging > .ed-row, .ed-item.settling > .ed-row { box-shadow: 0 6px 18px rgba(0, 0, 0, .55), 0 0 10px var(--c-alt-dim); }
-.ed-item.dragging > .ed-row { background: color-mix(in srgb, var(--c-alt) 12%, var(--c-bg)); outline: 1px solid var(--c-alt); }
+/* ───────────── Rendszer: komponensek ───────────── */
+.hw-list { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; gap: 6px 18px; }
+.hw-row {
+  display: grid; grid-template-columns: 18px 104px minmax(0, 1fr); align-items: start; gap: 12px; padding: 9px 14px;
+  background: color-mix(in srgb, var(--c-main) 5%, transparent);
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+}
+.hw-row > svg { width: 18px; height: 18px; color: var(--c-alt); }
+.hw-label { padding-top: 2px; font: 400 10px/1.3 var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--c-text-dim); }
+.hw-val { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.hw-val b { font-size: 14px; color: var(--c-text); font-variation-settings: "wdth" 85, "wght" 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hw-val small { font: 400 11px/1.3 var(--f-mono); color: color-mix(in srgb, var(--c-alt) 70%, var(--c-text)); overflow-wrap: anywhere; }
+.c-hw .ed-none { grid-column: 1 / -1; padding: 6px 2px; }
+#resetAll.armed { color: var(--c-bg); background: var(--c-hot); }
+#resetAll.armed svg { color: var(--c-bg); }
+html[data-scheme="light"] .hw-row { clip-path: none; border-radius: 7px; }
+html[data-scheme="light"] .set-rail { border-radius: 6px; }
+@media (max-width: 1180px) {
+  .hw-list, .ord-pair { grid-template-columns: minmax(0, 1fr); }
+  .wall-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 
-/* Ikonok: a sor elején nincs sárga szegély (mint a Látható szekcióknál); csak a nem
-   telepített program kap piros jelzést */
-.ed-row { border-left: 0; }
-.ed-row.missing { box-shadow: inset 2px 0 0 var(--c-hot); }
+/* a kártyacímek melletti kis szöveg: a nagybetűs ékezetek (É, Ő) ne vágódjanak le */
+.set-card h2 small { line-height: 1.5; margin-block: -3px; }
+
+/* a BE/KI kapcsoló akkora, mint a szegmensválasztók gombjai */
+.set-wrap .sbtn .switch {
+  flex: none; min-width: 46px; height: 26px; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center;
+  font: 400 11px/1 var(--f-display); letter-spacing: .06em; text-transform: uppercase;
+  color: var(--c-text-dim); border: 1px solid color-mix(in srgb, var(--c-main) 22%, transparent);
+}
+.set-wrap .sbtn.toggle.on .switch { color: var(--c-bg); background: var(--c-main); border-color: var(--c-main); }
+html[data-scheme="light"] .set-wrap .sbtn .switch { border-radius: 6px; }
+
+/* memóriafoglalatok: egy sorban, foglalatonként egy cella */
+.hw-slots { display: flex; gap: 4px; margin: 3px 0 1px; }
+.hw-slot {
+  flex: 1 1 0; min-width: 0; display: flex; align-items: baseline; justify-content: center; gap: 5px; padding: 4px 4px 3px;
+  font-style: normal; white-space: nowrap; overflow: hidden;
+  background: color-mix(in srgb, var(--c-main) 14%, transparent); border-top: 2px solid var(--c-main);
+}
+.hw-slot b { font-size: 12px; color: var(--c-text); font-variation-settings: "wdth" 80, "wght" 600; }
+.hw-slot em { font: 400 9.5px/1.3 var(--f-mono); font-style: normal; color: var(--c-text-dim); }
+.hw-slot.empty { background: transparent; border-top-color: color-mix(in srgb, var(--c-text) 22%, transparent); outline: 1px dashed color-mix(in srgb, var(--c-text) 18%, transparent); outline-offset: -1px; }
+.hw-slot.empty b { font-size: 10.5px; font-weight: 400; color: var(--c-text-dim); }
+/* ékezetek: a nagybetűk fölötti jelek (É, Á, Í) ne vágódjanak le */
+.pal-head b { overflow: visible; text-overflow: clip; }
+.ed-path { line-height: 1.8; }
+
+/* Háttértár: teljes szélességben, meghajtónként egy sor */
+.hw-row.wide { grid-column: 1 / -1; }
+
+/* ───────────── kártyacím jobb oldalán Alapállapot gomb (Méretek, Sorrend) ───────────── */
+.set-card h2:has(.card-reset) { align-items: center; margin-top: -6px; margin-bottom: 8px; }
+.card-reset { margin-left: auto; }
+
+/* ───────────── Időjárás: a megtalált hely a mező alatt ───────────── */
+.ws-found { margin-top: 10px; padding-left: 2px; font-size: 12px; line-height: 1.5; color: var(--c-text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-found b { font-weight: 600; color: color-mix(in srgb, var(--c-alt) 75%, var(--c-text)); }
+.ws-found.bad { color: var(--c-hot); }
+.ws-found:empty { display: none; }
+
+/* ───────────── Háttértár: oszlopokban ───────────── */
+.hd-table {
+  display: grid; grid-template-columns: minmax(0, 1.9fr) 64px 52px 64px minmax(0, 1fr) minmax(110px, auto) minmax(110px, .8fr);
+  column-gap: 14px; row-gap: 6px; align-items: center; min-width: 0;
+}
+.hd-table > span { min-width: 0; font-size: 12.5px; color: var(--c-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.5; }
+.hd-table > .hd-h { font: 400 9.5px/1.5 var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--c-text-dim); }
+.hd-name { font-variation-settings: "wdth" 85, "wght" 600; }
+.hd-num { text-align: right; font-variant-numeric: tabular-nums; }
+.hd-vol em { font-style: normal; color: var(--c-text-dim); }
+.hd-use { --m: var(--c-alt); display: flex; align-items: center; gap: 8px; }
+.hd-use.warn { --m: #ffb02e; }
+.hd-use.hot { --m: var(--c-hot); }
+.hd-use i { flex: 1; position: relative; height: 6px; background: color-mix(in srgb, var(--m) 16%, transparent); }
+.hd-use i b { position: absolute; left: 0; top: 0; bottom: 0; background: var(--m); }
+.hd-use em { flex: none; width: 34px; text-align: right; font-style: normal; font-size: 11.5px; color: var(--m); font-variant-numeric: tabular-nums; }
+.hw-row.wide { align-items: start; }
+
+/* ───────────── aktív (sárga hátterű) elemek: kicsit sötétebb árnyalat ───────────── */
+.seg button.on { background: var(--c-main-deep); border-color: var(--c-main-deep); }
+.sbtn.toggle.on .switch, .set-wrap .sbtn.toggle.on .switch { background: var(--c-main-deep); border-color: var(--c-main-deep); }
+.sbtn.primary, .sbtn.primary:disabled:hover { background: var(--c-main-deep); }
+
+/* a Bezárás gomb rámutatáskor is a sötétebb sárgát kapja */
+.set-close:hover { background: var(--c-main-deep); }
+.acc-row .seg button { min-width: 0; padding: 0 9px; }

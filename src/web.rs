@@ -37,6 +37,11 @@ pub(crate) fn health_url(cfg: &Config) -> String {
     format!("cybershell://localhost/hub.html?part=health&lang={}&scheme={}", cfg.language, cfg.scheme)
 }
 
+/// A „Megszakadt a kapcsolat” sáv (a szünet-sáv felülete, más tartalommal).
+pub(crate) fn net_url(cfg: &Config) -> String {
+    format!("cybershell://localhost/hub.html?part=health&kind=net&lang={}&scheme={}", cfg.language, cfg.scheme)
+}
+
 pub(crate) fn launcher_url(cfg: &Config) -> String {
     format!("cybershell://localhost/hub.html?part=launcher&lang={}&scheme={}", cfg.language, cfg.scheme)
 }

@@ -27,7 +27,7 @@
             <div class="pk-title">${icon}<span>${esc(it.title)}</span><button class="pk-x" data-close>${svg('close')}</button></div>
             <div class="pk-box" style="${box(rel(it.box))}">${inner}</div>
           </div>`;
-      }).join('');
+      }).join('') + `<button class="pk-closeall" id="pkCloseAll">${svg('close')}<span>${T('peekCloseAll')}</span></button>`;
       // kirajzolva: a program ekkor jegyzi be a kisképeket és jeleníti meg az ablakot
       post({ type: 'peek-ready', seq: msg.seq });
     };
@@ -49,6 +49,10 @@
       post({ type: 'peek-close', hwnd: Number(card.dataset.hwnd) });
     };
     $('pkItems').addEventListener('click', (e) => {
+      if (e.target.closest('#pkCloseAll')) {
+        for (const c of root.querySelectorAll('.pk-card')) c.classList.add('closing');
+        return post({ type: 'peek-close-all' });
+      }
       const item = e.target.closest('.pm-item');
       if (item) return post({ type: 'menu-pick', cmd: item.dataset.cmd, hwnd: menuHwnd });
       const card = e.target.closest('.pk-card');

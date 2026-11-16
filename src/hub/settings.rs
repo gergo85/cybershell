@@ -10,7 +10,7 @@ use crate::web::nav_url;
 use crate::web::percent_encode;
 use crate::web::push;
 use crate::web::settings_url;
-use crate::{appbar, autostart, clipboard, config, keyhook, sys, wintrack};
+use crate::{appbar, autostart, clipboard, config, keyhook, sys, winsync, wintrack};
 use serde_json::json;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -90,8 +90,53 @@ impl Hub {
             cur if cur.is_empty() => self.cfg.wallpaper.clone(),
             cur => cur,
         };
-        let payload = json!({
+        // a panelek elrendezésének előnézetéhez: az elsődleges képernyő mérete (logikai pixel)
+        let mons = appbar::monitors();
+        let screen = mons.first().map(|m| {
+            let s = (m.dpi as f64 / 96.0).max(0.5);
+            json!({ "w": ((m.rect.right - m.rect.left) as f64 / s).round(), "h": ((m.rect.bottom - m.rect.top) as f64 / s).round() })
+        });
+        let c = &self.cfg;
+        // a naptárak titkos címét nem küldjük ki, csak a kiszolgáló nevét
+        let calendars: Vec<serde_json::Value> = c
+            .calendar
+            .feeds
+            .iter()
+            .map(|f| {
+                let host = f.url.split("://").nth(1).and_then(|r| r.split('/').next()).unwrap_or("");
+                json!({ "name": f.name, "color": f.color, "host": host })
+            })
+            .collect();
+        let extra = json!({
+            "screen": screen,
+            "monitors": mons.len(),
+            "bars": {
+                "icons": c.left_width, "info": c.right_width, "frame": c.frame,
+                "ranges": {
+                    "iconsWidth": config::ICONS_RANGE, "infoWidth": config::INFO_RANGE,
+                    "frame.top": config::FRAME_TB_RANGE, "frame.bottom": config::FRAME_TB_RANGE,
+                    "frame.left": config::FRAME_SIDE_RANGE, "frame.right": config::FRAME_SIDE_RANGE,
+                },
+                "defaults": { "icons": config::Config::default().left_width, "info": config::Config::default().right_width, "frame": config::Frame::default() },
+            },
+            "allMonitors": c.all_monitors,
+            "hideTaskbar": c.hide_taskbar,
+            "activity": { "autoStart": c.activity.auto_start, "sound": c.activity.sound },
+            "calendars": calendars,
+            "webSearch": c.start_menu.web_search,
+            "neonBorder": c.neon_border,
+            "windowsSync": c.windows_sync,
+            "terminalFound": winsync::terminal_installed(),
+            "scheme": c.scheme,
+            "themes": { "dark": c.theme, "light": c.theme_light, "defaultDark": config::Theme::default(), "defaultLight": config::Theme::light() },
+        });
+        if self.hardware.is_none() && !self.hardware_busy {
+            self.hardware_busy = true;
+            std::thread::spawn(|| crate::send(crate::UserEvent::Hardware(sys::hardware())));
+        }
+        let mut payload = json!({
             "type": "settings",
+            "hardware": self.hardware,
             "autostart": autostart::is_enabled(),
             "layout": { "icons": self.cfg.icons_edge, "info": self.cfg.info_edge },
             "winKey": self.cfg.start_menu.win_key,
@@ -109,6 +154,9 @@ impl Hub {
             "wallpapers": self.wallpaper_list(),
             "wallpaper": current_wallpaper,
         });
+        if let (Some(p), Some(e)) = (payload.as_object_mut(), extra.as_object()) {
+            p.extend(e.clone());
+        }
         self.settings_eval(&payload);
     }
 
@@ -322,6 +370,7 @@ impl Hub {
                     wintrack::shell_open(GITHUB_URL, "", "", false);
                 }
                 "exit" => self.exit_requested = true,
+                "reset-all" => self.reset_all(),
                 "autostart" => self.set_autostart(msg["on"].as_bool().unwrap_or(false)),
                 _ => {}
             },
@@ -343,7 +392,7 @@ impl Hub {
             }
             "appearance" => {
                 let v = msg["value"].as_str().unwrap_or("dark");
-                if ["dark", "light", "auto"].contains(&v) && self.cfg.appearance != v {
+                if ["dark", "light", "auto", "windows"].contains(&v) && self.cfg.appearance != v {
                     self.cfg.appearance = v.to_string();
                     log(format!("megjelenés: {v}"));
                     self.cfg.resolve_scheme();
@@ -433,6 +482,47 @@ impl Hub {
                     }
                 }
             }
+            // a csak a config.json-ban szereplő beállítások (méretek, keret, színek, szinkron…)
+            "set" => {
+                self.on_set(msg["key"].as_str().unwrap_or(""), &msg["value"]);
+                self.send_settings();
+            }
+            "cal-add" => {
+                let t = match self.calendar_add(&msg) {
+                    Ok(()) => self.tr("Naptár csatolva.", "Calendar connected."),
+                    Err("dup") => self.tr("Ez a naptár már csatolva van.", "This calendar is already connected."),
+                    Err(_) => self.tr(
+                        "Ez nem iCal-cím. A Google Naptár „Titkos cím iCal formátumban” mezőjét másold be (https://…).",
+                        "That is not an iCal address. Paste the “Secret address in iCal format” from Google Calendar (https://…).",
+                    ),
+                };
+                self.settings_eval(&json!({ "type": "toast", "text": t }));
+                self.send_settings();
+            }
+            "cal-remove" => {
+                self.calendar_remove(msg["i"].as_u64().unwrap_or(u64::MAX) as usize);
+                self.send_settings();
+            }
+            "cal-edit" => {
+                let i = msg["i"].as_u64().unwrap_or(u64::MAX) as usize;
+                if let Some(f) = self.cfg.calendar.feeds.get_mut(i) {
+                    if let Some(n) = msg["name"].as_str().map(str::trim).filter(|n| !n.is_empty()) {
+                        f.name = n.chars().take(40).collect();
+                    }
+                    if let Some(c) = msg["color"].as_str().filter(|c| config::is_hex_color(c)) {
+                        f.color = c.to_lowercase();
+                    }
+                    self.save_config();
+                    self.cal_cache = None;
+                    self.send_calendar_feeds();
+                }
+                self.send_settings();
+            }
+            // a Google Naptár beállításai (itt található a titkos iCal-cím)
+            "cal-help" => {
+                self.settings_lower();
+                wintrack::shell_open("https://calendar.google.com/calendar/r/settings", "", "", false);
+            }
             "save-apps" => {
                 let apps = self.apps_from_settings(&msg["apps"]);
                 log(format!("ikonok mentve: {} db", apps.len()));
@@ -514,6 +604,217 @@ impl Hub {
         }
     }
 
+    /// Egy beállítás módosítása a beállítások felületéről. Csak az itt felsorolt kulcsokat
+    /// fogadjuk el, mindegyiket érvényes tartományra szorítva.
+    pub(crate) fn on_set(&mut self, key: &str, v: &serde_json::Value) {
+        enum Then {
+            Nothing,
+            Relayout,
+            Theme,
+            Sync,
+        }
+        let num = |r: (u32, u32)| v.as_f64().map(|n| (n.round().max(0.0) as u32).clamp(r.0, r.1));
+        let then = match key {
+            "iconsWidth" | "infoWidth" => {
+                let Some(n) = num(if key == "iconsWidth" { config::ICONS_RANGE } else { config::INFO_RANGE }) else { return };
+                let slot = if key == "iconsWidth" { &mut self.cfg.left_width } else { &mut self.cfg.right_width };
+                if *slot == n {
+                    return;
+                }
+                *slot = n;
+                Then::Relayout
+            }
+            "frame.top" | "frame.bottom" | "frame.left" | "frame.right" => {
+                let range = if key == "frame.top" || key == "frame.bottom" { config::FRAME_TB_RANGE } else { config::FRAME_SIDE_RANGE };
+                let Some(n) = num(range) else { return };
+                let f = &mut self.cfg.frame;
+                let slot = match key {
+                    "frame.top" => &mut f.top,
+                    "frame.bottom" => &mut f.bottom,
+                    "frame.left" => &mut f.left,
+                    _ => &mut f.right,
+                };
+                if *slot == n {
+                    return;
+                }
+                *slot = n;
+                Then::Relayout
+            }
+            // Méretek: alapállapot (a két sáv és a négy keret alapértéke)
+            "sizesReset" => {
+                let d = config::Config::default();
+                self.cfg.left_width = d.left_width;
+                self.cfg.right_width = d.right_width;
+                self.cfg.frame = config::Frame::default();
+                Then::Relayout
+            }
+            "allMonitors" => {
+                let Some(b) = v.as_bool() else { return };
+                self.cfg.all_monitors = b;
+                Then::Relayout
+            }
+            "hideTaskbar" => {
+                let Some(b) = v.as_bool() else { return };
+                self.set_hide_taskbar(b);
+                Then::Nothing
+            }
+            "activity.autoStart" => {
+                let Some(b) = v.as_bool() else { return };
+                self.cfg.activity.auto_start = b;
+                Then::Nothing
+            }
+            "activity.sound" => {
+                let Some(b) = v.as_bool() else { return };
+                self.cfg.activity.sound = b;
+                Then::Nothing
+            }
+            "webSearch" => {
+                let Some(t) = v.as_str().map(str::trim) else { return };
+                if !(t.starts_with("https://") || t.starts_with("http://")) || !t.contains("{q}") || t.len() > 500 {
+                    let m = self.tr(
+                        "A webes kereső címe https://-sel kezdődjön, és legyen benne {q}.",
+                        "The web search address must start with https:// and contain {q}.",
+                    );
+                    self.settings_eval(&json!({ "type": "toast", "text": m }));
+                    return;
+                }
+                self.cfg.start_menu.web_search = t.to_string();
+                Then::Nothing
+            }
+            "neonBorder" => {
+                let Some(m) = v.as_str().filter(|m| ["off", "active", "all"].contains(m)) else { return };
+                self.cfg.neon_border = m.to_string();
+                if m == "off" {
+                    self.reset_borders();
+                }
+                Then::Nothing
+            }
+            // Windows kiemelőszín: ki, vagy a téma melyik színe
+            "windowsSync.accentColor" => {
+                let Some(m) = v.as_str().filter(|m| ["off", "main", "alt", "hot"].contains(m)) else { return };
+                let w = &mut self.cfg.windows_sync;
+                w.accent = m != "off";
+                if m != "off" {
+                    w.accent_color = m.to_string();
+                }
+                Then::Sync
+            }
+            "windowsSync.darkMode" | "windowsSync.accent" | "windowsSync.terminal" => {
+                let Some(b) = v.as_bool() else { return };
+                let w = &mut self.cfg.windows_sync;
+                match key {
+                    "windowsSync.darkMode" => w.dark_mode = b,
+                    "windowsSync.accent" => w.accent = b,
+                    _ => w.terminal = b,
+                }
+                Then::Sync
+            }
+            "themeReset" => {
+                match v.as_str() {
+                    Some("dark") => self.cfg.theme = config::Theme::default(),
+                    Some("light") => self.cfg.theme_light = config::Theme::light(),
+                    _ => return,
+                }
+                Then::Theme
+            }
+            k if k.starts_with("theme.") || k.starts_with("themeLight.") => {
+                let Some(c) = v.as_str().filter(|c| config::is_hex_color(c)) else { return };
+                let (scheme, field) = k.split_once('.').unwrap_or_default();
+                let t = if scheme == "theme" { &mut self.cfg.theme } else { &mut self.cfg.theme_light };
+                let slot = match field {
+                    "main" => &mut t.main,
+                    "alt" => &mut t.alt,
+                    "hot" => &mut t.hot,
+                    "bg" => &mut t.bg,
+                    "text" => &mut t.text,
+                    _ => return,
+                };
+                *slot = c.to_lowercase();
+                Then::Theme
+            }
+            _ => return,
+        };
+        log(format!("beállítás: {key} = {v}"));
+        if !self.save_config() {
+            return;
+        }
+        match then {
+            Then::Relayout => self.apply_config(None),
+            Then::Theme => self.push_theme(),
+            Then::Sync => self.sync_windows(),
+            Then::Nothing => {}
+        }
+    }
+
+    /// A gép alkatrészei megérkeztek a háttérszálról.
+    pub(crate) fn on_hardware(&mut self, v: Option<serde_json::Value>) {
+        self.hardware_busy = false;
+        match v {
+            Some(v) => {
+                log(format!("rendszerkomponensek: {}", v["cpu"]["name"].as_str().unwrap_or("?")));
+                self.hardware = Some(v);
+                self.send_settings();
+            }
+            None => log("rendszerkomponensek: nem kérdezhetők le"),
+        }
+    }
+
+    /// Minden beállítás alapértékre. A programok (Ikonok), a Start menü kitűzött elemei, a
+    /// naptárak, a háttérkép, az időjárás helye és az indulás a géppel megmarad; a régi fájl
+    /// `config.backup.json` néven a mellé kerül.
+    pub(crate) fn reset_all(&mut self) {
+        let backup = self.cfg_path.with_file_name("config.backup.json");
+        if let Err(e) = std::fs::copy(&self.cfg_path, &backup) {
+            log(format!("a config.json mentése nem sikerült: {e}"));
+        }
+        let old = std::mem::take(&mut self.cfg);
+        let mut c = config::Config {
+            apps: old.apps,
+            calendar: old.calendar,
+            wallpaper: old.wallpaper,
+            start_with_windows: old.start_with_windows,
+            ..config::Config::default()
+        };
+        c.start_menu.pinned = old.start_menu.pinned;
+        c.weather.city = old.weather.city;
+        c.weather.latitude = old.weather.latitude;
+        c.weather.longitude = old.weather.longitude;
+        c.finish();
+        self.cfg = c;
+        log("minden beállítás alaphelyzetbe állítva (mentés: config.backup.json)");
+        if self.cfg.hide_taskbar != self.want_hidden_taskbar {
+            let on = self.cfg.hide_taskbar;
+            self.set_hide_taskbar(on);
+        }
+        self.reset_borders();
+        self.save_config();
+        self.health_restart();
+        self.apply_config(None);
+        self.push_theme();
+        if let Some(s) = &self.settings {
+            let _ = s.webview.load_url(&nav_url(&settings_url(&self.cfg)));
+        }
+        let t = self.tr(
+            "Minden beállítás alaphelyzetben. A korábbi fájl: config.backup.json",
+            "Everything is back to defaults. The previous file: config.backup.json",
+        );
+        self.toast(&t);
+    }
+
+    /// A Windows tálcájának elrejtése vagy visszaadása menet közben.
+    pub(crate) fn set_hide_taskbar(&mut self, on: bool) {
+        self.cfg.hide_taskbar = on;
+        if on && self.orig_taskbar.is_none() {
+            self.orig_taskbar = Some(appbar::taskbar_state());
+            appbar::hide_taskbar();
+        } else if !on && let Some(st) = self.orig_taskbar.take() {
+            appbar::restore_taskbar(st);
+        }
+        self.want_hidden_taskbar = on;
+        self.save_state();
+        self.layout(true);
+    }
+
     pub(crate) fn wallpaper_dir(&self) -> PathBuf {
         self.cfg_path.parent().map(|p| p.join("wallpapers")).unwrap_or_else(|| PathBuf::from("wallpapers"))
     }
@@ -536,7 +837,12 @@ impl Hub {
             .iter()
             .map(|p| {
                 let s = p.to_string_lossy().to_string();
-                json!({ "path": s, "url": format!("/__file/{}", percent_encode(&s.replace('\\', "/"))) })
+                let name = p.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
+                json!({
+                    "path": s,
+                    "url": format!("/__file/{}", percent_encode(&s.replace('\\', "/"))),
+                    "builtin": DEFAULT_WALLPAPERS.contains(&name.as_str()),
+                })
             })
             .collect()
     }

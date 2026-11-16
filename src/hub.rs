@@ -7,10 +7,12 @@ pub(crate) mod flyout;
 pub(crate) mod health;
 pub(crate) mod icons;
 pub(crate) mod layout;
+pub(crate) mod net;
 pub(crate) mod panel;
 pub(crate) mod preview;
 pub(crate) mod settings;
 pub(crate) mod start;
+pub(crate) mod sync;
 pub(crate) mod theme;
 
 use crate::CLEANUP;
@@ -37,6 +39,7 @@ use crate::web::fly_url;
 use crate::web::health_url;
 use crate::web::launcher_url;
 use crate::web::nav_url;
+use crate::web::net_url;
 use crate::web::peek_url;
 use crate::web::percent_encode;
 use crate::web::push;
@@ -145,6 +148,23 @@ pub(crate) struct Hub {
     /// Parancsok a Spotify-szálnak, és a legutóbbi állapot (újratöltéskor azonnal visszaküldjük).
     pub(crate) media_tx: Option<Sender<media::Cmd>>,
     pub(crate) last_media: Option<String>,
+    /// Neonkeret: az ablakok, amelyek keretét átszíneztük (és a beállított szín).
+    pub(crate) borders: HashMap<isize, u32>,
+    /// A neonkeret-réteg által követett ablak (az utolsó előtérbe került programablak).
+    pub(crate) neon_target: Option<isize>,
+    /// A gép alkatrészei (a beállítások első megnyitásakor kérdezzük le), és hogy folyamatban van-e.
+    pub(crate) hardware: Option<serde_json::Value>,
+    pub(crate) hardware_busy: bool,
+    /// Internetkapcsolat: a piros sáv ablaka, az egymást követő sikertelen mérések, épp
+    /// nincs-e kapcsolat, elrejtették-e a sávot, és a következő mérés ideje.
+    pub(crate) net: Option<HealthWin>,
+    pub(crate) net_misses: u8,
+    pub(crate) net_offline: bool,
+    pub(crate) net_dismissed: bool,
+    pub(crate) next_net_check: Instant,
+    /// A Codex-használat legutóbb elküldött állapota és a következő olvasás ideje.
+    pub(crate) last_codex: Option<String>,
+    pub(crate) next_codex: Instant,
 }
 
 /// Ezek a rendszerfolyamatok ablakai ne jelenjenek meg a futó programok között.
@@ -336,6 +356,9 @@ impl Hub {
             if let Some(u) = &self.last_usage {
                 self.eval_bar(idx, u);
             }
+            if let Some(c) = &self.last_codex {
+                self.eval_bar(idx, c);
+            }
             // újratöltés (pl. panelcsere) után is látszódjon, hogy a beállítások nyitva vannak
             if self.settings.as_ref().is_some_and(|s| s.visible) && self.settings_bar.is_none_or(|b| b == idx) {
                 self.eval_bar(idx, &json!({ "type": "settings-open", "on": true }).to_string());
@@ -390,13 +413,14 @@ impl Hub {
                 self.fly_hide(true);
             }
         }
-        // a Start menü és a kereső is bezárul, ha máshova kattintanak
+        // a Start menü és a kereső is bezárul, ha ugyanazon a képernyőn máshova kattintanak
+        // (a másik képernyőn tett kattintás vagy ott előjövő program nyitva hagyja)
         if let Some(l) = &self.launcher
             && l.visible
             && now.duration_since(l.shown_at) > Duration::from_millis(400)
         {
             let fg = unsafe { GetForegroundWindow() };
-            if fg != l.hwnd {
+            if self.launcher_lost_to(fg) {
                 self.launcher_hide(true);
             }
         }
@@ -419,10 +443,17 @@ impl Hub {
         // „Auto” megjelenés: napkeltekor világosra, napnyugtakor sötétre vált
         if now >= self.next_scheme_check {
             self.next_scheme_check = now + Duration::from_secs(30);
-            if self.cfg.appearance == "auto" && self.cfg.resolve_scheme() {
-                log(format!("megjelenés (auto): {}", self.cfg.scheme));
+            if matches!(self.cfg.appearance.as_str(), "auto" | "windows") && self.cfg.resolve_scheme() {
+                log(format!("megjelenés ({}): {}", self.cfg.appearance, self.cfg.scheme));
                 self.push_theme();
             }
+        }
+        if now >= self.next_net_check {
+            self.next_net_check = now + Duration::from_secs(3);
+            self.net_check();
+        }
+        if self.cfg.sections.codex && now >= self.next_codex {
+            self.codex_send(false);
         }
         if now >= self.next_power {
             self.next_power = now + Duration::from_secs(20);
@@ -568,12 +599,17 @@ impl Hub {
                         log(format!("eszköz nem indult: {target}"));
                     }
                 }
-                // laptop: a Windows saját Wi-Fi-listája, illetve az akkumulátor beállításai
-                "wifi" => {
-                    wintrack::shell_open("ms-availablenetworks:", "", "", false);
-                }
-                "battery" => {
-                    wintrack::shell_open("ms-settings:batterysaver", "", "", false);
+                // laptop: a Windows saját Wi-Fi-listája, az akkumulátor, a hálózat és a Bluetooth
+                // beállításai
+                "wifi" | "battery" | "network" | "bluetooth" => {
+                    let uri = match msg["name"].as_str().unwrap_or("") {
+                        "wifi" => "ms-availablenetworks:",
+                        "battery" => "ms-settings:batterysaver",
+                        "network" => "ms-settings:network-status",
+                        _ => "ms-settings:bluetooth",
+                    };
+                    self.settings_dismiss();
+                    wintrack::shell_open(uri, "", "", false);
                 }
                 _ => {}
             },
@@ -618,6 +654,7 @@ impl Hub {
             "drag-hover" => self.drag_hover(&msg),
             "drop-open" => self.drop_open(&msg),
             "alert" => self.on_alert(msg["on"].as_bool().unwrap_or(false)),
+            "codex-refresh" => self.codex_send(true),
             "usage-refresh" => {
                 if let Some(tx) = &self.usage_wake {
                     let _ = tx.send(());
@@ -639,6 +676,7 @@ impl Hub {
             self.last_fg = Some(wintrack::root_owner(fg));
         }
         let wins = self.tracker.snapshot(&own);
+        self.update_borders(&wins);
         for w in &wins {
             let k = w.hwnd.0 as isize;
             if !self.seen.contains_key(&k) {
@@ -818,6 +856,10 @@ impl Hub {
         if let Some(h) = &self.health {
             let _ = h.webview.load_url(&nav_url(&health_url(&self.cfg)));
         }
+        if let Some(n) = &self.net {
+            let _ = n.webview.load_url(&nav_url(&net_url(&self.cfg)));
+        }
+        self.last_codex = None;
         if self.cfg.health.enabled != self.health_due.is_some() {
             self.health_restart();
         }
@@ -849,6 +891,7 @@ impl Hub {
             return;
         }
         self.shut_down = true;
+        self.reset_borders();
         for b in &self.bars {
             if b.registered {
                 appbar::unregister(b.hwnd);

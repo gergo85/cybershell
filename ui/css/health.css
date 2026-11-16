@@ -33,3 +33,10 @@
 }
 .hb-x svg { width: 14px; height: 14px; stroke-width: 2; }
 .hb-x:hover { background: #fff; color: var(--hb); }
+/* a nagybetűs ékezetek (Á, É) ne vágódjanak le */
+.hb-txt span { line-height: 1.5; }
+
+/* Megszakadt a kapcsolat: két gomb (beállítások, elrejtés), a gombok közt kis rés */
+.hb.net { gap: 10px; }
+.hb.net .hb-txt { margin-right: 4px; }
+.hb-x.hb-icon { width: 34px; padding: 0; justify-content: center; }

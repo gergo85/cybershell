@@ -18,6 +18,8 @@ pub const TITLE_H: f64 = 30.0;
 pub const THUMB_H: f64 = 140.0;
 /// A kiskép és a kártya széle közti hely.
 pub const INSET: f64 = 6.0;
+/// Az alsó sáv az „Összes bezárása” gombbal.
+pub const FOOTER: f64 = 40.0;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Rectf {

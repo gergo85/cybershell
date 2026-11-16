@@ -261,9 +261,10 @@
 .weather:hover, .weather.open { background: color-mix(in srgb, var(--c-alt) 6%, transparent); }
 .weather:hover h3, .weather.open h3 { color: var(--c-alt); }
 
-/* ───────────── laptop (Wi-Fi és akkumulátor) ───────────── */
+/* ───────────── laptop (Wi-Fi, akkumulátor, hálózat, Bluetooth: 2 × 2 gomb) ───────────── */
 .lap-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
 .lap {
+  min-width: 0; overflow: hidden; white-space: nowrap;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
   height: 40px; padding-top: 2px;
   font-size: 8.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--c-text);
@@ -464,3 +465,24 @@ html[data-scheme="light"] .tool { clip-path: none; border-radius: 7px; }
 .right.overflow:not(.horiz) > .sys:not(.sys-start) { bottom: calc(-1 * (var(--ib, 0) * 1px + 10px)); padding-bottom: calc(var(--ib, 0) * 1px + 10px); margin-bottom: calc(-1 * (var(--ib, 0) * 1px + 10px)); margin-top: auto; }
 .right.overflow.horiz > .sys-start { left: calc(-1 * (var(--ia, 0) * 1px + 12px)); padding-left: calc(var(--ia, 0) * 1px + 12px); margin-left: calc(-1 * (var(--ia, 0) * 1px + 12px)); }
 .right.overflow.horiz > .sys:not(.sys-start) { right: calc(-1 * (var(--ib, 0) * 1px + 8px)); padding-right: calc(var(--ib, 0) * 1px + 8px); margin-right: calc(-1 * (var(--ib, 0) * 1px + 8px)); margin-left: auto; }
+
+/* laptop: szűkített panelen alacsonyabb gombok */
+.right.tight .lap { height: 36px; }
+.right.tighter .lap { height: 32px; gap: 2px; }
+
+/* ───────────── kompakt nézet (a beállítások Panelek fülén) ───────────── */
+:is(#claudeSec, #codexSec).compact :is(.lim-reset, .usage-foot) { display: none; }
+#clockSec.compact .sec-line { display: none; }
+
+/* ───────────── aktív (sárga hátterű) gombok: kicsit sötétebb árnyalat ───────────── */
+.sys-btn.open { background: var(--c-main-deep); border-color: var(--c-main-deep); }
+.mu-btns .ib:hover, .mu-btns .mu-play:hover, .mu-btns .mu-shuf:hover { background: var(--c-main-deep); }
+
+/* Dátum kompakt nézetben: a hét nélkül */
+#dateSec.compact .week { display: none; }
+
+/* a hangerő, a Claude és a Codex sávja és százaléka visszafogottabb */
+.vol-pct { opacity: .72; text-shadow: none; }
+.vol-bar i { opacity: .55; box-shadow: none; }
+.lim-head b { opacity: .72; }
+.lim-bar i { opacity: .55; box-shadow: none; }

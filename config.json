@@ -31,6 +31,7 @@
   "sections": {
     "tools": true,
     "claude": true,
+    "codex": false,
     "activity": false,
     "clock": true,
     "date": true,
@@ -41,6 +42,7 @@
     "order": [
       "tools",
       "claude",
+      "codex",
       "activity",
       "weather",
       "music",
@@ -48,7 +50,20 @@
       "clock",
       "date",
       "power"
-    ]
+    ],
+    "toolsOrder": [
+      "calc",
+      "notepad",
+      "search",
+      "snip"
+    ],
+    "powerOrder": [
+      "lock",
+      "sleep",
+      "shutdown",
+      "restart"
+    ],
+    "compact": []
   },
   "appearance": "dark",
   "theme": {
@@ -74,6 +89,13 @@
     "pinned": [],
     "webSearch": "https://www.google.com/search?q={q}",
     "clipboard": true
+  },
+  "neonBorder": "off",
+  "windowsSync": {
+    "darkMode": false,
+    "accent": false,
+    "accentColor": "hot",
+    "terminal": false
   },
   "wallpaper": "",
   "apps": [

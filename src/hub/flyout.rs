@@ -183,18 +183,17 @@ impl Hub {
     }
 
     /// Új naptár csatolása (Google Naptár: „Titkos cím iCal formátumban”).
-    pub(crate) fn calendar_add(&mut self, msg: &serde_json::Value) {
+    /// Hibánál a hiba kódja: "url" (nem iCal-cím) vagy "dup" (már csatolva van).
+    pub(crate) fn calendar_add(&mut self, msg: &serde_json::Value) -> Result<(), &'static str> {
         let mut url = msg["url"].as_str().unwrap_or("").trim().to_string();
         if let Some(rest) = url.strip_prefix("webcal://") {
             url = format!("https://{rest}");
         }
         if !url.starts_with("https://") || url.len() > 2000 {
-            self.fly_eval(&json!({ "type": "cal-error", "error": "url" }));
-            return;
+            return Err("url");
         }
         if self.cfg.calendar.feeds.iter().any(|f| f.url == url) {
-            self.fly_eval(&json!({ "type": "cal-error", "error": "dup" }));
-            return;
+            return Err("dup");
         }
         const COLORS: [&str; 6] = ["#00e1ff", "#f3e600", "#ff2a6d", "#7ee787", "#b26bff", "#ffb02e"];
         let name = msg["name"]
@@ -210,6 +209,19 @@ impl Hub {
         self.cal_cache = None;
         self.send_calendar_feeds();
         self.calendar_fetch(true);
+        Ok(())
+    }
+
+    /// Egy csatolt naptár eltávolítása (sorszám szerint).
+    pub(crate) fn calendar_remove(&mut self, i: usize) {
+        if i < self.cfg.calendar.feeds.len() {
+            let f = self.cfg.calendar.feeds.remove(i);
+            log(format!("naptár eltávolítva: {}", f.name));
+            self.save_config();
+            self.cal_cache = None;
+            self.send_calendar_feeds();
+            self.calendar_fetch(true);
+        }
     }
 
     pub(crate) fn on_fly_ipc(&mut self, raw: &str) {
@@ -217,18 +229,12 @@ impl Hub {
         match msg["type"].as_str().unwrap_or("") {
             "close" => self.fly_hide(false),
             "cal-fetch" => self.calendar_fetch(msg["force"].as_bool().unwrap_or(false)),
-            "cal-add" => self.calendar_add(&msg),
-            "cal-remove" => {
-                let i = msg["i"].as_u64().unwrap_or(u64::MAX) as usize;
-                if i < self.cfg.calendar.feeds.len() {
-                    let f = self.cfg.calendar.feeds.remove(i);
-                    log(format!("naptár eltávolítva: {}", f.name));
-                    self.save_config();
-                    self.cal_cache = None;
-                    self.send_calendar_feeds();
-                    self.calendar_fetch(true);
+            "cal-add" => {
+                if let Err(e) = self.calendar_add(&msg) {
+                    self.fly_eval(&json!({ "type": "cal-error", "error": e }));
                 }
             }
+            "cal-remove" => self.calendar_remove(msg["i"].as_u64().unwrap_or(u64::MAX) as usize),
             // a Google Naptár beállításai (itt található a titkos iCal-cím)
             "cal-help" => {
                 wintrack::shell_open("https://calendar.google.com/calendar/r/settings", "", "", false);

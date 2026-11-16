@@ -14,6 +14,8 @@
   --c-alt-dim: color-mix(in srgb, var(--c-alt) 45%, transparent);
   --c-hot-dim: color-mix(in srgb, var(--c-hot) 45%, transparent);
   --c-panel: color-mix(in srgb, var(--c-main) 4%, var(--c-bg));
+  /* aktív, kitöltött gombok háttere: a fő szín kicsit sötétebben */
+  --c-main-deep: color-mix(in srgb, var(--c-main) 82%, #000);
   --c-text-dim: color-mix(in srgb, var(--c-text) 55%, transparent);
 
   --f-display: "Bahnschrift", "Segoe UI", sans-serif;

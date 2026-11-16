@@ -435,7 +435,8 @@
       ['shell:MyComputerFolder', 'pc', L('Ez a gép', 'This PC')],
       ['ms-settings:', 'settings', L('Windows beállítások', 'Windows Settings')],
     ];
-    $('lxPlaces').innerHTML = FOOT_PLACES.map(([t, icon, name]) => `<button class="lx-fbtn" data-open="${t}" title="${name}">${svg(icon)}</button>`).join('');
+    $('lxPlaces').innerHTML = `<button class="lx-fbtn" data-clipview title="${T('lxClipBtn')}">${svg('clipboard')}</button>` +
+      FOOT_PLACES.map(([t, icon, name]) => `<button class="lx-fbtn" data-open="${t}" title="${name}">${svg(icon)}</button>`).join('');
     const POWER = [['signout', 'logout', T('lxSignOut')], ['lock', 'lock', L('Zárolás', 'Lock')], ['sleep', 'moon', T('pwSleep')],
       ['restart', 'reload', L('Újraindítás', 'Restart')], ['shutdown', 'power', L('Leállítás', 'Shut down')]];
     $('lxPower').innerHTML = POWER.map(([act, icon, name]) => `<button class="lx-fbtn pw-${act}" data-power="${act}" title="${name}">${svg(icon)}</button>`).join('');
@@ -624,6 +625,13 @@
       if (del) { e.stopPropagation(); return removeItem(flat[Number(del.dataset.del)]); }
       const clr = e.target.closest('[data-clear]');
       if (clr) return clearAll(clr.dataset.clear, clr);
+      // Vágólap gomb: a vágólap-előzmények listája (a kereső „v:” előtagja)
+      if (e.target.closest('[data-clipview]')) {
+        $('lxQ').value = 'v: ';
+        $('lxQ').dispatchEvent(new Event('input'));
+        $('lxQ').focus();
+        return;
+      }
       const el = e.target.closest('[data-app], [data-file], .lx-item, [data-open], [data-power]');
       if (!el) return;
       if (el.dataset.app) return runApp(el.dataset.app, e.ctrlKey && e.shiftKey ? 'admin' : '');

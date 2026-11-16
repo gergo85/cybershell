@@ -4,6 +4,7 @@ mod appbar;
 mod apps;
 mod autostart;
 mod clipboard;
+mod codex;
 mod config;
 /// A beágyazott felület és gyári háttérképek (a build.rs készíti).
 mod embedded {
@@ -13,10 +14,12 @@ mod hub;
 mod keyhook;
 mod lifecycle;
 mod media;
+mod neon;
 mod peek;
 mod sys;
 mod usage;
 mod web;
+mod winsync;
 mod wintrack;
 
 use crate::appbar::Edge;
@@ -44,6 +47,7 @@ use crate::web::fly_url;
 use crate::web::health_url;
 use crate::web::launcher_url;
 use crate::web::make_popup;
+use crate::web::net_url;
 use crate::web::peek_url;
 use crate::web::settings_url;
 use crate::wintrack::Matcher;
@@ -66,9 +70,9 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{MOD_ALT, MOD_CONTROL, MOD_NORE
 use windows::Win32::UI::Shell::{ABN_FULLSCREENAPP, ABN_POSCHANGED, DefSubclassProc};
 use windows::Win32::UI::WindowsAndMessaging::{
     FindWindowW, GetForegroundWindow, PostMessageW, RegisterWindowMessageW, SW_SHOWNOACTIVATE, ShowWindow, WM_DISPLAYCHANGE, WM_ENDSESSION,
-    WM_HOTKEY,
+    WM_HOTKEY, WM_SETTINGCHANGE,
 };
-use windows::core::w;
+use windows::core::{PCWSTR, w};
 use wry::http::Request;
 use wry::{WebContext, WebViewBuilder};
 
@@ -117,6 +121,12 @@ enum UserEvent {
     Media(String),
     /// A szünetre figyelmeztető sáv üzenete.
     HealthIpc(String),
+    /// A Windows színbeállításai (sötét/világos mód, kiemelőszín) megváltoztak.
+    SystemTheme,
+    /// A „Megszakadt a kapcsolat” sáv üzenete.
+    NetIpc(String),
+    /// A gép alkatrészeinek lekérdezése elkészült (háttérszálról).
+    Hardware(Option<serde_json::Value>),
     /// Új elem a vágólap-előzményekben (a figyelő szálról).
     Clipboard,
 }
@@ -197,6 +207,13 @@ unsafe extern "system" fn subclass_proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LP
     }
     if msg == WM_DISPLAYCHANGE {
         send(UserEvent::Reposition);
+    }
+    // a Windows sötét/világos módja vagy kiemelőszíne megváltozott
+    if msg == WM_SETTINGCHANGE && lp.0 != 0 {
+        let what = unsafe { PCWSTR(lp.0 as *const u16).to_string() }.unwrap_or_default();
+        if what == "ImmersiveColorSet" {
+            send(UserEvent::SystemTheme);
+        }
     }
     // Kijelentkezés, leállítás: a Windows nem várja meg a szokásos kilépést, ezért
     // itt azonnal visszaadjuk a tálcát és felszabadítjuk a képernyő szélét.
@@ -419,6 +436,7 @@ fn main() {
         hovered: false,
         hide_at: None,
         refresh_at: None,
+        asked_at: None,
     });
     let fly_win = popup("oldalpanel", fly_url(&cfg), (380, 560), true, UserEvent::FlyIpc).map(|(window, webview, hwnd)| FlyWin {
         window,
@@ -434,6 +452,12 @@ fn main() {
         LaunchWin { window, webview, hwnd, visible: false, shown_at: Instant::now(), hidden_at: None, mode: "start", prev: None }
     });
     let health_win = popup("szünet", health_url(&cfg), (660, 66), false, UserEvent::HealthIpc).map(|(window, webview, hwnd)| HealthWin {
+        window,
+        webview,
+        hwnd,
+        visible: false,
+    });
+    let net_win = popup("kapcsolat", net_url(&cfg), (660, 66), false, UserEvent::NetIpc).map(|(window, webview, hwnd)| HealthWin {
         window,
         webview,
         hwnd,
@@ -571,10 +595,23 @@ fn main() {
         apps_busy: false,
         media_tx: None,
         last_media: None,
+        borders: HashMap::new(),
+        neon_target: None,
+        hardware: None,
+        hardware_busy: false,
+        net: net_win,
+        net_misses: 0,
+        net_offline: false,
+        net_dismissed: false,
+        next_net_check: Instant::now() + Duration::from_secs(5),
+        last_codex: None,
+        next_codex: Instant::now(),
     };
     // A telepített programok listája (a Start menünek) háttérben készül el.
     hub.apps_refresh(true);
     hub.health_restart();
+    // a Windows (mód, kiemelőszín) és a Windows Terminal igazítása a témához
+    hub.sync_windows();
     // Win billentyű: saját Start menü (Win) és kereső (Win+S)
     keyhook::set_enabled(hub.cfg.start_menu.win_key);
     clipboard::set_enabled(hub.cfg.start_menu.clipboard);
@@ -650,6 +687,9 @@ fn main() {
                 UserEvent::Media(payload) => hub.on_media(payload),
                 UserEvent::HealthIpc(raw) => hub.on_health_ipc(&raw),
                 UserEvent::Clipboard => hub.send_clips(),
+                UserEvent::SystemTheme => hub.on_system_theme(),
+                UserEvent::Hardware(v) => hub.on_hardware(v),
+                UserEvent::NetIpc(raw) => hub.on_net_ipc(&raw),
             },
             // a claude.ai ablak bezárása csak elrejti
             Event::WindowEvent { window_id, event: WindowEvent::CloseRequested, .. }
@@ -671,6 +711,7 @@ fn main() {
         let _keep_fly = hub.fly.as_ref().map(|f| &f.window);
         let _keep_launcher = hub.launcher.as_ref().map(|l| &l.window);
         let _keep_health = hub.health.as_ref().map(|h| &h.window);
+        let _keep_net = hub.net.as_ref().map(|h| &h.window);
         hub.tick();
         // képernyő került be vagy ki: a sávcsoportokat itt (ablak létrehozására alkalmas helyen) igazítjuk
         if hub.needs_rebuild() {

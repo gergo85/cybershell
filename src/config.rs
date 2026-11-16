@@ -46,8 +46,8 @@ pub struct Config {
     pub calendar: Calendar,
     /// A jobb panel szekcióinak láthatósága.
     pub sections: Sections,
-    /// Megjelenés: "dark" (Cyberpunk 2077), "light" (Ghost in the Shell) vagy "auto"
-    /// (a Windows világos/sötét módját követi).
+    /// Megjelenés: "dark" (Cyberpunk 2077), "light" (Ghost in the Shell), "auto" (napkeltétől
+    /// napnyugtáig világos, éjjel sötét) vagy "windows" (a Windows világos/sötét módját követi).
     pub appearance: String,
     /// A ténylegesen használt séma ("dark" vagy "light"); "auto" esetén a Windowsból számolva.
     #[serde(skip)]
@@ -60,6 +60,11 @@ pub struct Config {
     pub health: Health,
     /// A saját Start menü és kereső.
     pub start_menu: StartMenu,
+    /// Neonkeret más programok ablakain (Windows 11): "off", "active" (csak az aktív ablak
+    /// kerete kapja a téma fő színét) vagy "all" (a többi ablaké halványabban).
+    pub neon_border: String,
+    /// A Windows és a Windows Terminal igazodása a CyberShell témájához.
+    pub windows_sync: WindowsSync,
     /// A beállításokban választott háttérkép teljes útvonala. Ha a fájlban átírod,
     /// újratöltéskor a CyberShell beállítja a Windows háttérképének.
     pub wallpaper: String,
@@ -82,6 +87,8 @@ pub struct Sections {
     /// Eszköztár: Számológép, Jegyzettömb, Keresés, Képmetsző.
     pub tools: bool,
     pub claude: bool,
+    /// A Codex-használat (5 órás és heti keret) szekció; alapból rejtett.
+    pub codex: bool,
     pub activity: bool,
     pub clock: bool,
     pub date: bool,
@@ -96,9 +103,37 @@ pub struct Sections {
     /// A szekciók sorrendje az információs panelen (a Keresés/Indítás és a Főkapcsoló között;
     /// a laptop szekció mindig az időjárás előtt van).
     pub order: Vec<String>,
+    /// Az Eszköztár gombjainak sorrendje: "calc", "notepad", "search", "snip".
+    pub tools_order: Vec<String>,
+    /// A Főkapcsoló gombjainak sorrendje: "lock", "sleep", "shutdown", "restart".
+    pub power_order: Vec<String>,
+    /// Kompakt nézetben lévő szekciók: "claude" és "codex" (a nullázásig hátralévő idő és a
+    /// frissítés sora nélkül), "clock" (a másodperc-számláló nélkül), "date" (a hét nélkül).
+    pub compact: Vec<String>,
 }
 
-pub const SECTION_KEYS: [&str; 9] = ["tools", "claude", "activity", "date", "clock", "weather", "music", "volume", "power"];
+pub const COMPACT_KEYS: [&str; 4] = ["claude", "codex", "clock", "date"];
+
+pub const TOOL_KEYS: [&str; 4] = ["calc", "notepad", "search", "snip"];
+pub const POWER_KEYS: [&str; 4] = ["lock", "sleep", "shutdown", "restart"];
+
+/// Érvényes gombsorrend: minden kulcs pontosan egyszer (a hiányzók a végére kerülnek).
+fn normalize_keys(list: &mut Vec<String>, keys: &[&str]) {
+    let mut out: Vec<String> = Vec::new();
+    for k in list.iter() {
+        if keys.contains(&k.as_str()) && !out.contains(k) {
+            out.push(k.clone());
+        }
+    }
+    for k in keys {
+        if !out.iter().any(|o| o == k) {
+            out.push(k.to_string());
+        }
+    }
+    *list = out;
+}
+
+pub const SECTION_KEYS: [&str; 10] = ["tools", "claude", "codex", "activity", "date", "clock", "weather", "music", "volume", "power"];
 
 impl Default for Sections {
     fn default() -> Self {
@@ -108,6 +143,7 @@ impl Default for Sections {
         Sections {
             tools: true,
             claude: full,
+            codex: false,
             activity: false,
             clock: true,
             date: full,
@@ -117,6 +153,9 @@ impl Default for Sections {
             power: true,
             // alapból az idő a dátum alatt van, alul az időjárás, a zene és a hangerő
             order: SECTION_KEYS.iter().map(|s| s.to_string()).collect(),
+            tools_order: TOOL_KEYS.iter().map(|s| s.to_string()).collect(),
+            power_order: POWER_KEYS.iter().map(|s| s.to_string()).collect(),
+            compact: Vec::new(),
         }
     }
 }
@@ -132,14 +171,24 @@ impl Sections {
         }
         for k in SECTION_KEYS {
             if !order.iter().any(|o| o == k) {
-                // az Eszköztár (v1.4-ben új) alapból a Claude fölé kerül
+                // az Eszköztár (v1.4-ben új) alapból a Claude fölé, a Codex (v1.5) alá kerül
                 match order.iter().position(|o| o == "claude") {
                     Some(i) if k == "tools" => order.insert(i, k.to_string()),
+                    Some(i) if k == "codex" => order.insert(i + 1, k.to_string()),
                     _ => order.push(k.to_string()),
                 }
             }
         }
         self.order = order;
+        normalize_keys(&mut self.tools_order, &TOOL_KEYS);
+        normalize_keys(&mut self.power_order, &POWER_KEYS);
+        let mut compact: Vec<String> = Vec::new();
+        for k in &self.compact {
+            if COMPACT_KEYS.contains(&k.as_str()) && !compact.contains(k) {
+                compact.push(k.clone());
+            }
+        }
+        self.compact = compact;
     }
 }
 
@@ -160,6 +209,28 @@ pub struct StartMenu {
 impl Default for StartMenu {
     fn default() -> Self {
         StartMenu { win_key: true, pinned: Vec::new(), web_search: "https://www.google.com/search?q={q}".into(), clipboard: true }
+    }
+}
+
+/// Szinkron a Windows-zal: bekapcsolva a CyberShell témaváltása a Windowsra is átvezetődik.
+/// Kikapcsoláskor az eredeti Windows-beállítás visszaáll.
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase", default)]
+pub struct WindowsSync {
+    /// A Windows sötét/világos módja (alkalmazások és rendszer) követi a CyberShell sémáját.
+    pub dark_mode: bool,
+    /// A Windows kiemelőszíne a téma egyik színe (`accent_color`).
+    pub accent: bool,
+    /// Melyik színe: "main", "alt" vagy "hot" (alapból "hot": a sárga és a cián a Windows
+    /// világos felületein nehezen olvasható).
+    pub accent_color: String,
+    /// A Windows Terminal színsémája a CyberShell témája („CyberShell Dark” / „CyberShell Light”).
+    pub terminal: bool,
+}
+
+impl Default for WindowsSync {
+    fn default() -> Self {
+        WindowsSync { dark_mode: false, accent: false, accent_color: "hot".into(), terminal: false }
     }
 }
 
@@ -301,6 +372,8 @@ impl Default for Config {
             theme_light: Theme::light(),
             health: Health::default(),
             start_menu: StartMenu::default(),
+            neon_border: "off".into(),
+            windows_sync: WindowsSync::default(),
             wallpaper: String::new(),
             apps: Vec::new(),
         }
@@ -390,17 +463,47 @@ pub fn load(path: &Path) -> Result<Config, String> {
     // A BOM-ot (Jegyzettömb menti így) eldobjuk.
     let text = text.trim_start_matches('\u{feff}');
     let mut cfg: Config = serde_json::from_str(text).map_err(|e| format!("Hibás config.json: {e}"))?;
-    cfg.sections.normalize();
-    cfg.resolve_language();
-    cfg.normalize_edges();
-    cfg.health.minutes = cfg.health.minutes.clamp(5, 480);
-    cfg.resolve_scheme();
+    cfg.finish();
     Ok(cfg)
+}
+
+/// A frame és a sávok vastagságának megengedett tartománya (logikai pixel).
+/// A sávok és a keretek megengedett vastagsága (logikai pixel): az ikonsáv, a panelsáv,
+/// a fenti és lenti, illetve az oldalsó keret.
+pub const ICONS_RANGE: (u32, u32) = (64, 96);
+pub const INFO_RANGE: (u32, u32) = (80, 128);
+pub const FRAME_TB_RANGE: (u32, u32) = (0, 32);
+pub const FRAME_SIDE_RANGE: (u32, u32) = (0, 40);
+
+/// Érvényes #rrggbb szín-e.
+pub fn is_hex_color(s: &str) -> bool {
+    s.len() == 7 && s.starts_with('#') && s[1..].chars().all(|c| c.is_ascii_hexdigit())
 }
 
 pub const EDGE_NAMES: [&str; 4] = ["left", "right", "top", "bottom"];
 
 impl Config {
+    /// Betöltés utáni rendbetétel: sorrend, nyelv, panelhelyek, tartományok, séma.
+    pub fn finish(&mut self) {
+        self.sections.normalize();
+        self.resolve_language();
+        self.normalize_edges();
+        self.health.minutes = self.health.minutes.clamp(5, 480);
+        self.left_width = self.left_width.clamp(ICONS_RANGE.0, ICONS_RANGE.1);
+        self.right_width = self.right_width.clamp(INFO_RANGE.0, INFO_RANGE.1);
+        self.frame.top = self.frame.top.clamp(FRAME_TB_RANGE.0, FRAME_TB_RANGE.1);
+        self.frame.bottom = self.frame.bottom.clamp(FRAME_TB_RANGE.0, FRAME_TB_RANGE.1);
+        self.frame.left = self.frame.left.clamp(FRAME_SIDE_RANGE.0, FRAME_SIDE_RANGE.1);
+        self.frame.right = self.frame.right.clamp(FRAME_SIDE_RANGE.0, FRAME_SIDE_RANGE.1);
+        if !["main", "alt", "hot"].contains(&self.windows_sync.accent_color.as_str()) {
+            self.windows_sync.accent_color = "hot".into();
+        }
+        if !["off", "active", "all"].contains(&self.neon_border.as_str()) {
+            self.neon_border = "off".into();
+        }
+        self.resolve_scheme();
+    }
+
     /// A panelek helye: érvényes, egymástól eltérő szélek (a régi „felcserélt panelek”
     /// beállítást is átváltja).
     pub fn normalize_edges(&mut self) {
@@ -422,11 +525,19 @@ impl Config {
         }
     }
 
-    /// A megjelenés feloldása: "auto" esetén napszak szerint (napnyugtától napkeltéig sötét).
+    /// A megjelenés feloldása: "auto" esetén napszak szerint (napnyugtától napkeltéig sötét),
+    /// "windows" esetén a Windows alkalmazás-módja szerint.
     /// Igazat ad, ha a séma megváltozott.
     pub fn resolve_scheme(&mut self) -> bool {
         let scheme = match self.appearance.as_str() {
             "light" => "light",
+            "windows" => {
+                if crate::winsync::windows_light().unwrap_or(false) {
+                    "light"
+                } else {
+                    "dark"
+                }
+            }
             "auto" => {
                 let geo = self.weather.latitude.zip(self.weather.longitude);
                 if crate::sys::is_night(geo) { "dark" } else { "light" }
@@ -475,7 +586,7 @@ impl Config {
 }
 
 /// A fájlba írt alak: automatikus nyelvnél "auto" kerül bele.
-fn to_json(cfg: &Config) -> serde_json::Result<serde_json::Value> {
+pub fn to_json(cfg: &Config) -> serde_json::Result<serde_json::Value> {
     let mut v = serde_json::to_value(cfg)?;
     if cfg.language_auto {
         v["language"] = serde_json::Value::from("auto");
