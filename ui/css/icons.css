@@ -1,10 +1,13 @@
 /* Ikonok: a programok ikonsávja (alapból bal oldalt). */
 
 /* ───────────── Bal oldali sáv ───────────── */
+/* Az első ikon teteje ugyanott van, ahol a másik oldali panel Start gombjáé (a sáv tetejétől
+   12 px), az utolsó alja pedig ugyanott, ahol a MENÜ gombé (10 px): a lista saját 8 px-es
+   belső margója is beleszámít. */
 .left {
   position: absolute; inset: 0;
   display: flex; flex-direction: column; align-items: center;
-  padding: calc(var(--t) * 1px + 14px) 1px calc(var(--b) * 1px + 12px) 0;
+  padding: calc(var(--ia, 0) * 1px + 4px) 1px calc(var(--ib, 0) * 1px + 2px) 0;
 }
 .apps {
   flex: 1; min-height: 0; width: 100%;
@@ -49,30 +52,26 @@
 .app:hover .tile { background: var(--c-main); }
 .app:hover .tile-in { color: var(--c-main); }
 .app:hover .label { color: var(--c-text); }
-.app:hover .tile img { filter: none; opacity: 1; }
-.app:hover .tile svg, .app:hover .tile img, .qbtn:hover svg {
-  animation: glitch .28s steps(2) 1;
+.app:hover .tile img { opacity: 1; }
+/* hoverkor az ikon egy pillanatra „glitchel” */
+.app:hover .tile svg, .app:hover .tile img {
+  animation: glitch .28s steps(2) 1; animation-delay: var(--hover-delay);
   filter: drop-shadow(1.5px 0 0 var(--c-hot)) drop-shadow(-1.5px 0 0 var(--c-alt));
 }
 .app:active .tile-in { background: color-mix(in srgb, var(--c-main) 35%, var(--c-bg)); }
 
 /* programszín: az ikon és a csempe kerete enyhén a program színét kapja (config "color") */
-.app.pinned[style*="--app"] .tile, .qbtn[style*="--app"] .qtile {
+.app.pinned[style*="--app"] .tile {
   background: color-mix(in srgb, var(--app) 38%, transparent);
 }
-.app.pinned[style*="--app"] .tile-in, .qbtn[style*="--app"] .qtile {
-  color: color-mix(in srgb, var(--app) 72%, var(--c-text));
-}
 .app.pinned[style*="--app"] .tile-in {
+  color: color-mix(in srgb, var(--app) 72%, var(--c-text));
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--app) 12%, transparent), transparent 65%),
     var(--c-bg);
 }
 .app.pinned[style*="--app"]:hover .tile-in, .app.pinned[style*="--app"].active .tile-in { color: var(--app); }
 .app.pinned[style*="--app"]:hover .tile, .app.pinned[style*="--app"].active .tile { background: var(--c-main); }
-
-/* a futó, nem kitűzött programok saját ikonja is kap egy kis színt */
-.app.extra .tile img { filter: grayscale(.45) brightness(1.05); opacity: .9; }
 
 /* fájlhúzás: a kurzor alatti ikon cián kerettel jelez */
 .app.drop .tile { background: var(--c-alt); }
@@ -87,7 +86,8 @@
   opacity: .45;
 }
 .app.extra .tile { background: color-mix(in srgb, var(--c-alt) 30%, transparent); }
-.app.extra .tile img { width: 24px; height: 24px; }
+/* a futó, nem kitűzött programok saját ikonja is kap egy kis színt */
+.app.extra .tile img { width: 24px; height: 24px; filter: grayscale(.45) brightness(1.05); opacity: .9; }
 .app.extra:hover .tile, .app.extra.active .tile { background: var(--c-alt); }
 .app.extra.active::before { background: var(--c-alt); box-shadow: 0 0 8px var(--c-alt); }
 .app.extra.active .label { color: var(--c-alt); }
@@ -99,7 +99,6 @@
 
 /* ───────────── Felcserélt panelek: a belső margók tükrözése ───────────── */
 .left.side-right { padding-left: 1px; padding-right: 0; }
-.app:hover .tile svg, .app:hover .tile img, .qbtn:hover svg { animation-delay: var(--hover-delay); }
 
 /* ───────────── Bal sáv: több ablakos program jelzése ───────────── */
 .app::after {
@@ -114,10 +113,6 @@
   white-space: normal; overflow-wrap: anywhere; text-align: center; line-height: 1.25;
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
 }
-/* Az első ikon teteje ugyanott van, ahol a másik oldali panel Start gombjáé (a sáv tetejétől
-   12 px), az utolsó alja pedig ugyanott, ahol a MENÜ gombé (10 px): a lista saját 8 px-es
-   belső margója is beleszámít. */
-.left { padding-top: calc(var(--ia, 0) * 1px + 4px); padding-bottom: calc(var(--ib, 0) * 1px + 2px); }
 
 /* Ikonnév mutatása kikapcsolva: csak az ikonok (a név a súgóban) */
 .left.no-labels .label { display: none; }

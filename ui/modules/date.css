@@ -1,0 +1,24 @@
+/* Dátum: év, hónap és nap, alatta a hét. Kattintható (naptár). */
+.date { position: relative; margin: -4px -4px; padding: 4px; gap: 4px; cursor: pointer; transition: background-color .12s ease; }
+.date:hover, .date.open { background: color-mix(in srgb, var(--c-alt) 6%, transparent); }
+.date:hover h3, .date.open h3 { color: var(--c-alt); }
+.date-stack {
+  display: flex; flex-direction: column;
+  font-size: 17px; line-height: 1.05; color: var(--c-text-dim);
+  font-variation-settings: "wdth" 75, "wght" 600;
+  font-variant-numeric: tabular-nums;
+}
+.week {
+  font: 700 9px/1 var(--f-mono); letter-spacing: .12em;
+  color: color-mix(in srgb, var(--c-alt) 75%, transparent);
+}
+
+/* álló panelen a dátum és a hét középre rendezve */
+.right:not(.horiz) .date-stack { align-items: center; }
+.right:not(.horiz) .week { text-align: center; }
+
+/* kompakt nézet: a hét nélkül */
+#dateSec.compact .week { display: none; }
+
+/* vízszintes panelen */
+.right.horiz .date { margin: -4px; }

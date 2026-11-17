@@ -24,6 +24,10 @@
   /* a sávok tényleges vastagsága, a program tölti ki */
   --l: 86; --t: 10; --r: 86; --b: 10;
   --arm: 44px;
+
+  /* hover: azonnali reakció, rövid, puha átmenettel (lásd hover.css) */
+  --hover-delay: 0ms; --hover-fade: .12s;
+  color-scheme: dark;
 }
 
 /* lejárt az aktivitás-visszaszámláló: minden keret rózsaszínre vált és lüktet */
@@ -53,9 +57,12 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: squar
     linear-gradient(270deg, var(--c-bg), var(--c-panel));
 }
 
-/* az oldalpanelek belső szélén futó neonvonal, a felső és alsó keret vonalához illesztve */
+/* Az oldalpanelek belső szélén futó neonvonal, a felső és alsó keret vonalához illesztve.
+   --ia / --ib: a sáv két végén lévő (később elhelyezett) merőleges sávok vastagsága; ennyivel
+   beljebb kezdődik a neonvonal és a tartalom. */
 .edge {
   position: absolute; width: 1px;
+  top: calc(var(--ia, 0) * 1px - 1px); bottom: calc(var(--ib, 0) * 1px - 1px);
   background: linear-gradient(to bottom,
     var(--c-main) 0 var(--arm), var(--c-main-dim) var(--arm) calc(100% - var(--arm)), var(--c-main) calc(100% - var(--arm)));
   box-shadow: 0 0 6px var(--c-main-glow);
@@ -68,14 +75,14 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: squar
 .edge::before { top: calc(var(--arm) + 10px); }
 .edge::after { bottom: calc(var(--arm) + 10px); }
 
-/* csempe (a bal sáv ikonjai és a jobb panel gyorsgombjai) */
-.tile, .qtile {
+/* csempe (az Ikonok programjai) */
+.tile {
   position: relative; display: block;
   clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
   background: color-mix(in srgb, var(--c-main) 30%, transparent);
   transition: background .15s;
 }
-.tile-in, .qtile::before {
+.tile-in {
   position: absolute; inset: 1px;
   clip-path: polygon(8.6px 0, 100% 0, 100% calc(100% - 8.6px), calc(100% - 8.6px) 100%, 0 100%, 0 8.6px);
   background:
@@ -90,18 +97,5 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: squar
   100% { transform: translate(0); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .sweep, .sys-btn::before { animation: none !important; display: none; }
+  .sweep { animation: none !important; display: none; }
 }
-
-/* ───────────── Hover: azonnali reakció, rövid, puha átmenettel ───────────── */
-:root { --hover-delay: 0ms; --hover-fade: .12s; --close-delay: 0s; }
-
-/* ───────────── panelek bármelyik szélen ─────────────
-   --ia / --ib: a sáv két végén lévő (később elhelyezett) merőleges sávok vastagsága;
-   ennyivel beljebb kezdődik a neonvonal és a tartalom. */
-.edge { top: calc(var(--ia, 0) * 1px - 1px); bottom: calc(var(--ib, 0) * 1px - 1px); }
-
-/* ───────────── világos téma – Ghost in the Shell ─────────────
-   Hűvös, papírfehér felületek, vékony türkiz és acélkék vonalak, finom műszaki rácsháló
-   (mint a kiberagy-kijelzők), narancsvörös figyelmeztetés. A neonfény helyett tompa árnyék. */
-:root { color-scheme: dark; }

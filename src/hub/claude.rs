@@ -1,12 +1,16 @@
 //! Claude-használat: a claude.ai belépőablak, a lekérdezés és a háttérszál eredményének közzététele.
 
+use crate::UserEvent;
+use crate::config::Config;
 use crate::hub::Hub;
-use crate::log;
 use crate::web::push;
+use crate::{appbar, log, send};
 use serde_json::json;
 use std::time::{Duration, Instant};
-use tao::window::Window;
-use wry::WebView;
+use tao::dpi::PhysicalPosition;
+use tao::window::{Window, WindowBuilder};
+use wry::http::Request;
+use wry::{WebContext, WebView, WebViewBuilder};
 
 /// A claude.ai ablak üresjárati oldala: könnyű, de a claude.ai-hoz tartozik,
 /// így innen elérhetők a saját fiókod adatai (a sütik a CyberShell saját böngészőprofiljában vannak).
@@ -61,6 +65,62 @@ pub(crate) struct ClaudeWeb {
     /// (valóban nincs belépve) vagy "error" (nem érhető el, pl. induláskor még nincs hálózat).
     /// Belépést csak "login" esetén kérünk.
     pub(crate) state: &'static str,
+}
+
+/// A claude.ai ablak: rejtve indul, csak belépéskor jelenik meg. A sütik a CyberShell saját
+/// böngészőprofiljában maradnak, az asztali Claude apphoz nem nyúlunk.
+pub(crate) fn make_claude_window(
+    target: &tao::event_loop::EventLoopWindowTarget<UserEvent>,
+    web_context: &mut WebContext,
+    cfg: &Config,
+) -> Option<ClaudeWeb> {
+    let (mon, _) = appbar::primary_monitor();
+    let window = WindowBuilder::new()
+        .with_title(match cfg.language.as_str() {
+            "en" => "CyberShell – sign in to claude.ai",
+            "pl" => "CyberShell – logowanie do claude.ai",
+            _ => "CyberShell – belépés a claude.ai-ra",
+        })
+        // a tálcán az exe saját ikonja látszódjon (assets/cybershell.rc, 1-es azonosító)
+        .with_window_icon({
+            use tao::platform::windows::IconExtWindows;
+            tao::window::Icon::from_resource(1, None).ok()
+        })
+        .with_visible(false)
+        .with_inner_size(tao::dpi::LogicalSize::new(480.0, 760.0))
+        .with_position(PhysicalPosition::new((mon.left + mon.right) / 2 - 300, (mon.top + mon.bottom) / 2 - 470))
+        .build(target)
+        .ok();
+    window.and_then(|window| {
+        let webview = WebViewBuilder::new_with_web_context(web_context)
+            .with_url(CLAUDE_IDLE_URL)
+            .with_background_color(cfg.bg_rgba())
+            .with_ipc_handler(|req: Request<String>| send(UserEvent::ClaudeWeb(req.body().clone())))
+            // A Google-belépés felugró ablakban zajlik; alapból ezt a komponens letiltaná,
+            // és a claude.ai „There was an error logging you in” hibát adna.
+            .with_new_window_req_handler(|url: String, _features| {
+                log(format!("claude.ai felugró ablak: {}", url.split('?').next().unwrap_or("")));
+                if url.starts_with("https://") { wry::NewWindowResponse::Allow } else { wry::NewWindowResponse::Deny }
+            })
+            .with_on_page_load_handler(|ev, url| {
+                if matches!(ev, wry::PageLoadEvent::Finished) {
+                    send(UserEvent::ClaudeLoaded(url));
+                }
+            })
+            .build(&window)
+            .map_err(|e| log(format!("claude.ai ablak nem hozható létre: {e}")))
+            .ok()?;
+        Some(ClaudeWeb {
+            window,
+            webview,
+            visible: false,
+            next_fetch: Instant::now() + Duration::from_secs(300),
+            ok: None,
+            persisted: false,
+            revived: false,
+            state: "pending",
+        })
+    })
 }
 
 /// A claude.ai munkamenet-sütijeit (amelyek a program bezárásakor elvesznének)

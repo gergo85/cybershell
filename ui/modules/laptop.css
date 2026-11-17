@@ -1,0 +1,31 @@
+/* Laptop: Wi-Fi, akkumulátor, hálózat, Bluetooth (2×2 gomb). */
+.lap-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.lap {
+  min-width: 0; overflow: hidden; white-space: nowrap;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  height: 40px; padding-top: 2px;
+  font-size: 8.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--c-text);
+  font-variation-settings: "wdth" 80, "wght" 600; font-variant-numeric: tabular-nums;
+  background: color-mix(in srgb, var(--app, var(--c-main)) 10%, transparent);
+  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+  transition: background-color .12s ease, color .12s ease;
+}
+.lap svg { display: block; width: 17px; height: 17px; color: color-mix(in srgb, var(--app) 85%, var(--c-text)); }
+.lap .bat { display: block; height: 17px; }
+.bat-fill { fill: currentColor; stroke: none; }
+.bat-bolt { stroke: var(--c-main); stroke-width: 1.8; }
+.lap.low { --app: var(--c-hot); }
+.lap.low span:last-child { color: var(--c-hot); }
+.lap.offline svg { opacity: .35; }
+.lap:hover { background: var(--app); color: var(--c-bg); }
+.lap:hover svg { color: var(--c-bg); }
+.lap:hover .bat-bolt { stroke: var(--c-bg); }
+.lap.low:hover span:last-child { color: var(--c-bg); }
+
+/* szűkített panelen alacsonyabb gombok */
+.right.tight .lap { height: 36px; }
+.right.tighter .lap { height: 32px; gap: 2px; }
+
+/* vízszintes panelen a négy gomb egy sorban */
+.right.horiz .laptop { width: 212px; }
+.right.horiz .lap-grid { grid-template-columns: repeat(4, 1fr); }

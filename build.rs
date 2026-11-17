@@ -36,12 +36,17 @@ fn main() {
     let root = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     let mut ui = Vec::new();
     files(&root.join("ui"), &root.join("ui"), &mut ui);
-    // a gyári háttérképek (a felhasználó által később felvettek nem kerülnek bele)
-    let defaults = ["blue-hexagons.jpg", "circuit-lines.jpg", "dust-bridge.jpg", "hud-interface.jpg", "motherboard.jpg", "tech-plates.jpg"];
-    let walls: Vec<(String, PathBuf)> =
-        defaults.iter().map(|n| (n.to_string(), root.join("wallpapers").join(n))).filter(|(_, p)| p.is_file()).collect();
+    // a gyári háttérképek: a `wallpapers` mappa minden képe (jpg, png, bmp), a fájlnevükkel;
+    // cseréjükhöz elég a mappában kicserélni a fájlokat
+    let mut walls: Vec<(String, PathBuf)> = Vec::new();
+    files(&root.join("wallpapers"), &root.join("wallpapers"), &mut walls);
+    walls.retain(|(rel, p)| {
+        let ext = p.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+        !rel.contains('/') && ["jpg", "jpeg", "png", "bmp"].contains(&ext.as_str())
+    });
 
     println!("cargo:rerun-if-changed=ui");
+    println!("cargo:rerun-if-changed=wallpapers");
     for (_, p) in ui.iter().chain(walls.iter()) {
         println!("cargo:rerun-if-changed={}", p.display());
     }

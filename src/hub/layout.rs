@@ -123,14 +123,15 @@ pub(crate) fn insets_of(cfg: &Config, edge: Edge, size: impl Fn(Edge) -> f64) ->
 pub(crate) fn bar_url(part: &str, edge: Edge, cfg: &Config) -> String {
     let (ia, ib) = insets_of(cfg, edge, |e| thickness_of(cfg, e) as f64);
     format!(
-        "cybershell://localhost/hub.html?part={part}&side={}&l={}&t={}&r={}&b={}&ia={ia}&ib={ib}&lang={}&scheme={}",
+        "cybershell://localhost/hub.html?part={part}&side={}&l={}&t={}&r={}&b={}&ia={ia}&ib={ib}&lang={}&scheme={}{}",
         edge.name(),
         thickness_of(cfg, Edge::Left),
         thickness_of(cfg, Edge::Top),
         thickness_of(cfg, Edge::Right),
         thickness_of(cfg, Edge::Bottom),
         cfg.language,
-        cfg.scheme
+        cfg.scheme,
+        crate::web::tips_param(cfg)
     )
 }
 

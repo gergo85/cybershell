@@ -45,7 +45,8 @@
     let extrasSig = '';
     const renderExtras = (extras, activeKey) => {
       extras = extras || [];
-      const sig = extras.map((x) => `${x.key}|${x.name}`).join('\n');
+      // az ikon címe is benne van: a Store-appok csomagikonja a programlista betöltése után érkezik
+      const sig = extras.map((x) => `${x.key}|${x.name}|${x.icon}`).join('\n');
       if (sig !== extrasSig) {
         extrasSig = sig;
         $('extras').innerHTML = extras.length ? `<div class="extras-sep"></div>` + extras.map((x) => `
@@ -60,6 +61,10 @@
         el.classList.toggle('multi', (counts[el.dataset.key] || 0) >= 2);
       }
     };
+    // ha egy futó program ikonja nem tölthető be, üres hely helyett az általános programikon
+    appsEl.addEventListener('error', (e) => {
+      if (e.target.tagName === 'IMG' && e.target.closest('.extra')) e.target.outerHTML = svg('app');
+    }, true);
     const target = (el) => (el.dataset.key ? { key: el.dataset.key } : { id: Number(el.dataset.id) });
 
     // Fájlhúzás: az ikon fölött időzve előjön a program, ráejtve azzal nyílik meg.

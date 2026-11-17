@@ -6,7 +6,7 @@ use crate::UserEvent;
 use crate::config::Config;
 use crate::log;
 use crate::send;
-use crate::{apps, media, wintrack};
+use crate::{apps, media, tray, wintrack};
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 use tao::dpi::PhysicalSize;
@@ -21,29 +21,35 @@ use wry::http::header::CONTENT_TYPE;
 use wry::http::{Request, Response};
 use wry::{WebContext, WebView, WebViewBuilder, WebViewBuilderExtWindows};
 
+/// Kikapcsolt súgó szövegeknél a felület címébe kerülő jelzés (a felület így már az első
+/// kirajzoláskor title nélkül jelenik meg).
+pub(crate) fn tips_param(cfg: &Config) -> &'static str {
+    if cfg.tooltips { "" } else { "&tips=0" }
+}
+
 pub(crate) fn settings_url(cfg: &Config) -> String {
-    format!("cybershell://localhost/hub.html?part=settings&lang={}&scheme={}", cfg.language, cfg.scheme)
+    format!("cybershell://localhost/hub.html?part=settings&lang={}&scheme={}{}", cfg.language, cfg.scheme, tips_param(cfg))
 }
 
 pub(crate) fn peek_url(cfg: &Config) -> String {
-    format!("cybershell://localhost/hub.html?part=peek&lang={}&scheme={}", cfg.language, cfg.scheme)
+    format!("cybershell://localhost/hub.html?part=peek&lang={}&scheme={}{}", cfg.language, cfg.scheme, tips_param(cfg))
 }
 
 pub(crate) fn fly_url(cfg: &Config) -> String {
-    format!("cybershell://localhost/hub.html?part=fly&lang={}&scheme={}", cfg.language, cfg.scheme)
+    format!("cybershell://localhost/hub.html?part=fly&lang={}&scheme={}{}", cfg.language, cfg.scheme, tips_param(cfg))
 }
 
 pub(crate) fn health_url(cfg: &Config) -> String {
-    format!("cybershell://localhost/hub.html?part=health&lang={}&scheme={}", cfg.language, cfg.scheme)
+    format!("cybershell://localhost/hub.html?part=health&lang={}&scheme={}{}", cfg.language, cfg.scheme, tips_param(cfg))
 }
 
 /// A „Megszakadt a kapcsolat” sáv (a szünet-sáv felülete, más tartalommal).
 pub(crate) fn net_url(cfg: &Config) -> String {
-    format!("cybershell://localhost/hub.html?part=health&kind=net&lang={}&scheme={}", cfg.language, cfg.scheme)
+    format!("cybershell://localhost/hub.html?part=health&kind=net&lang={}&scheme={}{}", cfg.language, cfg.scheme, tips_param(cfg))
 }
 
 pub(crate) fn launcher_url(cfg: &Config) -> String {
-    format!("cybershell://localhost/hub.html?part=launcher&lang={}&scheme={}", cfg.language, cfg.scheme)
+    format!("cybershell://localhost/hub.html?part=launcher&lang={}&scheme={}{}", cfg.language, cfg.scheme, tips_param(cfg))
 }
 
 /// Egy már futó felület újratöltéséhez: a wry csak az első betöltésnél (`with_url`) írja át
@@ -95,6 +101,32 @@ pub(crate) fn serve(ui_dir: &Path, req: &Request<Vec<u8>>) -> Response<Cow<'stat
     // /__appicon/<azonosító>: a Start menü egy programjának ikonja
     if let Some(id) = path.strip_prefix("/__appicon/") {
         return match apps::icon_png(id) {
+            Some(png) => Response::builder()
+                .header(CONTENT_TYPE, "image/png")
+                .header("Cache-Control", "max-age=86400")
+                .body(Cow::Owned(png))
+                .unwrap_or_else(|_| not_found()),
+            None => not_found(),
+        };
+    }
+    // /__userpic: a Windows-fiók profilképe (a Start menü aljára)
+    if path == "/__userpic" {
+        let pic = apps::user_picture().and_then(|p| std::fs::read(&p).ok().map(|d| (p, d)));
+        return match pic {
+            Some((p, data)) => {
+                let png = p.extension().is_some_and(|e| e.eq_ignore_ascii_case("png"));
+                Response::builder()
+                    .header(CONTENT_TYPE, if png { "image/png" } else { "image/jpeg" })
+                    .header("Cache-Control", "no-cache")
+                    .body(Cow::Owned(data))
+                    .unwrap_or_else(|_| not_found())
+            }
+            None => not_found(),
+        };
+    }
+    // /__tray/<azonosító>: egy háttérprogram ikonjának képe az értesítési területről
+    if let Some(id) = path.strip_prefix("/__tray/") {
+        return match tray::icon_png(id) {
             Some(png) => Response::builder()
                 .header(CONTENT_TYPE, "image/png")
                 .header("Cache-Control", "max-age=86400")

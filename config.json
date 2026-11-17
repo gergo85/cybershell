@@ -8,6 +8,7 @@
   "infoEdge": "auto",
   "allMonitors": true,
   "iconLabels": true,
+  "tooltips": true,
   "frame": {
     "top": 10,
     "bottom": 10,
@@ -23,32 +24,54 @@
   "weather": {
     "enabled": true,
     "city": "Budapest",
-    "wind": false
+    "wind": true
+  },
+  "network": {
+    "pingHost": "1.1.1.1"
+  },
+  "currency": {
+    "list": [
+      "EUR",
+      "USD",
+      "HUF",
+      "GBP",
+      "CHF"
+    ]
   },
   "calendar": {
     "feeds": []
   },
   "sections": {
     "tools": true,
-    "claude": true,
+    "claude": false,
     "codex": false,
     "activity": false,
+    "load": false,
+    "network": true,
+    "date": false,
     "clock": true,
-    "date": true,
-    "weather": false,
+    "laptop": true,
+    "weather": true,
+    "currency": false,
     "music": true,
     "volume": true,
+    "tray": true,
     "power": true,
     "order": [
       "tools",
       "claude",
       "codex",
       "activity",
+      "load",
+      "network",
+      "date",
+      "clock",
+      "laptop",
       "weather",
+      "currency",
       "music",
       "volume",
-      "clock",
-      "date",
+      "tray",
       "power"
     ],
     "toolsOrder": [

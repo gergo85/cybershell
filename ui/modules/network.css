@@ -1,0 +1,31 @@
+/* Hálózat: letöltés, feltöltés, ping, alatta az elmúlt perc grafikonja. Kattintható. */
+.netmod { position: relative; margin: -4px; padding: 4px; cursor: pointer; transition: background-color .12s ease; }
+.netmod:hover { background: color-mix(in srgb, var(--c-alt) 6%, transparent); }
+.netmod:hover h3 { color: var(--c-alt); }
+.nm-rows { display: flex; flex-direction: column; gap: 3px; }
+.nm-row { display: flex; align-items: baseline; gap: 5px; white-space: nowrap; }
+.nm-row i { flex: none; width: 9px; font-style: normal; font-size: 12px; line-height: 1; }
+.nm-row b { font: 600 12.5px/1 var(--f-display); font-variation-settings: "wdth" 75, "wght" 650; font-variant-numeric: tabular-nums; color: var(--c-text); }
+.nm-down i { color: var(--c-alt); }
+.nm-up i { color: var(--c-main); }
+.nm-ping { justify-content: space-between; margin-top: 1px; }
+.nm-ping span { font: 400 8.5px/1 var(--f-mono); letter-spacing: .06em; color: var(--c-text-dim); }
+.nm-ping b { color: var(--c-alt); }
+.nm-ping.warn b { color: var(--c-main); }
+.nm-ping.hot b { color: var(--c-hot); }
+
+/* az elmúlt perc: letöltés (kísérő szín), feltöltés (fő szín, halványan) */
+.nm-spark { display: block; width: 100%; height: 22px; margin-top: 2px; overflow: visible; }
+.nm-spark path { fill: none; stroke-width: 1.3; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.nm-down-line { stroke: var(--c-alt); }
+.nm-up-line { stroke: color-mix(in srgb, var(--c-main) 55%, transparent); }
+
+/* kompakt nézet: grafikon nélkül */
+#networkSec.compact .nm-spark { display: none; }
+
+/* vízszintes panelen a számok és a grafikon egymás mellett */
+.right.horiz .netmod { width: 170px; display: grid; grid-template-columns: 1fr 64px; grid-template-areas: "h h" "rows spark"; column-gap: 10px; row-gap: 4px; align-content: start; }
+.right.horiz .netmod h3 { grid-area: h; }
+.right.horiz .nm-rows { grid-area: rows; }
+.right.horiz .nm-spark { grid-area: spark; height: 100%; margin: 0; }
+.right.horiz #networkSec.compact { grid-template-columns: 1fr; }

@@ -28,13 +28,14 @@ Mentés után nyomd meg a `Ctrl+Alt+R`-t.
 
 | Mező | Jelentés |
 |---|---|
-| `language` | A felület nyelve: `"auto"` (alapérték: magyar Windowson magyar, minden másnál angol), `"hu"` vagy `"en"`. A beállításokban választott nyelv felülírja az automatikusat. A szövegek az `ui\i18n.js` fájlban vannak, új nyelv is felvehető. |
+| `language` | A felület nyelve: `"auto"` (alapérték: magyar Windowson magyar, lengyelen lengyel, minden másnál angol), `"en"`, `"hu"` vagy `"pl"`. A beállításokban választott nyelv felülírja az automatikusat. A szövegek az `ui\i18n.js` fájlban vannak, új nyelv is felvehető. |
 | `startWithWindows` | Induljon-e a CyberShell bejelentkezéskor. A fájl az irányadó: indításkor ehhez igazítja a Windows beállítását. |
 | `iconsEdge`, `infoEdge` | Az Ikonok és az információs panel helye: `"left"`, `"right"`, `"top"` vagy `"bottom"` (az Ikonok alapból `left`). Az `infoEdge` lehet `"auto"` is (ez az alapérték): laptopon (akkumulátoros gépen) `bottom`, mert oldalt a kisebb képernyőn nem fér ki minden, asztali gépen `right`. Nem lehetnek ugyanott. A régi `swapSides: true` beállítást a program magától `right`/`left`-re váltja. |
 | `iconLabels` | `false` esetén az Ikonok sávján nem látszik a programok neve (alapból `true`). |
+| `tooltips` | Súgó szövegek: `false` esetén sehol nem jelennek meg az elemek fölött időzve felbukkanó magyarázatok (alapból `true`). |
 | `allMonitors` | `false` esetén a CyberShell csak az elsődleges képernyőn jelenik meg (alapból mindegyiken). |
 | `calendar.feeds` | A csatolt naptárak (név, iCal-cím, szín). A naptárban is felvehetők és törölhetők. |
-| `sections` | Az információs panel szekcióinak láthatósága (`tools`, `claude`, `codex` – alapból `false` –, `activity`, `date`, `clock`, `weather`, `music`, `volume`, `power`) és sorrendje (`order`). Ami a sorrendből hiányzik, a végére kerül (az Eszköztár a Claude elé). |
+| `sections` | Az információs panel moduljainak láthatósága (`tools`, `claude`, `codex`, `activity`, `load`, `network`, `date`, `clock`, `laptop`, `weather`, `currency`, `music`, `volume`, `tray`, `power`; alapból rejtett a `claude`, a `codex`, az `activity`, a `load`, a `date` és a `currency`; a `laptop` csak akkumulátoros gépen látszik) és sorrendje (`order`). Ami a sorrendből hiányzik, az alapsorrend szerinti szomszédja mellé kerül. |
 | `startMenu.winKey` | `true` (alapból): a `Win` billentyű a CyberShell Start menüjét, a `Win+S` a keresőjét nyitja meg. `false` esetén a Windows sajátja jön. |
 | `startMenu.pinned` | A Start menübe kitűzött programok azonosítói (a menüben jobb gombbal kitűzve kerülnek ide). |
 | `startMenu.webSearch` | A webes keresés címe, a `{q}` helyére kerül a keresett szöveg (alapból Google). |

@@ -9,6 +9,22 @@
 <link rel="stylesheet" href="css/strip.css">
 <link rel="stylesheet" href="css/icons.css">
 <link rel="stylesheet" href="css/panel.css">
+<!-- az információs panel moduljai (a Codex a Claude stílusát használja) -->
+<link rel="stylesheet" href="modules/tools.css">
+<link rel="stylesheet" href="modules/claude.css">
+<link rel="stylesheet" href="modules/activity.css">
+<link rel="stylesheet" href="modules/load.css">
+<link rel="stylesheet" href="modules/network.css">
+<link rel="stylesheet" href="modules/date.css">
+<link rel="stylesheet" href="modules/clock.css">
+<link rel="stylesheet" href="modules/laptop.css">
+<link rel="stylesheet" href="modules/weather.css">
+<link rel="stylesheet" href="modules/currency.css">
+<link rel="stylesheet" href="modules/music.css">
+<link rel="stylesheet" href="modules/volume.css">
+<link rel="stylesheet" href="modules/tray.css">
+<link rel="stylesheet" href="modules/power.css">
+<link rel="stylesheet" href="css/hover.css">
 <link rel="stylesheet" href="css/peek.css">
 <link rel="stylesheet" href="css/flyout.css">
 <link rel="stylesheet" href="css/settings.css">
@@ -19,11 +35,27 @@
 </head>
 <body>
 <div id="root"></div>
-<!-- adatok: ikonok, szövegek -->
+<!-- adatok (ikonok, szövegek), közös segédek -->
 <script src="icons.js"></script>
 <script src="i18n.js"></script>
-<!-- közös segédek, majd felületenként egy fájl; az indító a cím szerint választ közülük -->
 <script src="core.js"></script>
+<!-- az információs panel moduljai: a sorrendjük az alapsorrend a panelen (leírás: modules/README.md) -->
+<script src="modules/tools.js"></script>
+<script src="modules/claude.js"></script>
+<script src="modules/codex.js"></script>
+<script src="modules/activity.js"></script>
+<script src="modules/load.js"></script>
+<script src="modules/network.js"></script>
+<script src="modules/date.js"></script>
+<script src="modules/clock.js"></script>
+<script src="modules/laptop.js"></script>
+<script src="modules/weather.js"></script>
+<script src="modules/currency.js"></script>
+<script src="modules/music.js"></script>
+<script src="modules/volume.js"></script>
+<script src="modules/tray.js"></script>
+<script src="modules/power.js"></script>
+<!-- felületenként egy fájl; az indító (hub.js) a cím szerint választ közülük -->
 <script src="parts/strip.js"></script>
 <script src="parts/icons.js"></script>
 <script src="parts/panel.js"></script>

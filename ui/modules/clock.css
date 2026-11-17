@@ -1,0 +1,29 @@
+/* Idő: egysoros óra és perc, alatta a másodperc-sáv. */
+.clock-row {
+  display: flex; align-items: baseline; justify-content: center;
+  font-size: 30px; line-height: 1;
+  font-variation-settings: "wdth" 75, "wght" 600;
+  font-variant-numeric: tabular-nums;
+}
+.clock-row #hh { color: color-mix(in srgb, var(--c-main) 72%, transparent); text-shadow: 0 0 8px color-mix(in srgb, var(--c-main) 22%, transparent); }
+.clock-row .colon { margin: 0 1px; position: relative; top: -2px; color: color-mix(in srgb, var(--c-text) 45%, transparent); }
+.clock-row #mm { color: color-mix(in srgb, var(--c-text) 68%, transparent); }
+
+/* a perc másodpercei: 12 szakasz, az éppen futó kiemelve */
+.sec-line { display: flex; align-items: center; gap: 6px; }
+.segs { display: flex; gap: 2px; flex: 1; }
+.segs i { flex: 1; height: 4px; background: var(--c-main-faint); }
+.segs i.on { background: var(--c-main-dim); }
+.segs i.now { background: var(--c-alt-dim); }
+.ss { font-family: var(--f-mono); font-size: 10px; color: var(--c-alt-dim); width: 14px; text-align: right; }
+
+/* kompakt nézet: a másodperc-sáv nélkül */
+#clockSec.compact .sec-line { display: none; }
+
+/* világos téma */
+html[data-scheme="light"] .clock-row #hh { color: var(--c-main); }
+html[data-scheme="light"] .clock-row #mm { color: color-mix(in srgb, var(--c-text) 70%, transparent); }
+
+/* vízszintes panelen: az óra a fejléccel egy vonalban kezdődik */
+.right.horiz .clock { width: 112px; }
+.right.horiz .clock-row { justify-content: flex-start; }

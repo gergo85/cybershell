@@ -1,5 +1,5 @@
 (() => {
-  const { $, q, part, lang, T, root, demo, post, setTheme, svg, esc, pad, fetchJson, resolvePlace, wmoText, wmoIcon } = window.HUB;
+  const { $, q, part, lang, locale, decimal, T, root, demo, post, setTheme, svg, esc, pad, fetchJson, resolvePlace, wmoText, wmoIcon } = window.HUB;
 
   // ───────────── oldalpanel: részletes időjárás és naptár (az információs panel mellett) ─────────────
   function buildFly() {
@@ -40,14 +40,13 @@
       void root.offsetWidth;
       root.classList.add('in');
     };
-    const locale = lang === 'en' ? 'en-GB' : 'hu-HU';
     const hm = (iso) => (iso || '').slice(11, 16);
 
     // ════════════ időjárás ════════════
     let wcfg = null;
     let last = null;   // { at, geo, w }
     let busy = false;
-    const dec = (v) => (lang === 'en' ? v : v.replace('.', ','));
+    const dec = decimal;
     const uvText = (u) => (u < 3 ? T('wUvLow') : u < 6 ? T('wUvMid') : u < 8 ? T('wUvHigh') : T('wUvVeryHigh'));
     const dayName = (iso) => new Intl.DateTimeFormat(locale, { weekday: 'short' })
       .format(new Date(`${iso}T12:00:00`)).replace('.', '').toUpperCase();
@@ -406,7 +405,7 @@
           if (k > 4) cls.push('we');
           if (sameDay(d, today)) cls.push('today');
           if (sameDay(d, sel)) cls.push('sel');
-          const tip = real.length ? ` title="${real.length} ${T('calEventsN')}"` : '';
+          const tip = real.length ? ` title="${T('calEventsN', { n: real.length })}"` : '';
           html += `<button class="${cls.join(' ')}" data-day="${+d}"${tip}><span>${d.getDate()}</span>` +
             `<i class="cg-dots">${colors.map((c) => `<b style="--c:${esc(c)}"></b>`).join('')}</i></button>`;
         }

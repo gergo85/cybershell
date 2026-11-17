@@ -1,4 +1,7 @@
-/* Világos téma (Ghost in the Shell): színek, rácsháló, lekerekített keretek és saját díszítés. */
+/* Világos téma (Ghost in the Shell): színek, rácsháló, lekerekített keretek és saját díszítés.
+   Hűvös, papírfehér felületek, vékony türkiz és acélkék vonalak, finom műszaki rácsháló (mint a
+   kiberagy-kijelzők), narancsvörös figyelmeztetés; a neonfény helyett tompa árnyék. A panel
+   moduljainak saját világos stílusa a modulok fájljában van (modules/<modul>.css). */
 
 html[data-scheme="light"] {
   color-scheme: light;
@@ -33,35 +36,26 @@ html[data-scheme="light"] :is(.lx-brand, .set-title) {
   text-shadow: 1px 0 0 color-mix(in srgb, var(--c-hot) 45%, transparent), -1px 0 0 color-mix(in srgb, var(--c-alt) 45%, transparent);
 }
 html[data-scheme="light"] :is(.act-time, .vol-pct, .w-temp, .clock-row #hh, .lim-head b, .meter-head b) { text-shadow: none; }
-html[data-scheme="light"] .clock-row #hh { color: var(--c-main); }
-html[data-scheme="light"] .clock-row #mm { color: color-mix(in srgb, var(--c-text) 70%, transparent); }
-html[data-scheme="light"] :is(.mu-title, .mu-artist) { text-shadow: 0 0 4px color-mix(in srgb, #fff 80%, transparent); }
-html[data-scheme="light"] .mu-art img { opacity: .55; }
 html[data-scheme="light"] .lx-menu { box-shadow: 0 8px 24px rgba(20, 40, 50, .18); }
 html[data-scheme="light"] .pk-box { background: color-mix(in srgb, var(--c-text) 12%, var(--c-bg)); }
 html[data-scheme="light"] .tile img { filter: grayscale(1) contrast(1.1); opacity: .75; }
 html[data-scheme="light"] .strip { background: color-mix(in srgb, #fff 40%, var(--c-bg)); }
-html[data-scheme="light"] .edge, html[data-scheme="light"] :is(.top, .bottom, .vleft, .vright) .line { box-shadow: none; }
+html[data-scheme="light"] :is(.top, .bottom, .vleft, .vright) .line { box-shadow: none; }
 html[data-scheme="light"] .hb { --hb: #d8202f; }
-html[data-scheme="light"] .mu-art::after {
-  background:
-    repeating-linear-gradient(0deg, rgba(255,255,255,.3) 0 1px, transparent 1px 3px),
-    linear-gradient(180deg, color-mix(in srgb, var(--c-bg) 30%, transparent), color-mix(in srgb, var(--c-bg) 82%, transparent) 70%);
-}
 
 /* ───────────── Ghost in the Shell – saját keretformák és díszítés ─────────────
    A cyberpunkos levágott sarkok, sárga–fekete veszélycsíkok és trapéz helyett: lekerekített,
    vékony vonalas keretek, gyűrűk, pontsorok és finom adatcsík-mintázat (kiberagy-kijelző). */
 /* ikonkeretek: lekerekített, vékony kontúr, hoverkor dupla gyűrű */
-html[data-scheme="light"] :is(.tile, .qtile, .tile-in, .lx-tile, .ed-icon) { clip-path: none; }
-html[data-scheme="light"] :is(.tile, .qtile) { border-radius: 11px; }
-html[data-scheme="light"] .tile-in, html[data-scheme="light"] .qtile::before { clip-path: none; border-radius: 10px; }
-html[data-scheme="light"] .tile-in, html[data-scheme="light"] .qtile::before {
+html[data-scheme="light"] :is(.tile, .tile-in, .lx-tile, .ed-icon) { clip-path: none; }
+html[data-scheme="light"] .tile { border-radius: 11px; }
+html[data-scheme="light"] .tile-in {
+  clip-path: none; border-radius: 10px;
   background:
     radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--c-main) 10%, transparent), transparent 70%),
     color-mix(in srgb, #fff 60%, var(--c-bg));
 }
-html[data-scheme="light"] :is(.app:hover .tile, .app.active .tile, .qbtn:hover .qtile, .qbtn.open .qtile) {
+html[data-scheme="light"] :is(.app:hover .tile, .app.active .tile) {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--c-bg) 100%, transparent), 0 0 0 3px color-mix(in srgb, var(--c-main) 45%, transparent);
 }
 html[data-scheme="light"] :is(.lx-tile, .ed-icon) { border-radius: 10px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-main) 18%, transparent); }
@@ -100,10 +94,9 @@ html[data-scheme="light"] .side-bottom .edge::before, html[data-scheme="light"] 
 /* a futó programok előtti elválasztó: pontsor a csíkok helyett */
 html[data-scheme="light"] .extras-sep {
   opacity: .8;
-  background: radial-gradient(circle, var(--c-main) 1.2px, transparent 1.6px) 0 50% / 7px 7px repeat-x;
+  background: radial-gradient(circle, var(--c-alt) 1.2px, transparent 1.6px) 0 50% / 7px 7px repeat-x;
 }
 html[data-scheme="light"] .left.horiz .extras-sep { background-repeat: repeat-y; background-position: 50% 0; }
-html[data-scheme="light"] .extras-sep { background-image: radial-gradient(circle, var(--c-alt) 1.2px, transparent 1.6px); }
 
 /* vékony keretek (fent, lent, oldalt) */
 html[data-scheme="light"] .strip .line { box-shadow: none; background: var(--c-main-dim); }

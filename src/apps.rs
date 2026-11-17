@@ -63,6 +63,31 @@ fn is_junk(name: &str, id: &str, target: &str) -> bool {
         || t.contains("\\unins") && t.ends_with(".exe")
 }
 
+/// A Windows része-e (és nem telepített program): a Windows mappájában lévő eszközök (Parancssor,
+/// PowerShell, Karaktertábla…), a felügyeleti konzolok (.msc), a héj elemei (Fájlkezelő,
+/// Vezérlőpult, Futtatás), a beépített rendszercsomagok (Gépház, Windows biztonság, Első
+/// lépések…) és a mappára vagy más nem futtatható célra mutató parancsikonok. A Start menü
+/// „Minden alkalmazás” szűrője ez alapján választja szét a telepített programokat.
+pub fn is_system(id: &str, target: &str) -> bool {
+    let t = target.to_lowercase();
+    if t.is_empty() {
+        // Store-app (csomagnév!belépési pont): a Windows saját csomagjai rendszerelemek
+        let family = id.split('!').next().unwrap_or("").to_lowercase();
+        return !id.contains('!')
+            || family.starts_with("windows.")
+            || family.starts_with("microsoftwindows.")
+            || family.starts_with("microsoft.sechealthui");
+    }
+    if t.starts_with("steam://") {
+        return false;
+    }
+    if t.ends_with(".exe") {
+        return t.contains(r"\windows\");
+    }
+    // .msc, ::{CLSID}, mappa és minden más nem futtatható cél
+    true
+}
+
 /// A Windows „Alkalmazások” mappájának elemei, név szerint rendezve.
 /// A hívó szálon COM-nak inicializálva kell lennie.
 pub fn enumerate() -> Vec<StartApp> {
@@ -148,8 +173,13 @@ pub fn icon_png(id: &str) -> Option<Vec<u8>> {
 /// a Notepad.exe-hez). Asztali programnál a parancsikon célja egyezik, Store-appnál a csomag:
 /// a `WindowsApps\<Név>_<verzió>_<arch>__<kiadó>\…` útvonalból a `<Név>_<kiadó>!` azonosító-előtag.
 pub fn name_for_path(list: &[StartApp], path: &str) -> Option<String> {
+    app_for_path(list, path).map(|a| a.name.clone())
+}
+
+/// Egy futó program bejegyzése a Start menü listájában (lásd `name_for_path`).
+pub fn app_for_path<'a>(list: &'a [StartApp], path: &str) -> Option<&'a StartApp> {
     if let Some(a) = list.iter().find(|a| !a.target.is_empty() && a.target.eq_ignore_ascii_case(path)) {
-        return Some(a.name.clone());
+        return Some(a);
     }
     let lower = path.to_lowercase();
     let rest = &path[lower.find("\\windowsapps\\")? + "\\windowsapps\\".len()..];
@@ -158,7 +188,7 @@ pub fn name_for_path(list: &[StartApp], path: &str) -> Option<String> {
     let family = format!("{name}_{publisher}!").to_lowercase();
     let hits: Vec<&StartApp> = list.iter().filter(|a| a.id.to_lowercase().starts_with(&family)).collect();
     // több belépési pontú csomagnál (pl. Office) nem találgatunk
-    (hits.len() == 1).then(|| hits[0].name.clone())
+    (hits.len() == 1).then(|| hits[0])
 }
 
 /// A program ismert-e (csak ismert azonosítót indítunk el).
@@ -276,44 +306,80 @@ pub fn recent_files(limit: usize) -> Vec<(String, String)> {
         .collect()
 }
 
+/// Egy szöveges érték a HKLM alól (üres vagy hiányzó érték: None).
+fn hklm_string(key: &str, value: &str) -> Option<String> {
+    use windows::Win32::System::Registry::{HKEY_LOCAL_MACHINE, RRF_RT_REG_SZ, RegGetValueW};
+    let mut buf = [0u16; 520];
+    let mut len = (buf.len() * 2) as u32;
+    let r = unsafe {
+        RegGetValueW(
+            HKEY_LOCAL_MACHINE,
+            &HSTRING::from(key),
+            &HSTRING::from(value),
+            RRF_RT_REG_SZ,
+            None,
+            Some(buf.as_mut_ptr() as *mut _),
+            Some(&mut len),
+        )
+    };
+    if r.is_err() {
+        return None;
+    }
+    let n = (len as usize / 2).saturating_sub(1).min(buf.len());
+    Some(String::from_utf16_lossy(&buf[..n]).trim().to_string()).filter(|s| !s.is_empty())
+}
+
+/// A bejelentkezett felhasználó egy adata a bejelentkező képernyő nyilvántartásából
+/// (LogonUI\SessionData), pl. a teljes neve vagy a biztonsági azonosítója (SID).
+fn logon_value(value: &str) -> Option<String> {
+    let user = std::env::var("USERNAME").unwrap_or_default().to_lowercase();
+    if user.is_empty() {
+        return None;
+    }
+    (0..32).find_map(|i| {
+        let key = format!(r"SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\LogonUI\SessionData\{i}");
+        let sam = hklm_string(&key, "LoggedOnSAMUser")?.to_lowercase();
+        if !sam.ends_with(&format!("\\{user}")) {
+            return None;
+        }
+        hklm_string(&key, value)
+    })
+}
+
 /// A bejelentkezett felhasználó teljes neve (a Start menü aljára): ugyanaz, amit a Windows a
 /// bejelentkező képernyőn mutat. Ha nem található, a felhasználónév.
 pub fn user_name() -> String {
-    use windows::Win32::System::Registry::{HKEY_LOCAL_MACHINE, RRF_RT_REG_SZ, RegGetValueW};
     static NAME: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-    NAME.get_or_init(|| {
-        let user = std::env::var("USERNAME").unwrap_or_default();
-        let read = |key: &str, value: &str| -> Option<String> {
-            let mut buf = [0u16; 260];
-            let mut len = (buf.len() * 2) as u32;
-            let r = unsafe {
-                RegGetValueW(
-                    HKEY_LOCAL_MACHINE,
-                    &HSTRING::from(key),
-                    &HSTRING::from(value),
-                    RRF_RT_REG_SZ,
-                    None,
-                    Some(buf.as_mut_ptr() as *mut _),
-                    Some(&mut len),
-                )
-            };
-            if r.is_err() {
-                return None;
-            }
-            let n = (len as usize / 2).saturating_sub(1).min(buf.len());
-            Some(String::from_utf16_lossy(&buf[..n]).trim().to_string())
-        };
-        for i in 0..32 {
-            let key = format!("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Authentication\\LogonUI\\SessionData\\{i}");
-            let sam = read(&key, "LoggedOnSAMUser").unwrap_or_default();
-            if !user.is_empty()
-                && sam.to_lowercase().ends_with(&format!("\\{}", user.to_lowercase()))
-                && let Some(name) = read(&key, "LoggedOnDisplayName").filter(|n| !n.is_empty())
-            {
-                return name;
-            }
-        }
-        user
-    })
-    .clone()
+    NAME.get_or_init(|| logon_value("LoggedOnDisplayName").unwrap_or_else(|| std::env::var("USERNAME").unwrap_or_default())).clone()
+}
+
+/// A Windows-fiók profilképe (96 pontos, a Windows ennyit tárol több méretben is): a fájl
+/// útvonala, ha a felhasználó beállított képet. A Start menü a neve mellett mutatja.
+pub fn user_picture() -> Option<PathBuf> {
+    let sid = logon_value("LoggedOnUserSID")?;
+    let key = format!(r"SOFTWARE\Microsoft\Windows\CurrentVersion\AccountPicture\Users\{sid}");
+    ["Image96", "Image192", "Image64"].iter().find_map(|v| hklm_string(&key, v).map(PathBuf::from).filter(|p| p.is_file()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_system;
+
+    #[test]
+    fn installed_or_system() {
+        // telepített programok
+        assert!(!is_system("Chrome", r"C:\Program Files\Google\Chrome\Application\chrome.exe"));
+        assert!(!is_system("ai.artcraft.app", r"C:\Users\x\AppData\Local\ArtCraft\artcraft.exe"));
+        assert!(!is_system("SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify", ""));
+        assert!(!is_system("Microsoft.WindowsCalculator_8wekyb3d8bbwe!App", ""));
+        assert!(!is_system("steam://rungameid/1091500", "steam://rungameid/1091500"));
+        // a Windows részei
+        assert!(is_system(r"{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\cmd.exe", r"C:\WINDOWS\system32\cmd.exe"));
+        assert!(is_system("Microsoft.AutoGenerated.{X}", r"C:\WINDOWS\system32\services.msc"));
+        assert!(is_system("Microsoft.Windows.Explorer", "::{52205FD8-5DFB-447D-801A-D0B52F2E83E1}"));
+        assert!(is_system("windows.immersivecontrolpanel_cw5n1h2txyewy!microsoft.windows.immersivecontrolpanel", ""));
+        assert!(is_system("MicrosoftWindows.Client.CBS_cw5n1h2txyewy!WindowsBackup", ""));
+        assert!(is_system("Microsoft.SecHealthUI_8wekyb3d8bbwe!SecHealthUI", ""));
+        assert!(is_system(r"C:\xampp7\htdocs", r"C:\xampp7\htdocs"));
+    }
 }

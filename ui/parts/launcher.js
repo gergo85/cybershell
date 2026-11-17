@@ -1,5 +1,5 @@
 (() => {
-  const { $, q, lang, T, root, css, demo, post, setTheme, svg, esc, store } = window.HUB;
+  const { $, q, lang, locale, decimal, T, root, css, demo, post, setTheme, svg, esc, store } = window.HUB;
 
   // ───────────── saját Start menü és kereső ─────────────
   // Egy felület, két elrendezés: "start" (az információs panel mellett: kitűzött és gyakori
@@ -27,12 +27,15 @@
               <div class="lx-list" id="lxFreq"></div>
             </section>
             <section class="lx-sec">
-              <h4>${T('lxRecent')}</h4>
+              <h4 id="lxRecentHead">${T('lxRecent')}</h4>
               <div class="lx-list" id="lxRecent"></div>
             </section>
           </div>
           <div class="lx-col lx-all">
             <h4>${T('lxAllApps')}<small id="lxCount"></small></h4>
+            <div class="lx-filter" id="lxFilter">
+              <button data-filter="all">${T('lxFilterAll')}</button><button data-filter="apps" title="${T('lxFilterAppsHint')}">${T('lxFilterApps')}</button><button data-filter="system" title="${T('lxFilterSysHint')}">${T('lxFilterSys')}</button>
+            </div>
             <div class="lx-az" id="lxAz"></div>
             <div class="lx-letters" id="lxLetters"></div>
           </div>
@@ -41,7 +44,7 @@
       </div>
       <footer class="lx-foot">
         <div class="lx-userbox">
-          <div class="lx-user">${svg('user')}<span id="lxUser"></span></div>
+          <div class="lx-user"><span class="lx-avatar" id="lxAvatar">${svg('user')}</span><span id="lxUser"></span></div>
           <button class="lx-fbtn lx-acct" data-open="ms-settings:yourinfo" title="${T('lxAccount')}">${svg('settings')}</button>
           <button class="lx-fbtn lx-acct" data-open="ms-settings:signinoptions" title="${T('lxSignIn')}">${svg('shield')}</button>
         </div>
@@ -146,61 +149,61 @@
     };
 
     // ── beállítások és rendszerműveletek (keresésben) ──
-    const L = (hu, en) => (lang === 'en' ? en : hu);
+    const L = (hu, en, pl) => ({ en, pl }[lang] || hu);
     const SETTINGS = [
-      ['display', L('Kijelző', 'Display'), 'képernyő felbontás monitor fényerő skálázás screen resolution brightness scale'],
-      ['nightlight', L('Éjszakai fény', 'Night light'), 'kék fény blue light'],
-      ['sound', L('Hang', 'Sound'), 'hangszóró mikrofon kimenet bemenet speaker microphone output input audio'],
-      ['apps-volume', L('Hangerőkeverő', 'Volume mixer'), 'hangerő programonként volume per app'],
-      ['notifications', L('Értesítések', 'Notifications'), 'ne zavarjanak do not disturb focus'],
-      ['powersleep', L('Energiagazdálkodás', 'Power & sleep'), 'alvás akkumulátor energia sleep battery power'],
-      ['batterysaver', L('Akkumulátor', 'Battery'), 'energiatakarékos battery saver'],
-      ['storagesense', L('Tárhely', 'Storage'), 'lemez hely meghajtó disk space drive'],
-      ['multitasking', L('Többfeladatos működés', 'Multitasking'), 'ablak elrendezés snap windows'],
-      ['clipboard', L('Vágólap', 'Clipboard'), 'másolás előzmények copy history'],
-      ['about', L('Névjegy (a gép adatai)', 'About (this PC)'), 'rendszer gépnév processzor memória system pc name specs'],
-      ['bluetooth', L('Bluetooth és eszközök', 'Bluetooth & devices'), 'eszköz párosítás device pair'],
-      ['printers', L('Nyomtatók és lapolvasók', 'Printers & scanners'), 'nyomtató print scanner'],
-      ['mousetouchpad', L('Egér', 'Mouse'), 'kurzor görgetés cursor scroll touchpad érintőpad'],
-      ['typing', L('Gépelés', 'Typing'), 'billentyűzet keyboard autocorrect'],
-      ['network', L('Hálózat és internet', 'Network & internet'), 'net ethernet kapcsolat connection'],
-      ['network-wifi', L('Wi-Fi', 'Wi-Fi'), 'wifi vezeték nélküli wireless'],
-      ['network-vpn', L('VPN', 'VPN'), 'virtuális magánhálózat'],
-      ['personalization', L('Személyre szabás', 'Personalization'), 'megjelenés appearance'],
-      ['personalization-background', L('Háttér', 'Background'), 'háttérkép wallpaper'],
-      ['colors', L('Színek', 'Colors'), 'sötét mód világos dark mode light accent'],
-      ['lockscreen', L('Zárolási képernyő', 'Lock screen'), 'zárolás lock'],
-      ['themes', L('Témák', 'Themes'), 'téma theme'],
-      ['fonts', L('Betűtípusok', 'Fonts'), 'betű font'],
-      ['appsfeatures', L('Telepített alkalmazások', 'Installed apps'), 'program eltávolítás uninstall apps'],
-      ['defaultapps', L('Alapértelmezett alkalmazások', 'Default apps'), 'társítás fájltípus default association'],
-      ['startupapps', L('Indítási alkalmazások', 'Startup apps'), 'indítás autostart startup'],
-      ['yourinfo', L('Fiókadatok', 'Your info'), 'fiók account'],
-      ['signinoptions', L('Bejelentkezési lehetőségek', 'Sign-in options'), 'jelszó pin hello password'],
-      ['dateandtime', L('Dátum és idő', 'Date & time'), 'óra időzóna clock time zone'],
-      ['regionlanguage', L('Nyelv és régió', 'Language & region'), 'nyelv billentyűzetkiosztás language region keyboard layout'],
-      ['gaming-gamebar', L('Game Bar', 'Game Bar'), 'játék gaming'],
-      ['easeofaccess', L('Akadálymentesség', 'Accessibility'), 'nagyító felolvasó magnifier narrator'],
-      ['privacy', L('Adatvédelem és biztonság', 'Privacy & security'), 'engedélyek permissions'],
-      ['windowsdefender', L('Windows biztonság', 'Windows Security'), 'vírus védelem tűzfal virus defender firewall'],
-      ['windowsupdate', L('Windows Update', 'Windows Update'), 'frissítés update'],
+      ['display', L('Kijelző', 'Display', 'Ekran'), 'képernyő felbontás monitor fényerő skálázás screen resolution brightness scale'],
+      ['nightlight', L('Éjszakai fény', 'Night light', 'Światło nocne'), 'kék fény blue light'],
+      ['sound', L('Hang', 'Sound', 'Dźwięk'), 'hangszóró mikrofon kimenet bemenet speaker microphone output input audio'],
+      ['apps-volume', L('Hangerőkeverő', 'Volume mixer', 'Mikser głośności'), 'hangerő programonként volume per app'],
+      ['notifications', L('Értesítések', 'Notifications', 'Powiadomienia'), 'ne zavarjanak do not disturb focus'],
+      ['powersleep', L('Energiagazdálkodás', 'Power & sleep', 'Zasilanie i uśpienie'), 'alvás akkumulátor energia sleep battery power'],
+      ['batterysaver', L('Akkumulátor', 'Battery', 'Bateria'), 'energiatakarékos battery saver'],
+      ['storagesense', L('Tárhely', 'Storage', 'Magazyn'), 'lemez hely meghajtó disk space drive'],
+      ['multitasking', L('Többfeladatos működés', 'Multitasking', 'Wielozadaniowość'), 'ablak elrendezés snap windows'],
+      ['clipboard', L('Vágólap', 'Clipboard', 'Schowek'), 'másolás előzmények copy history'],
+      ['about', L('Névjegy (a gép adatai)', 'About (this PC)', 'Informacje (o komputerze)'), 'rendszer gépnév processzor memória system pc name specs'],
+      ['bluetooth', L('Bluetooth és eszközök', 'Bluetooth & devices', 'Bluetooth i urządzenia'), 'eszköz párosítás device pair'],
+      ['printers', L('Nyomtatók és lapolvasók', 'Printers & scanners', 'Drukarki i skanery'), 'nyomtató print scanner'],
+      ['mousetouchpad', L('Egér', 'Mouse', 'Mysz'), 'kurzor görgetés cursor scroll touchpad érintőpad'],
+      ['typing', L('Gépelés', 'Typing', 'Pisanie'), 'billentyűzet keyboard autocorrect'],
+      ['network', L('Hálózat és internet', 'Network & internet', 'Sieć i Internet'), 'net ethernet kapcsolat connection'],
+      ['network-wifi', L('Wi-Fi', 'Wi-Fi', 'Wi-Fi'), 'wifi vezeték nélküli wireless'],
+      ['network-vpn', L('VPN', 'VPN', 'VPN'), 'virtuális magánhálózat'],
+      ['personalization', L('Személyre szabás', 'Personalization', 'Personalizacja'), 'megjelenés appearance'],
+      ['personalization-background', L('Háttér', 'Background', 'Tło'), 'háttérkép wallpaper'],
+      ['colors', L('Színek', 'Colors', 'Kolory'), 'sötét mód világos dark mode light accent'],
+      ['lockscreen', L('Zárolási képernyő', 'Lock screen', 'Ekran blokady'), 'zárolás lock'],
+      ['themes', L('Témák', 'Themes', 'Motywy'), 'téma theme'],
+      ['fonts', L('Betűtípusok', 'Fonts', 'Czcionki'), 'betű font'],
+      ['appsfeatures', L('Telepített alkalmazások', 'Installed apps', 'Zainstalowane aplikacje'), 'program eltávolítás uninstall apps'],
+      ['defaultapps', L('Alapértelmezett alkalmazások', 'Default apps', 'Aplikacje domyślne'), 'társítás fájltípus default association'],
+      ['startupapps', L('Indítási alkalmazások', 'Startup apps', 'Aplikacje autostartu'), 'indítás autostart startup'],
+      ['yourinfo', L('Fiókadatok', 'Your info', 'Twoje informacje'), 'fiók account'],
+      ['signinoptions', L('Bejelentkezési lehetőségek', 'Sign-in options', 'Opcje logowania'), 'jelszó pin hello password'],
+      ['dateandtime', L('Dátum és idő', 'Date & time', 'Data i godzina'), 'óra időzóna clock time zone'],
+      ['regionlanguage', L('Nyelv és régió', 'Language & region', 'Język i region'), 'nyelv billentyűzetkiosztás language region keyboard layout'],
+      ['gaming-gamebar', L('Game Bar', 'Game Bar', 'Game Bar'), 'játék gaming'],
+      ['easeofaccess', L('Akadálymentesség', 'Accessibility', 'Ułatwienia dostępu'), 'nagyító felolvasó magnifier narrator'],
+      ['privacy', L('Adatvédelem és biztonság', 'Privacy & security', 'Prywatność i zabezpieczenia'), 'engedélyek permissions'],
+      ['windowsdefender', L('Windows biztonság', 'Windows Security', 'Zabezpieczenia Windows'), 'vírus védelem tűzfal virus defender firewall'],
+      ['windowsupdate', L('Windows Update', 'Windows Update', 'Windows Update'), 'frissítés update'],
     ].map(([uri, name, kw]) => ({ kind: 'setting', key: `set:${uri}`, uri: `ms-settings:${uri}`, name, kw, icon: 'settings', sub: T('lxSettingSub') }));
     const TOOLS = [
-      ['control', L('Vezérlőpult', 'Control Panel'), 'control panel'],
-      ['devmgmt.msc', L('Eszközkezelő', 'Device Manager'), 'illesztőprogram driver hardver'],
-      ['diskmgmt.msc', L('Lemezkezelés', 'Disk Management'), 'partíció partition meghajtó'],
-      ['services.msc', L('Szolgáltatások', 'Services'), 'service'],
-      ['regedit', L('Beállításszerkesztő', 'Registry Editor'), 'registry rendszerleíró'],
-      ['msinfo32', L('Rendszerinformáció', 'System Information'), 'msinfo hardver'],
-      ['eventvwr.msc', L('Eseménynapló', 'Event Viewer'), 'napló log hiba error'],
+      ['control', L('Vezérlőpult', 'Control Panel', 'Panel sterowania'), 'control panel'],
+      ['devmgmt.msc', L('Eszközkezelő', 'Device Manager', 'Menedżer urządzeń'), 'illesztőprogram driver hardver'],
+      ['diskmgmt.msc', L('Lemezkezelés', 'Disk Management', 'Zarządzanie dyskami'), 'partíció partition meghajtó'],
+      ['services.msc', L('Szolgáltatások', 'Services', 'Usługi'), 'service'],
+      ['regedit', L('Beállításszerkesztő', 'Registry Editor', 'Edytor rejestru'), 'registry rendszerleíró'],
+      ['msinfo32', L('Rendszerinformáció', 'System Information', 'Informacje o systemie'), 'msinfo hardver'],
+      ['eventvwr.msc', L('Eseménynapló', 'Event Viewer', 'Podgląd zdarzeń'), 'napló log hiba error'],
     ].map(([cmd, name, kw]) => ({ kind: 'tool', key: `tool:${cmd}`, cmd, name, kw: `${kw} ${cmd}`, icon: 'terminal', sub: T('lxToolSub', { c: cmd }) }));
     const SYSTEM = [
-      ['lock', L('Zárolás', 'Lock'), 'lezár kijelentkezés lock', 'lock'],
-      ['sleep', L('Alvó állapot', 'Sleep'), 'alvás felfüggesztés sleep suspend', 'moon'],
-      ['restart', L('Újraindítás', 'Restart'), 'újraindít reboot restart', 'reload'],
-      ['shutdown', L('Leállítás', 'Shut down'), 'kikapcsol leáll shutdown power off', 'power'],
-      ['settings', L('CyberShell beállítások', 'CyberShell settings'), 'cybershell menü beállítás settings', 'settings'],
-      ['recycle', L('Lomtár', 'Recycle Bin'), 'kuka törölt trash recycle', 'trash'],
+      ['lock', L('Zárolás', 'Lock', 'Zablokuj'), 'lezár kijelentkezés lock', 'lock'],
+      ['sleep', L('Alvó állapot', 'Sleep', 'Uśpij'), 'alvás felfüggesztés sleep suspend', 'moon'],
+      ['restart', L('Újraindítás', 'Restart', 'Uruchom ponownie'), 'újraindít reboot restart', 'reload'],
+      ['shutdown', L('Leállítás', 'Shut down', 'Wyłącz'), 'kikapcsol leáll shutdown power off', 'power'],
+      ['settings', L('CyberShell beállítások', 'CyberShell settings', 'Ustawienia CyberShell'), 'cybershell menü beállítás settings', 'settings'],
+      ['recycle', L('Lomtár', 'Recycle Bin', 'Kosz'), 'kuka törölt trash recycle', 'trash'],
     ].map(([act, name, kw, icon]) => ({ kind: 'system', key: `sys:${act}`, act, name, kw, icon, sub: T('lxSystemSub') }));
 
     // ── számológép: + − × ÷ ^ % zárójelek, sqrt, pi (eval nélkül) ──
@@ -243,7 +246,7 @@
     };
     const fmtNum = (v) => {
       const r = Math.abs(v) >= 1e15 || (Math.abs(v) < 1e-6 && v !== 0) ? v.toExponential(6) : String(+v.toPrecision(12));
-      return lang === 'en' ? r : r.replace('.', ',');
+      return decimal(r);
     };
 
     // ── találatok összeállítása ──
@@ -332,7 +335,7 @@
     const clipItem = (c) => ({
       kind: 'clip', key: `clip:${c.id}`, id: c.id, icon: 'clipboard',
       name: c.text.replace(/\s+/g, ' ').trim().slice(0, 160),
-      sub: T('lxClipSub', { s: c.source ? `${c.source} · ` : '', t: ago(c.at), n: c.len.toLocaleString(lang === 'en' ? 'en' : 'hu') }),
+      sub: T('lxClipSub', { s: c.source ? `${c.source} · ` : '', t: ago(c.at), n: c.len.toLocaleString(locale) }),
     });
     const fileItem = (f) => ({ kind: 'file', key: `file:${f.path}`, name: f.name, sub: T('lxRecentFile'), icon: fileIcon(f.name), path: f.path });
 
@@ -352,9 +355,8 @@
     // csoportcím, a vágólapnál és a legutóbbi fájloknál „Összes törlése” gombbal (két kattintásra)
     let clearArmed = '';
     let clearTimer = 0;
-    const groupHead = (g) => `<h4>${esc(g.title)}${g.clear
-      ? `<button class="lx-clear${clearArmed === g.clear ? ' armed' : ''}" data-clear="${g.clear}" title="${T(g.clear === 'clip' ? 'lxClipClearHint' : 'lxRecentClearHint')}">${svg('trash')}<span>${T(clearArmed === g.clear ? 'lxClearSure' : 'lxClearAll')}</span></button>`
-      : ''}</h4>`;
+    const clearBtn = (what) => `<button class="lx-clear${clearArmed === what ? ' armed' : ''}" data-clear="${what}" title="${T(what === 'clip' ? 'lxClipClearHint' : 'lxRecentClearHint')}">${svg('trash')}<span>${T(clearArmed === what ? 'lxClearSure' : 'lxClearAll')}</span></button>`;
+    const groupHead = (g) => `<h4>${esc(g.title)}${g.clear ? clearBtn(g.clear) : ''}</h4>`;
     const renderResults = () => {
       const groups = build(input.value);
       flat = groups.flatMap((g) => g.items);
@@ -397,19 +399,36 @@
       const c = norm(name).replace(/^[^a-z0-9]+/, '')[0] || '#';
       return /[a-z]/.test(c) ? c.toUpperCase() : '#';
     };
+    // Minden alkalmazás: mind, csak a telepített programok, vagy csak a Windows részei (eszközök,
+    // konzolok, mappák); a választás megmarad
+    const FILTER_KEY = 'cybershell.start.filter';
+    let filter = ['all', 'apps', 'system'].includes(store.get(FILTER_KEY)) ? store.get(FILTER_KEY) : 'apps';
+    const shown = (a) => filter === 'all' || (filter === 'system') === !!a.system;
+    $('lxFilter').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-filter]');
+      if (!b || b.dataset.filter === filter) return;
+      filter = b.dataset.filter;
+      store.set(FILTER_KEY, filter);
+      renderHome();
+      $('lxAz').scrollTop = 0;
+    });
     const renderHome = () => {
       const pins = pinned.map(byId).filter(Boolean);
       $('lxPins').innerHTML = pins.map(tileHtml).join('') || `<div class="lx-empty small">${T('lxNoPins')}</div>`;
       $('lxPinHint').style.display = pins.length ? 'none' : '';
       const freq = apps.filter((a) => use[appKey(a)]).sort((a, b) => frecency(appKey(b)) - frecency(appKey(a))).slice(0, 5);
       $('lxFreq').innerHTML = freq.map(rowHtml).join('') || `<div class="lx-empty small">${T('lxNoFrequent')}</div>`;
+      // a Start menüben is törölhető az egész lista (mint a keresőben)
+      $('lxRecentHead').innerHTML = `${T('lxRecent')}${recent.length ? clearBtn('recent') : ''}`;
       $('lxRecent').innerHTML = recent.slice(0, 5).map((f) => `
         <button class="lx-row file" data-file="${esc(f.path)}" title="${esc(f.name)}">
           <span class="lx-ico">${svg(fileIcon(f.name))}</span><span class="lx-name">${esc(f.name)}</span>
         </button>`).join('') || `<div class="lx-empty small">${T('lxNoRecent')}</div>`;
       // minden alkalmazás betűnként
       const groups = new Map();
-      for (const a of apps) {
+      const listed = apps.filter(shown);
+      for (const b of $('lxFilter').children) b.classList.toggle('on', b.dataset.filter === filter);
+      for (const a of listed) {
         const l = letterOf(a.name);
         if (!groups.has(l)) groups.set(l, []);
         groups.get(l).push(a);
@@ -419,7 +438,7 @@
         || `<div class="lx-empty">${loading ? T('lxLoading') : T('lxNoHits')}</div>`;
       $('lxLetters').innerHTML = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map((l) =>
         `<button data-letter="${l}"${groups.has(l) ? '' : ' disabled'}>${l}</button>`).join('');
-      $('lxCount').textContent = apps.length ? String(apps.length) : '';
+      $('lxCount').textContent = apps.length ? String(listed.length) : '';
     };
     $('lxLetters').addEventListener('click', (e) => {
       const b = e.target.closest('[data-letter]');
@@ -429,16 +448,25 @@
     });
 
     const FOOT_PLACES = [
-      ['shell:Personal', 'doc', L('Dokumentumok', 'Documents')],
-      ['shell:Downloads', 'download', L('Letöltések', 'Downloads')],
-      ['shell:My Pictures', 'photo', L('Képek', 'Pictures')],
-      ['shell:MyComputerFolder', 'pc', L('Ez a gép', 'This PC')],
-      ['ms-settings:', 'settings', L('Windows beállítások', 'Windows Settings')],
+      ['shell:Personal', 'doc', L('Dokumentumok', 'Documents', 'Dokumenty')],
+      ['shell:Downloads', 'download', L('Letöltések', 'Downloads', 'Pobrane')],
+      ['shell:My Pictures', 'photo', L('Képek', 'Pictures', 'Obrazy')],
+      ['shell:MyComputerFolder', 'pc', L('Ez a gép', 'This PC', 'Ten komputer')],
+      ['ms-settings:', 'settings', L('Windows beállítások', 'Windows Settings', 'Ustawienia systemu Windows')],
     ];
     $('lxPlaces').innerHTML = `<button class="lx-fbtn" data-clipview title="${T('lxClipBtn')}">${svg('clipboard')}</button>` +
       FOOT_PLACES.map(([t, icon, name]) => `<button class="lx-fbtn" data-open="${t}" title="${name}">${svg(icon)}</button>`).join('');
-    const POWER = [['signout', 'logout', T('lxSignOut')], ['lock', 'lock', L('Zárolás', 'Lock')], ['sleep', 'moon', T('pwSleep')],
-      ['restart', 'reload', L('Újraindítás', 'Restart')], ['shutdown', 'power', L('Leállítás', 'Shut down')]];
+    // a Minden alkalmazás oszlop bal széle pontosan a lenti Képek gomb bal széléhez igazodik
+    const alignAllApps = () => {
+      const b = root.querySelector('[data-open="shell:My Pictures"]');
+      const home = $('lxHome');
+      if (!b || !b.offsetWidth || !home.offsetWidth) return;
+      const w = Math.round(home.getBoundingClientRect().right - b.getBoundingClientRect().left);
+      if (w > 200) home.style.setProperty('--all-w', `${w}px`);
+    };
+    window.addEventListener('resize', alignAllApps);
+    const POWER = [['signout', 'logout', T('lxSignOut')], ['lock', 'lock', L('Zárolás', 'Lock', 'Zablokuj')], ['sleep', 'moon', T('pwSleep')],
+      ['restart', 'reload', L('Újraindítás', 'Restart', 'Uruchom ponownie')], ['shutdown', 'power', L('Leállítás', 'Shut down', 'Wyłącz')]];
     $('lxPower').innerHTML = POWER.map(([act, icon, name]) => `<button class="lx-fbtn pw-${act}" data-power="${act}" title="${name}">${svg(icon)}</button>`).join('');
     $('lxKeys').innerHTML = `<span><kbd>ENTER</kbd>${T('lxKeyOpen')}</span>` +
       `<span><kbd>CTRL+SHIFT+ENTER</kbd>${T('lxKeyAdmin')}</span><span><kbd>CTRL+ENTER</kbd>${T('lxKeyFolder')}</span><span><kbd>&gt;</kbd>${T('lxKeyCmd')}</span><span><kbd>V:</kbd>${T('lxKeyClip')}</span>`;
@@ -608,13 +636,15 @@
       if (clearArmed !== what) {
         clearArmed = what;
         clearTimeout(clearTimer);
-        clearTimer = setTimeout(() => { clearArmed = ''; renderResults(); }, 3000);
+        clearTimer = setTimeout(() => { clearArmed = ''; renderResults(); renderHome(); }, 3000);
+        renderHome();
         return renderResults();
       }
       clearArmed = '';
       clearTimeout(clearTimer);
       if (what === 'clip') { clips = []; act({ type: 'clip-clear' }); }
-      else { recent = []; act({ type: 'recent-clear' }); renderHome(); }
+      else { recent = []; act({ type: 'recent-clear' }); }
+      renderHome();
       toast(T(what === 'clip' ? 'lxClipCleared' : 'lxRecentCleared'));
       renderResults();
       void btn;
@@ -717,6 +747,7 @@
       mode = m === 'search' ? 'search' : 'start';
       root.dataset.mode = mode;
       $('lxMode').textContent = mode === 'search' ? T('lxModeSearch') : T('lxModeStart');
+      setTimeout(alignAllApps, 0);
       input.placeholder = T(mode === 'search' ? 'lxPlaceholderSearch' : 'lxPlaceholder');
       input.value = '';
       closeMenu();
@@ -740,6 +771,14 @@
         if (msg.clips !== undefined) clips = msg.clips;
         loading = !!msg.loading && !apps.length;
         $('lxUser').textContent = (msg.user || '').toUpperCase();
+        // a Windows-fiók profilképe az ikon helyén (ha nincs, vagy nem tölthető be, marad az ikon)
+        if (msg.userPic) {
+          const img = new Image();
+          img.className = 'lx-pic';
+          img.alt = '';
+          img.onload = () => $('lxAvatar').replaceChildren(img);
+          img.src = `/__userpic?${Date.now()}`;
+        }
         renderHome();
         if (root.classList.contains('typing')) renderResults();
       }
@@ -756,8 +795,9 @@
         'Topaz Photo AI', 'Word', 'Excel', 'Outlook', 'OneNote', 'Discord', 'Steam', 'Számológép', 'Jegyzettömb', 'Paint', 'Fényképek',
         'Feladatkezelő', 'Parancssor', 'Terminal', 'GitHub Desktop', 'Total Commander', 'VLC media player', '7-Zip File Manager',
         'OBS Studio', 'Figma', 'Notion', 'Obsidian', 'Telegram', 'Zoom', 'DaVinci Resolve', 'Blender', 'Audacity', 'Képmetsző'];
-      const list = names.map((name, i) => ({ id: `demo-${i}`, name, target: i % 3 === 0 ? `C:\\Program Files\\${name}\\${name.split(' ')[0]}.exe` : '', exe: i % 3 === 0 }))
-        .sort((a, b) => a.name.localeCompare(b.name, 'hu'));
+      const list = names.map((name, i) => ({ id: `demo-${i}`, name, target: i % 3 === 0 ? `C:\\Program Files\\${name}\\${name.split(' ')[0]}.exe` : '', exe: i % 3 === 0,
+        system: ['Feladatkezelő', 'Parancssor'].includes(name) }))
+        .sort((a, b) => a.name.localeCompare(b.name, locale));
       use = { 'app:demo-2': { n: 30, t: Date.now() }, 'app:demo-0': { n: 22, t: Date.now() }, 'app:demo-4': { n: 15, t: Date.now() - 3600e3 },
         'app:demo-5': { n: 9, t: Date.now() - 86400e3 }, 'app:demo-3': { n: 5, t: Date.now() - 2 * 86400e3 } };
       h({ type: 'launcher-data', user: 'Demo User', pinned: ['demo-0', 'demo-2', 'demo-4', 'demo-5', 'demo-6', 'demo-3', 'demo-12', 'demo-13'], apps: list,

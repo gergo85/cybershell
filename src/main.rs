@@ -10,22 +10,25 @@ mod config;
 mod embedded {
     include!(concat!(env!("OUT_DIR"), "/embedded.rs"));
 }
+mod hardware;
 mod hub;
 mod keyhook;
 mod lifecycle;
 mod media;
+mod monitor;
 mod neon;
 mod peek;
 mod sys;
+mod tray;
 mod usage;
 mod web;
 mod winsync;
 mod wintrack;
+mod wmi;
 
 use crate::appbar::Edge;
 use crate::hub::Hub;
-use crate::hub::claude::CLAUDE_IDLE_URL;
-use crate::hub::claude::ClaudeWeb;
+use crate::hub::claude::make_claude_window;
 use crate::hub::flyout::FlyWin;
 use crate::hub::health::HealthWin;
 use crate::hub::layout::Bar;
@@ -37,7 +40,6 @@ use crate::hub::layout::make_bar;
 use crate::hub::preview::PeekWin;
 use crate::hub::settings::SettingsWin;
 use crate::hub::start::LaunchWin;
-use crate::lifecycle::default_config;
 use crate::lifecycle::emergency_cleanup;
 use crate::lifecycle::guard;
 use crate::lifecycle::migrate_legacy;
@@ -59,10 +61,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
-use tao::dpi::PhysicalPosition;
 use tao::event::{Event, WindowEvent};
 use tao::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy};
-use tao::window::WindowBuilder;
 use windows::Win32::Foundation::{ERROR_ALREADY_EXISTS, GetLastError, HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::System::Ole::OleInitialize;
 use windows::Win32::System::Threading::CreateMutexW;
@@ -73,8 +73,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     WM_HOTKEY, WM_SETTINGCHANGE,
 };
 use windows::core::{PCWSTR, w};
-use wry::http::Request;
-use wry::{WebContext, WebViewBuilder};
+use wry::WebContext;
 
 const POLL: Duration = Duration::from_millis(500);
 
@@ -119,6 +118,8 @@ enum UserEvent {
     AppsReady(Vec<apps::StartApp>),
     /// A Spotify lejátszásának állapota (háttérszálról).
     Media(String),
+    /// A rendszerfigyelő mérése (Terhelés, Hálózat modul).
+    Monitor(String),
     /// A szünetre figyelmeztető sáv üzenete.
     HealthIpc(String),
     /// A Windows színbeállításai (sötét/világos mód, kiemelőszín) megváltoztak.
@@ -300,9 +301,11 @@ fn main() {
         log("a régi CyberHub „Indulás a géppel” bejegyzése törölve, a CyberShell veszi át");
     }
 
-    // Bejelentkezéskori indulás: megvárjuk, amíg az Intéző és a tálca elkészül,
-    // különben a képernyősávok lefoglalása és a tálca elrejtése nem sikerülne.
-    if flag("--autostart") {
+    // Bejelentkezéskori indulás (a Run kulcs a --autostart kapcsolóval indít, csomagolva az
+    // indítási feladat kapcsoló nélkül): megvárjuk, amíg az Intéző és a tálca elkészül, különben
+    // a képernyősávok lefoglalása és a tálca elrejtése nem sikerülne.
+    let at_logon = flag("--autostart") || autostart::launched_at_logon();
+    if at_logon {
         let t0 = Instant::now();
         while t0.elapsed() < Duration::from_secs(90) {
             if appbar::taskbar_hwnd().is_some() {
@@ -329,60 +332,10 @@ fn main() {
 
     let base_dir = find_base_dir();
     let ui_dir = base_dir.join("ui");
-    // Ha csak az exe-t másolták át (nincs mellette wallpapers mappa), a gyári háttérképeket
-    // kicsomagoljuk; a felületet a beágyazott példányból szolgáljuk ki, ha nincs ui mappa.
-    let wall_dir = base_dir.join("wallpapers");
-    if !wall_dir.exists() && std::fs::create_dir_all(&wall_dir).is_ok() {
-        for (name, data) in embedded::WALLPAPERS {
-            let _ = std::fs::write(wall_dir.join(name), data);
-        }
-        log(format!("gyári háttérképek kicsomagolva: {}", wall_dir.display()));
-    }
     if !ui_dir.join("hub.html").exists() {
         log("nincs ui mappa az exe mellett: a beágyazott felület töltődik be");
     }
-    let cfg_path = value("--config").map(PathBuf::from).unwrap_or_else(|| base_dir.join("config.json"));
-    let mut loaded_ok = true;
-    let mut cfg = match config::load(&cfg_path) {
-        Ok(c) => c,
-        Err(e) => {
-            log(&e);
-            loaded_ok = false;
-            let c = default_config();
-            if !cfg_path.exists() {
-                let _ = config::save(&cfg_path, &c);
-            }
-            c
-        }
-    };
-    // „Indulás a géppel”: a konfigurációs fájl az irányadó. Ha még nincs benne,
-    // a Windows jelenlegi beállítását vesszük át. Bekapcsolt állapotban a bejegyzést
-    // mindig frissítjük (aktuális exe-útvonal, az Intézőre váró indítás).
-    let registered = autostart::is_enabled() || legacy_autostart;
-    let mut autostart_changed = false;
-    match cfg.start_with_windows {
-        None => cfg.start_with_windows = Some(registered),
-        // a Windowsban (Feladatkezelő) kikapcsolták: ezt tiszteletben tartjuk
-        Some(true) if autostart::disabled_in_windows() => {
-            log("indítás a Windowszal: a Windowsban letiltották, kikapcsolva");
-            cfg.start_with_windows = Some(false);
-            autostart_changed = true;
-        }
-        Some(want) => {
-            if (want || registered)
-                && let Err(e) = autostart::set(want)
-            {
-                log(format!("indítás a Windowszal – hiba: {e}"));
-            }
-        }
-    }
-    // A fájlba minden opció kerüljön bele (a hiányzókat alapértékkel kiegészítjük).
-    if loaded_ok && (autostart_changed || config::needs_rewrite(&cfg_path, &cfg)) {
-        match config::save(&cfg_path, &cfg) {
-            Ok(()) => log("konfigurációs fájl kiegészítve az összes opcióval"),
-            Err(e) => log(e),
-        }
-    }
+    let (cfg, cfg_path) = lifecycle::prepare_config(&base_dir, value("--config").map(PathBuf::from), legacy_autostart);
     let hide_taskbar = cfg.hide_taskbar && !flag("--keep-taskbar");
     let exit_after = value("--exit-after").and_then(|s| s.parse::<u64>().ok()).map(Duration::from_secs);
     log(format!("mappa: {}", base_dir.display()));
@@ -448,7 +401,7 @@ fn main() {
         kind: "weather",
         bar: 0,
     });
-    let launch_win = popup("Start", launcher_url(&cfg), (700, 780), true, UserEvent::LauncherIpc).map(|(window, webview, hwnd)| {
+    let launch_win = popup("Start menü", launcher_url(&cfg), (700, 780), true, UserEvent::LauncherIpc).map(|(window, webview, hwnd)| {
         LaunchWin { window, webview, hwnd, visible: false, shown_at: Instant::now(), hidden_at: None, mode: "start", prev: None }
     });
     let health_win = popup("szünet", health_url(&cfg), (660, 66), false, UserEvent::HealthIpc).map(|(window, webview, hwnd)| HealthWin {
@@ -465,59 +418,8 @@ fn main() {
     });
     ICONS_EDGE.store(edge_index(icons_edge_of(&cfg)), Ordering::Relaxed);
 
-    // claude.ai ablak: rejtve indul, csak belépéskor jelenik meg. A sütik a CyberShell saját
-    // böngészőprofiljában maradnak, az asztali Claude apphoz nem nyúlunk.
-    let claude = if cfg.claude_usage {
-        let (mon, _) = appbar::primary_monitor();
-        let window = WindowBuilder::new()
-            .with_title(if cfg.language == "en" {
-                "CyberShell – sign in to claude.ai"
-            } else {
-                "CyberShell – belépés a claude.ai-ra"
-            })
-            // a tálcán az exe saját ikonja látszódjon (assets/cybershell.rc, 1-es azonosító)
-            .with_window_icon({
-                use tao::platform::windows::IconExtWindows;
-                tao::window::Icon::from_resource(1, None).ok()
-            })
-            .with_visible(false)
-            .with_inner_size(tao::dpi::LogicalSize::new(480.0, 760.0))
-            .with_position(PhysicalPosition::new((mon.left + mon.right) / 2 - 300, (mon.top + mon.bottom) / 2 - 470))
-            .build(&event_loop)
-            .ok();
-        window.and_then(|window| {
-            let webview = WebViewBuilder::new_with_web_context(&mut web_context)
-                .with_url(CLAUDE_IDLE_URL)
-                .with_background_color(cfg.bg_rgba())
-                .with_ipc_handler(|req: Request<String>| send(UserEvent::ClaudeWeb(req.body().clone())))
-                // A Google-belépés felugró ablakban zajlik; alapból ezt a komponens letiltaná,
-                // és a claude.ai „There was an error logging you in” hibát adna.
-                .with_new_window_req_handler(|url: String, _features| {
-                    log(format!("claude.ai felugró ablak: {}", url.split('?').next().unwrap_or("")));
-                    if url.starts_with("https://") { wry::NewWindowResponse::Allow } else { wry::NewWindowResponse::Deny }
-                })
-                .with_on_page_load_handler(|ev, url| {
-                    if matches!(ev, wry::PageLoadEvent::Finished) {
-                        send(UserEvent::ClaudeLoaded(url));
-                    }
-                })
-                .build(&window)
-                .map_err(|e| log(format!("claude.ai ablak nem hozható létre: {e}")))
-                .ok()?;
-            Some(ClaudeWeb {
-                window,
-                webview,
-                visible: false,
-                next_fetch: Instant::now() + Duration::from_secs(300),
-                ok: None,
-                persisted: false,
-                revived: false,
-                state: "pending",
-            })
-        })
-    } else {
-        None
-    };
+    // claude.ai ablak: rejtve indul, csak belépéskor jelenik meg
+    let claude = if cfg.claude_usage { make_claude_window(&event_loop, &mut web_context, &cfg) } else { None };
 
     let orig_taskbar = if hide_taskbar {
         let s = appbar::taskbar_state();
@@ -544,6 +446,8 @@ fn main() {
         bars,
         tracker: Tracker::default(),
         last_fg: initial_fg,
+        fg_by_mon: HashMap::new(),
+        refocus: None,
         last_state: String::new(),
         pending: None,
         settings_watch: None,
@@ -580,6 +484,8 @@ fn main() {
         volume: None,
         last_volume: String::new(),
         next_volume: Instant::now(),
+        last_tray: String::new(),
+        next_tray: Instant::now(),
         cal_cache: None,
         cal_busy: false,
         launcher: launch_win,
@@ -617,6 +523,9 @@ fn main() {
     clipboard::set_enabled(hub.cfg.start_menu.clipboard);
     clipboard::start(|| send(UserEvent::Clipboard));
     keyhook::start(|what| send(UserEvent::WinKey(what)));
+    // Terhelés és Hálózat: a rendszerfigyelő háttérszál (csak a látható moduloknak mér)
+    monitor::spawn(|v| send(UserEvent::Monitor(v.to_string())));
+    hub.configure_monitor();
     // Zene: a Spotify lejátszásának figyelése háttérszálon
     {
         let (tx, rx) = std::sync::mpsc::channel::<media::Cmd>();
@@ -625,7 +534,7 @@ fn main() {
     }
     hub.check_available();
     // Bejelentkezéskori indulásnál a „géppel induló” programokat is elindítjuk.
-    if flag("--autostart") {
+    if at_logon {
         hub.launch_queue = hub
             .cfg
             .apps
@@ -685,6 +594,7 @@ fn main() {
                 UserEvent::LauncherIpc(raw) => hub.on_launcher_ipc(&raw),
                 UserEvent::AppsReady(list) => hub.on_apps_ready(list),
                 UserEvent::Media(payload) => hub.on_media(payload),
+                UserEvent::Monitor(payload) => hub.on_monitor(&payload),
                 UserEvent::HealthIpc(raw) => hub.on_health_ipc(&raw),
                 UserEvent::Clipboard => hub.send_clips(),
                 UserEvent::SystemTheme => hub.on_system_theme(),

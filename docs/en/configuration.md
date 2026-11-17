@@ -28,13 +28,14 @@ Press `Ctrl+Alt+R` after saving.
 
 | Field | Meaning |
 |---|---|
-| `language` | Interface language: `"auto"` (the default: Hungarian on Hungarian Windows, English everywhere else), `"hu"` or `"en"`. The language chosen in the settings overrides the automatic one. The texts are in `ui\i18n.js`; new languages can be added. |
+| `language` | Interface language: `"auto"` (the default: Hungarian on Hungarian Windows, Polish on Polish Windows, English everywhere else), `"en"`, `"hu"` or `"pl"`. The language chosen in the settings overrides the automatic one. The texts are in `ui\i18n.js`; new languages can be added. |
 | `startWithWindows` | Whether CyberShell starts at sign-in. The file is authoritative: on start the Windows setting is adjusted to it. |
 | `iconsEdge`, `infoEdge` | Position of the Icons and the info panel: `"left"`, `"right"`, `"top"` or `"bottom"` (Icons on the `left` by default). `infoEdge` also accepts `"auto"` (the default): at the `bottom` on laptops (battery-powered computers), where the side would be too short, and on the `right` on desktops. They cannot be the same. The old `swapSides: true` setting is converted to `right`/`left` automatically. |
 | `iconLabels` | With `false` the Icons bar shows no program names (`true` by default). |
+| `tooltips` | Help texts: with `false` no hover explanations appear anywhere (`true` by default). |
 | `allMonitors` | With `false` CyberShell appears only on the primary screen (on every screen by default). |
 | `calendar.feeds` | The attached calendars (name, iCal address, color). They can also be added and removed in the calendar. |
-| `sections` | Visibility (`tools`, `claude`, `codex` – `false` by default –, `activity`, `date`, `clock`, `weather`, `music`, `volume`, `power`) and order (`order`) of the info panel sections. Anything missing from the order goes to the end (the Toolbar goes before Claude). |
+| `sections` | Visibility (`tools`, `claude`, `codex`, `activity`, `load`, `network`, `date`, `clock`, `laptop`, `weather`, `currency`, `music`, `volume`, `tray`, `power`; `claude`, `codex`, `activity`, `load`, `date` and `currency` are hidden by default; `laptop` only shows on battery-powered computers) and order (`order`) of the info panel modules. Anything missing from the order goes next to its neighbour in the default order. |
 | `startMenu.winKey` | `true` (the default): the `Win` key opens the CyberShell Start menu and `Win+S` its search. With `false` the Windows ones open. |
 | `startMenu.pinned` | IDs of the programs pinned to the Start menu (added by pinning with right-click in the menu). |
 | `startMenu.webSearch` | The web search address; `{q}` is replaced by the search text (Google by default). |

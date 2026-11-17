@@ -22,7 +22,7 @@ CyberShell turns the Windows desktop into a neon cyberpunk HUD: a program bar on
 
 ## Quick start
 
-1. Put `CyberShell.exe` in a folder and start it. On first start it creates `config.json` and the `wallpapers` folder next to itself.
+1. Put `CyberShell.exe` in a folder and start it. On first start it creates `config.json` and the `wallpapers` folder in `%LOCALAPPDATA%\CyberShell`.
 2. Open **// MENU** at the bottom right to set the theme, language, programs and panels.
 3. Quit with `Ctrl+Alt+Q`; everything is restored.
 

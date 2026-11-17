@@ -1,0 +1,21 @@
+/* Terhelés: sorok százalékkal és sávval. Kattintható (Feladatkezelő). Az osztály nem „load”, mert
+   azt a beállítások Rendszerterhelés kártyája használja. */
+.ldmod { position: relative; margin: -4px; padding: 4px; cursor: pointer; transition: background-color .12s ease; }
+.ldmod:hover { background: color-mix(in srgb, var(--c-alt) 6%, transparent); }
+.ldmod:hover h3 { color: var(--c-alt); }
+.ld-rows { display: flex; flex-direction: column; gap: 4px; }
+.ld-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font: 400 8.5px/1 var(--f-mono); letter-spacing: .06em; color: var(--c-text-dim);
+}
+.ld-head b { font: 650 13px/1 var(--f-display); font-variation-settings: "wdth" 75, "wght" 650; letter-spacing: 0; color: var(--c-alt); font-variant-numeric: tabular-nums; }
+.ld-bar { position: relative; height: 3px; margin-top: 2px; background: color-mix(in srgb, var(--c-alt) 14%, transparent); }
+.ld-bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--c-alt); opacity: .7; transition: width .6s ease; }
+.ld-row.warn .ld-head b { color: var(--c-main); }
+.ld-row.warn .ld-bar i { background: var(--c-main); }
+.ld-row.hot .ld-head b { color: var(--c-hot); }
+.ld-row.hot .ld-bar i { background: var(--c-hot); }
+
+/* vízszintes panelen a sorok két oszlopban */
+.right.horiz .ldmod { width: 130px; }
+.right.horiz .ld-rows { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 8px; }

@@ -110,7 +110,8 @@ impl Hub {
                 log(format!("ejtés: {} fájl megnyitása – {exe} -> {}", paths.len(), if ok { "ok" } else { "HIBA" }));
             }
             _ => {
-                let t = self.tr("Ezzel a programmal nem nyitható meg.", "This program can't open it.");
+                let t =
+                    self.tr("Ezzel a programmal nem nyitható meg.", "This program can't open it.", "Ten program nie może tego otworzyć.");
                 self.toast(&t);
             }
         }
@@ -145,7 +146,7 @@ impl Hub {
                 });
             }
         } else {
-            let t = self.tr("Nem indítható", "Cannot start");
+            let t = self.tr("Nem indítható", "Cannot start", "Nie można uruchomić");
             self.toast(&format!("{t}: {}", app.name));
         }
     }

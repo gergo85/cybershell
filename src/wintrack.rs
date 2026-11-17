@@ -1,7 +1,7 @@
 //! Futó programok ablakainak figyelése, indítás és előtérbe hozás,
 //! valamint a nem kitűzött programok ikonja és neve.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -11,6 +11,9 @@ use windows::Win32::Graphics::Gdi::{
     BI_RGB, BITMAP, BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS, DeleteObject, GetDC, GetDIBits, GetObjectW, HGDIOBJ, ReleaseDC,
 };
 use windows::Win32::Storage::FileSystem::{GetFileVersionInfoSizeW, GetFileVersionInfoW, VerQueryValueW};
+use windows::Win32::System::ProcessStatus::{
+    K32EnumProcesses, K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS, PROCESS_MEMORY_COUNTERS_EX2,
+};
 use windows::Win32::System::Threading::{OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW};
 use windows::Win32::UI::Input::KeyboardAndMouse::{KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, VK_MENU, keybd_event};
 use windows::Win32::UI::Shell::{SHDefExtractIconW, ShellExecuteW};
@@ -84,6 +87,51 @@ pub fn path_of_pid(pid: u32) -> Option<String> {
         r.ok()?;
         Some(String::from_utf16_lossy(&buf[..len as usize]))
     }
+}
+
+/// A futó folyamatok azonosítója és programjuk útvonala kisbetűvel. A folyamatazonosítók
+/// útvonalát megjegyezzük, így a következő lekérdezésnél csak az újakat kell megnyitni.
+pub fn process_paths() -> Vec<(u32, String)> {
+    static CACHE: Mutex<Option<HashMap<u32, String>>> = Mutex::new(None);
+    let mut pids = vec![0u32; 4096];
+    let mut needed = 0u32;
+    if unsafe { K32EnumProcesses(pids.as_mut_ptr(), (pids.len() * 4) as u32, &mut needed) }.as_bool() {
+        pids.truncate(needed as usize / 4);
+    } else {
+        pids.clear();
+    }
+    let mut guard = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    let cache = guard.get_or_insert_with(HashMap::new);
+    let live: HashSet<u32> = pids.iter().copied().filter(|&p| p != 0).collect();
+    cache.retain(|pid, _| live.contains(pid));
+    for &pid in &live {
+        cache.entry(pid).or_insert_with(|| path_of_pid(pid).map(|p| p.to_lowercase()).unwrap_or_default());
+    }
+    cache.iter().filter(|(_, p)| !p.is_empty()).map(|(&pid, p)| (pid, p.clone())).collect()
+}
+
+/// Egy program összes futó folyamatának memóriája bájtban, ahogy a Feladatkezelő is
+/// mutatja (a folyamatok saját, a memóriában lévő része). None: nem fut, vagy nem
+/// kérdezhető le (pl. rendszergazdaként futó program).
+pub fn memory_of_path(path: &str) -> Option<u64> {
+    let want = path.to_lowercase();
+    let mut total = 0u64;
+    let mut found = false;
+    for (pid, _) in process_paths().into_iter().filter(|(_, p)| *p == want) {
+        let Ok(h) = (unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }) else { continue };
+        let mut pmc = PROCESS_MEMORY_COUNTERS_EX2 { cb: std::mem::size_of::<PROCESS_MEMORY_COUNTERS_EX2>() as u32, ..Default::default() };
+        let ok = unsafe { K32GetProcessMemoryInfo(h, &mut pmc as *mut _ as *mut PROCESS_MEMORY_COUNTERS, pmc.cb) }.as_bool();
+        unsafe {
+            let _ = CloseHandle(h);
+        }
+        if ok {
+            // a régebbi Windows nem tölti ki a saját munkakészletet: akkor a teljes munkakészlet
+            let bytes = if pmc.PrivateWorkingSetSize > 0 { pmc.PrivateWorkingSetSize } else { pmc.WorkingSetSize };
+            total += bytes as u64;
+            found = true;
+        }
+    }
+    found.then_some(total)
 }
 
 /// Olyan ablak-e, amilyet a tálca is mutatna.
@@ -243,6 +291,18 @@ pub fn shell_open(file: &str, args: &str, cwd: &str, maximized: bool) -> bool {
     let show = if maximized { SW_SHOWMAXIMIZED } else { SW_SHOWNORMAL };
     let r = unsafe { ShellExecuteW(None, &HSTRING::from("open"), &file, pcwstr(&args), pcwstr(&cwd), show) };
     r.0 as isize > 32
+}
+
+/// Van-e a kiterjesztéshez (pl. ".json") megnyitó program rendelve. Ha nincs, a Windows a
+/// megnyitáskor csak a „Hogyan szeretné megnyitni?” programválasztót adná.
+pub fn has_open_handler(ext: &str) -> bool {
+    use windows::Win32::UI::Shell::{ASSOCF_INIT_IGNOREUNKNOWN, ASSOCSTR_EXECUTABLE, AssocQueryStringW};
+    let mut len = 0u32;
+    unsafe {
+        AssocQueryStringW(ASSOCF_INIT_IGNOREUNKNOWN, ASSOCSTR_EXECUTABLE, &HSTRING::from(ext), windows::core::w!("open"), None, &mut len)
+    }
+    .is_ok()
+        && len > 1
 }
 
 /// Fájlok megnyitása egy adott programmal (az ikonra ejtett fájlokhoz).
@@ -417,4 +477,21 @@ pub fn shell_verb(verb: &str, file: &str, args: &str) -> bool {
     let args = opt(args);
     let r = unsafe { ShellExecuteW(None, &HSTRING::from(verb), &HSTRING::from(file), pcwstr(&args), PCWSTR::null(), SW_SHOWNORMAL) };
     r.0 as isize > 32
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    #[ignore = "a gép valódi folyamatait olvassa"]
+    fn live_memory() {
+        let mut seen = std::collections::HashSet::new();
+        for (_, p) in super::process_paths() {
+            if seen.insert(p.clone())
+                && let Some(b) = super::memory_of_path(&p)
+                && b > 200 * 1024 * 1024
+            {
+                println!("{} MB | {p}", b / 1024 / 1024);
+            }
+        }
+    }
 }

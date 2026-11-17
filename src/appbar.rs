@@ -168,6 +168,19 @@ pub fn monitors() -> Vec<Monitor> {
     list
 }
 
+/// Annak a képernyőnek a teljes területe, amelyiken az ablak (nagyobbik része) van.
+pub fn monitor_rect_of_window(hwnd: HWND) -> Option<RECT> {
+    use windows::Win32::Graphics::Gdi::{MONITOR_DEFAULTTONULL, MonitorFromWindow};
+    unsafe {
+        let mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL);
+        if mon.is_invalid() {
+            return None;
+        }
+        let mut mi = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
+        GetMonitorInfoW(mon, &mut mi).as_bool().then_some(mi.rcMonitor)
+    }
+}
+
 /// Annak a képernyőnek a munkaterülete, amelyiken a megadott terület (pl. egy sáv) van.
 pub fn work_area_of(rc: RECT) -> RECT {
     use windows::Win32::Graphics::Gdi::{MONITOR_DEFAULTTONEAREST, MonitorFromRect};
@@ -292,8 +305,15 @@ pub fn hide_taskbar() {
     }
 }
 
-pub fn taskbar_visible() -> bool {
+/// Valamelyik képernyő tálcája látható-e.
+pub fn any_taskbar_visible() -> bool {
     all_taskbars().iter().any(|tb| unsafe { IsWindowVisible(*tb) }.as_bool())
+}
+
+/// Minden képernyő tálcája látható-e (és van-e egyáltalán tálca).
+pub fn taskbar_visible() -> bool {
+    let all = all_taskbars();
+    !all.is_empty() && all.iter().all(|tb| unsafe { IsWindowVisible(*tb) }.as_bool())
 }
 
 pub fn show_taskbar() {
@@ -312,29 +332,19 @@ pub fn rehide_taskbar() {
     }
 }
 
-/// Visszaállítja a tálcát. Előbb az automatikus elrejtést kapcsoljuk vissza, és csak
-/// utána jelenítjük meg: fordított sorrendben az állapotváltás újra elrejti.
-/// A megjelenítést ellenőrizzük, és szükség esetén megismételjük.
+/// Visszaállítja a tálcát minden képernyőn. Előbb az automatikus elrejtést kapcsoljuk
+/// vissza, és csak utána jelenítjük meg: fordított sorrendben az állapotváltás újra elrejti.
+/// A héj az állapotváltás után késve még elrejtheti a további képernyők tálcáit is, ezért
+/// mindegyiket ellenőrizzük, és amíg valamelyik rejtve van, megismételjük a megjelenítést.
 pub fn restore_taskbar(original_state: u32) {
     set_taskbar_state(original_state);
-    // a további képernyők tálcái
-    for tb in secondary_taskbars() {
-        unsafe {
-            let _ = ShowWindow(tb, SW_SHOW);
-        }
-    }
-    let Some(tb) = taskbar_hwnd() else {
-        return;
-    };
     for _ in 0..10 {
-        unsafe {
-            let _ = ShowWindow(tb, SW_SHOW);
-        }
+        show_taskbar();
         std::thread::sleep(std::time::Duration::from_millis(150));
-        if unsafe { IsWindowVisible(tb) }.as_bool() {
+        if taskbar_visible() {
             // még egy kis várakozás után is ellenőrizzük, mert a héj késve reagálhat
             std::thread::sleep(std::time::Duration::from_millis(300));
-            if unsafe { IsWindowVisible(tb) }.as_bool() {
+            if taskbar_visible() {
                 return;
             }
         }

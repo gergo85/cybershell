@@ -1,0 +1,18 @@
+/* Eszköztár: 2×2 ikon (Számológép, Jegyzettömb, Keresés, Képmetsző). */
+.tool-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.tool {
+  display: flex; align-items: center; justify-content: center; height: 32px;
+  background: color-mix(in srgb, var(--app, var(--c-main)) 10%, transparent);
+  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+  transition: background-color .12s ease;
+}
+.tool svg { display: block; width: 17px; height: 17px; color: color-mix(in srgb, var(--app) 85%, var(--c-text)); transition: color .12s ease; }
+/* a Keresés gomb világít, amíg a kereső nyitva van */
+.tool:hover, .tool.open { background: var(--app); }
+.tool:hover svg, .tool.open svg { color: var(--c-bg); }
+.right.tighter .tool { height: 28px; }
+html[data-scheme="light"] .tool { clip-path: none; border-radius: 7px; }
+
+/* vízszintes panelen */
+.right.horiz .tools { width: 84px; }
+.right.horiz .tool { height: 24px; }

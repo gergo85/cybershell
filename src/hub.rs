@@ -70,6 +70,12 @@ pub(crate) struct Hub {
     pub(crate) bars: Vec<Bar>,
     pub(crate) tracker: Tracker,
     pub(crate) last_fg: Option<HWND>,
+    /// Képernyőnként (a sávcsoport sorszáma szerint) az ott legutóbb előtérbe került ablak: az
+    /// Ikonok ezt jelölik aktívnak az adott képernyőn.
+    pub(crate) fg_by_mon: HashMap<usize, HWND>,
+    /// Bezárt felugró ablak: utána a képernyője legfelső programja kapja vissza a fókuszt
+    /// (`refocus_later`), legkorábban a megadott időpontban.
+    pub(crate) refocus: Option<(HWND, Instant)>,
     pub(crate) last_state: String,
     pub(crate) pending: Option<Pending>,
     /// Nyitott beállítások mellett indított program: az első új ablakáig figyeljük, és csak
@@ -125,6 +131,9 @@ pub(crate) struct Hub {
     pub(crate) volume: Option<(Instant, sys::Volume)>,
     pub(crate) last_volume: String,
     pub(crate) next_volume: Instant,
+    /// A háttérprogramok (értesítési terület) legutóbb elküldött listája és a következő ellenőrzés.
+    pub(crate) last_tray: String,
+    pub(crate) next_tray: Instant,
     /// A naptárak legutóbbi letöltése (ideje és tartalma), illetve folyamatban van-e.
     pub(crate) cal_cache: Option<(Instant, String)>,
     pub(crate) cal_busy: bool,
@@ -226,8 +235,14 @@ impl Hub {
     }
 
     /// A felület nyelvének megfelelő szöveg.
-    pub(crate) fn tr(&self, hu: &str, en: &str) -> String {
-        if self.cfg.language == "en" { en.to_string() } else { hu.to_string() }
+    /// A program saját szövege a felület nyelvén (magyar, angol vagy lengyel).
+    pub(crate) fn tr(&self, hu: &str, en: &str, pl: &str) -> String {
+        match self.cfg.language.as_str() {
+            "en" => en,
+            "pl" => pl,
+            _ => hu,
+        }
+        .to_string()
     }
 
     pub(crate) fn check_available(&mut self) {
@@ -263,6 +278,16 @@ impl Hub {
             if !ok {
                 log(format!("nincs telepítve, elrejtve: {} ({})", a.name, a.path));
             }
+        }
+    }
+
+    /// Egy futó program ikonjának címe a felületnek. Store-appnál a csomag ikonja (a Start menü
+    /// bejegyzéséből): ezek exe-jében gyakran nincs ikon (pl. WhatsApp), így üres maradna a hely.
+    /// Minden más programnál az exe saját ikonja.
+    pub(crate) fn program_icon(&self, path: &str) -> String {
+        match apps::app_for_path(&self.start_apps, path).filter(|a| a.target.is_empty()) {
+            Some(a) => format!("/__appicon/{}", percent_encode(&a.id)),
+            None => format!("/__icon/{}", percent_encode(&path.replace('\\', "/"))),
         }
     }
 
@@ -338,6 +363,7 @@ impl Hub {
             "session": self.session,
             "autostart": autostart::is_enabled(),
             "weather": c.weather,
+            "currency": c.currency,
             "iconLabels": c.icon_labels,
             "language": c.language,
         });
@@ -350,6 +376,7 @@ impl Hub {
         if part == "right" {
             self.send_power(true);
             self.send_volume(true);
+            self.send_tray(true);
             if let Some(m) = &self.last_media {
                 self.eval_bar(idx, m);
             }
@@ -400,7 +427,9 @@ impl Hub {
         }
     }
 
-    /// Időzített teendők a fő ciklusban (az előnézet bezárása, újrarendezése).
+    /// Időzített teendők a fő ciklusban: a felugró ablakok bezárása, ha elvesztik a fókuszt, az
+    /// Egészség és az Auto téma, a kapcsolat, a panel élő adatai (Codex, akkumulátor, hangerő)
+    /// és az ablakelőnézet.
     pub(crate) fn tick(&mut self) {
         let now = Instant::now();
         // a részletes időjárás bezárul, ha máshova kattintanak (elveszti a fókuszt)
@@ -452,12 +481,16 @@ impl Hub {
             self.next_net_check = now + Duration::from_secs(3);
             self.net_check();
         }
-        if self.cfg.sections.codex && now >= self.next_codex {
+        if self.cfg.sections.shows("codex") && now >= self.next_codex {
             self.codex_send(false);
         }
         if now >= self.next_power {
             self.next_power = now + Duration::from_secs(20);
             self.send_power(false);
+        }
+        if now >= self.next_tray {
+            self.next_tray = now + Duration::from_secs(3);
+            self.send_tray(false);
         }
         // a hangerőt a billentyűzet vagy más program is állíthatja: gyakran ránézünk
         if now >= self.next_volume {
@@ -525,6 +558,10 @@ impl Hub {
                 .unwrap_or_default();
             log(format!("parancs ({}): {kind} {detail}", self.bars[idx].edge.name()));
         }
+        // az információs panel moduljainak üzenetei (hub/panel.rs)
+        if self.on_panel_ipc(idx, kind, &msg) {
+            return;
+        }
         match kind {
             "ready" => {
                 log(format!("felület betöltve: {}", self.bars[idx].edge.name()));
@@ -564,10 +601,6 @@ impl Hub {
                         self.settings_show(true);
                     }
                 }
-                "power" => {
-                    let action = msg["action"].as_str().unwrap_or("").to_string();
-                    self.power(&action);
-                }
                 // a saját Start menü és kereső (a panel Indítás és Keresés gombja)
                 "start" | "search" => {
                     let mode = if msg["name"] == "start" { "start" } else { "search" };
@@ -586,31 +619,6 @@ impl Hub {
                         }
                     }
                 }
-                // Eszköztár: Számológép, Jegyzettömb, Képmetsző (a Keresés a "search" parancs)
-                "tool" => {
-                    self.settings_dismiss();
-                    let target = match msg["tool"].as_str().unwrap_or("") {
-                        "calc" => "calc.exe",
-                        "notepad" => "notepad.exe",
-                        "snip" => r"shell:AppsFolder\Microsoft.ScreenSketch_8wekyb3d8bbwe!App",
-                        _ => "",
-                    };
-                    if !target.is_empty() && !wintrack::shell_open(target, "", "", false) {
-                        log(format!("eszköz nem indult: {target}"));
-                    }
-                }
-                // laptop: a Windows saját Wi-Fi-listája, az akkumulátor, a hálózat és a Bluetooth
-                // beállításai
-                "wifi" | "battery" | "network" | "bluetooth" => {
-                    let uri = match msg["name"].as_str().unwrap_or("") {
-                        "wifi" => "ms-availablenetworks:",
-                        "battery" => "ms-settings:batterysaver",
-                        "network" => "ms-settings:network-status",
-                        _ => "ms-settings:bluetooth",
-                    };
-                    self.settings_dismiss();
-                    wintrack::shell_open(uri, "", "", false);
-                }
                 _ => {}
             },
             // a Keresés és Indítás gomb helye (a Win billentyűvel nyitott menü is mellé kerüljön)
@@ -621,46 +629,14 @@ impl Hub {
                     }
                 }
             }
-            "weather-open" => self.fly_open(idx, "weather", &msg),
-            "calendar-open" => self.fly_open(idx, "calendar", &msg),
             "app-menu" => self.app_menu(idx, &msg),
             "launch-extra" => {
                 self.launch_extra(&msg);
-            }
-            // hangerő: a jobb panel csúszkája, görgetése és némítógombja
-            "volume-set" => {
-                let pct = msg["pct"].as_f64().unwrap_or(0.0).round().clamp(0.0, 100.0) as u8;
-                if let Some(v) = self.volume_ctl() {
-                    v.set(pct);
-                }
-                self.send_volume(true);
-            }
-            "volume-mute" => {
-                let on = msg["on"].as_bool().unwrap_or(false);
-                if let Some(v) = self.volume_ctl() {
-                    v.set_mute(on);
-                }
-                self.send_volume(true);
-            }
-            // zene: a Spotify vezérlése
-            "media" => self.media_cmd(&msg),
-            // a Windows hangerőkeverője (programonkénti hangerő)
-            "volume-open" => {
-                self.settings_dismiss();
-                wintrack::shell_open("ms-settings:apps-volume", "", "", false);
             }
             "peek" => self.peek_open(idx, &msg),
             "peek-leave" => self.peek_leave(true),
             "drag-hover" => self.drag_hover(&msg),
             "drop-open" => self.drop_open(&msg),
-            "alert" => self.on_alert(msg["on"].as_bool().unwrap_or(false)),
-            "codex-refresh" => self.codex_send(true),
-            "usage-refresh" => {
-                if let Some(tx) = &self.usage_wake {
-                    let _ = tx.send(());
-                }
-                self.claude_fetch();
-            }
             "log" => log(format!("[ui] {}", msg["text"].as_str().unwrap_or(""))),
             _ => {}
         }
@@ -670,10 +646,15 @@ impl Hub {
         if self.bars.is_empty() {
             return;
         }
+        self.refocus_top();
         let own = self.own_hwnds();
         let fg = unsafe { GetForegroundWindow() };
         if !fg.is_invalid() && !own.contains(&fg) {
-            self.last_fg = Some(wintrack::root_owner(fg));
+            let root = wintrack::root_owner(fg);
+            self.last_fg = Some(root);
+            if let Some(mon) = self.mon_of_window(root) {
+                self.fg_by_mon.insert(mon, root);
+            }
         }
         let wins = self.tracker.snapshot(&own);
         self.update_borders(&wins);
@@ -718,8 +699,6 @@ impl Hub {
         // több ablakos programok: ezek fölött az ikon előnézetet mutat
         let multi: Vec<usize> =
             self.matchers.iter().enumerate().filter(|(_, m)| wins.iter().filter(|w| m.matches(w)).count() >= 2).map(|(i, _)| i).collect();
-        let fg_win = self.last_fg.and_then(|h| wins.iter().find(|w| w.hwnd == h)).filter(|w| !w.iconic);
-        let active = fg_win.and_then(|w| self.matchers.iter().position(|m| m.matches(w)));
 
         // Nem kitűzött, de futó programok, a megjelenésük sorrendjében.
         let mut present: Vec<(String, &WinInfo)> = Vec::new();
@@ -746,16 +725,15 @@ impl Hub {
                 (w.title_raw.clone(), String::new())
             } else {
                 let name = self.program_name(&w.path);
-                (name, format!("/__icon/{}", percent_encode(&w.path.replace('\\', "/"))))
+                (name, self.program_icon(&w.path))
             };
             let n = wins.iter().filter(|x| extra_key(x).as_deref() == Some(k.as_str())).count();
             extras.push(json!({ "key": k, "name": name, "icon": icon, "n": n }));
         }
-        let active_extra = fg_win.filter(|_| active.is_none()).and_then(extra_key);
 
         // A tálca időnként visszajön (pl. Start menü után) – ilyenkor újra elrejtjük,
         // de nem, amíg a Start menü vagy a keresés van előtérben.
-        if self.want_hidden_taskbar && appbar::taskbar_visible() {
+        if self.want_hidden_taskbar && appbar::any_taskbar_visible() {
             let cls = if fg.is_invalid() { String::new() } else { wintrack::class_name(fg) };
             if cls != "Windows.UI.Core.CoreWindow" && cls != "Shell_TrayWnd" && cls != "XamlExplorerHostIslandWindow" {
                 appbar::rehide_taskbar();
@@ -790,21 +768,89 @@ impl Hub {
             self.layout(false);
         }
 
-        let state = json!({
-            "type": "state",
-            "running": running,
-            "multi": multi,
-            "active": active,
-            "extras": extras,
-            "activeExtra": active_extra,
-        })
-        .to_string();
-        if state != self.last_state {
-            self.last_state = state;
+        // A futó programok jelölése minden képernyőn ugyanaz; az aktív program képernyőnként a
+        // saját: az ott legutóbb előtérbe került, még ott lévő ablak. Egy képernyőcsoportnál
+        // (csak az elsődlegesen vannak sávok) a mindenkori előtérben lévő ablak.
+        let groups: Vec<usize> = {
+            let mut g: Vec<usize> = self.bars.iter().filter(|b| b.part == "left").map(|b| b.mon).collect();
+            g.dedup();
+            g
+        };
+        let single = groups.len() <= 1;
+        let states: Vec<(usize, String)> = groups
+            .iter()
+            .map(|&mon| {
+                let fg_h = if single { self.last_fg } else { self.fg_by_mon.get(&mon).copied() };
+                let fg_win = fg_h
+                    .and_then(|h| wins.iter().find(|w| w.hwnd == h))
+                    .filter(|w| !w.iconic && (single || self.mon_of_window(w.hwnd) == Some(mon)));
+                let active = fg_win.and_then(|w| self.matchers.iter().position(|m| m.matches(w)));
+                let active_extra = fg_win.filter(|_| active.is_none()).and_then(extra_key);
+                let state = json!({
+                    "type": "state",
+                    "running": running,
+                    "multi": multi,
+                    "active": active,
+                    "extras": extras,
+                    "activeExtra": active_extra,
+                });
+                (mon, state.to_string())
+            })
+            .collect();
+        let all = states.iter().map(|(_, s)| s.as_str()).collect::<Vec<_>>().join("\n");
+        if all != self.last_state {
+            self.last_state = all;
             for b in self.bars.iter().filter(|b| b.part == "left") {
-                push(&b.webview, &self.last_state);
+                if let Some((_, s)) = states.iter().find(|(m, _)| *m == b.mon) {
+                    push(&b.webview, s);
+                }
             }
         }
+    }
+
+    /// Egy saját felugró ablak (beállítások, Start menü, kereső, időjárás) bezárása után az adott
+    /// képernyő legfelső programablaka kapja vissza a fókuszt, ahogy a Windows is teszi egy ablak
+    /// bezárásakor; így a sávon ismét az ő ikonja aktív. Kicsit később, a következő `poll`-ban
+    /// történik, hogy egy közben megnyíló másik felugró ablakot (pl. a Start menüből a
+    /// beállításokat) vagy egy közben előtérbe került programot ne zavarjon.
+    pub(crate) fn refocus_later(&mut self, popup: HWND) {
+        self.refocus = Some((popup, Instant::now() + Duration::from_millis(120)));
+    }
+
+    fn refocus_top(&mut self) {
+        let Some((popup, due)) = self.refocus else { return };
+        if Instant::now() < due {
+            return;
+        }
+        self.refocus = None;
+        let popup_open = self.settings.as_ref().is_some_and(|s| s.visible)
+            || self.launcher.as_ref().is_some_and(|l| l.visible)
+            || self.fly.as_ref().is_some_and(|f| f.visible);
+        if popup_open {
+            return;
+        }
+        let own = self.own_hwnds();
+        let fg = unsafe { GetForegroundWindow() };
+        let wins = self.tracker.snapshot(&own);
+        if !fg.is_invalid() && wins.iter().any(|w| w.hwnd == wintrack::root_owner(fg)) {
+            return;
+        }
+        let Some(screen) = appbar::monitor_rect_of_window(popup) else { return };
+        if let Some(w) = wins.iter().find(|w| !w.iconic && appbar::monitor_rect_of_window(w.hwnd) == Some(screen)) {
+            wintrack::activate(w.hwnd);
+        }
+    }
+
+    /// Melyik sávcsoport képernyőjén van az ablak (a sávok helye szerint).
+    pub(crate) fn mon_of_window(&self, hwnd: HWND) -> Option<usize> {
+        let r = appbar::monitor_rect_of_window(hwnd)?;
+        self.bars
+            .iter()
+            .find(|b| {
+                let (cx, cy) = ((b.rect.left + b.rect.right) / 2, (b.rect.top + b.rect.bottom) / 2);
+                cx >= r.left && cx < r.right && cy >= r.top && cy < r.bottom
+            })
+            .map(|b| b.mon)
     }
 
     pub(crate) fn reload(&mut self) -> bool {
@@ -831,6 +877,7 @@ impl Hub {
         self.fly_hide(false);
         self.matchers = self.cfg.apps.iter().map(Matcher::new).collect();
         self.check_available();
+        self.configure_monitor();
         ICONS_EDGE.store(edge_index(self.icons_edge()), Ordering::Relaxed);
         self.layout(true);
         // ha a panelek helye változott, a sávok más felületet töltenek be; a címben a nyelv és
@@ -879,11 +926,16 @@ impl Hub {
         }
     }
 
+    /// A config.json megnyitása szerkesztésre: a .json fájlokhoz rendelt programmal, vagy ha
+    /// nincs ilyen (különben a Windows csak programválasztót adna), a Jegyzettömbbel.
     pub(crate) fn open_config(&self) {
         let p = self.cfg_path.to_string_lossy().to_string();
-        if !wintrack::shell_open(&p, "", "", false) {
+        let assoc = wintrack::has_open_handler(".json");
+        let ok = assoc && wintrack::shell_open(&p, "", "", false);
+        if !ok {
             wintrack::shell_open("notepad.exe", &format!("\"{p}\""), "", false);
         }
+        log(format!("konfigurációs fájl megnyitása: {p} ({})", if ok { "a .json programjával" } else { "Jegyzettömbbel" }));
     }
 
     pub(crate) fn shutdown(&mut self) {

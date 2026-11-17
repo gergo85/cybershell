@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  A CyberShell MSIX-csomagjának manifestje. A {{…}} helyére a build-msix.ps1 írja be az
+  értékeket: a Store-hoz a Name és a Publisher a Partner Centerből jön (Termékazonosító).
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap desktop rescap">
+
+  <Identity Name="{{NAME}}" Publisher="{{PUBLISHER}}" Version="{{VERSION}}" ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>CyberShell</DisplayName>
+    <PublisherDisplayName>{{PUBLISHER_DISPLAY_NAME}}</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.22000.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="hu-HU" />
+    <Resource Language="en-US" />
+  </Resources>
+
+  <Applications>
+    <Application Id="CyberShell" Executable="CyberShell.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="CyberShell"
+        Description="Saját Windows-héj: ikonsáv, információs panel, Start menü."
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png" />
+      <Extensions>
+        <!-- „Indulás a géppel”: a TaskId az src\autostart.rs TASK_ID értékével egyezzen -->
+        <desktop:Extension Category="windows.startupTask" Executable="CyberShell.exe" EntryPoint="Windows.FullTrustApplication">
+          <desktop:StartupTask TaskId="CyberShellStartup" Enabled="false" DisplayName="CyberShell" />
+        </desktop:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <Capability Name="internetClient" />
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>

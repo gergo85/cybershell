@@ -6,6 +6,11 @@
 //! engedélyező érték: HKCU\…\Explorer\StartupApproved\Run\CyberShell. Ezt a Windows csak a
 //! saját felületén kapcsolt programoknál írja be, ezért a bekapcsoláskor mi állítjuk be.
 //! Ha a felhasználó a Feladatkezelőben letiltja, a kapcsoló kikapcsolt állapotot mutat.
+//!
+//! Csomagolva (MSIX, pl. a Store-ból telepítve) a Run kulcs nem használható: a csomagolt
+//! program HKCU-ba írt értékei a csomag saját registryjébe kerülnek, ezeket a Windows
+//! bejelentkezéskor nem látja. Ilyenkor a csomag manifestjében bejegyzett indítási feladat
+//! (StartupTask) kapcsolja a Windowszal való indulást, a lenti `task` modulban.
 
 use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_SUCCESS, WIN32_ERROR};
 use windows::Win32::System::Registry::{
@@ -30,6 +35,9 @@ fn approved_state() -> Option<bool> {
 }
 
 pub fn is_enabled() -> bool {
+    if packaged() {
+        return task::state().is_some_and(task::enabled);
+    }
     let run = unsafe { RegGetValueW(HKEY_CURRENT_USER, RUN, NAME, RRF_RT_REG_SZ, None, None, None) } == ERROR_SUCCESS;
     run && approved_state() != Some(false)
 }
@@ -49,6 +57,9 @@ fn delete(key: HKEY) -> WIN32_ERROR {
 
 /// Be- vagy kikapcsolja. Bekapcsoláskor a most futó exe útvonalát jegyzi be.
 pub fn set(enabled: bool) -> Result<(), String> {
+    if packaged() {
+        return task::set(enabled);
+    }
     let run = open(RUN)?;
     let result = if enabled {
         let exe = std::env::current_exe().map_err(|e| e.to_string());
@@ -93,6 +104,9 @@ pub fn set(enabled: bool) -> Result<(), String> {
 
 /// A felhasználó a Windowsban (Feladatkezelő, Beállítások › Indítási alkalmazások) letiltotta.
 pub fn disabled_in_windows() -> bool {
+    if packaged() {
+        return task::state().is_some_and(task::blocked);
+    }
     approved_state() == Some(false)
 }
 
@@ -102,6 +116,10 @@ const LEGACY_NAME: PCWSTR = w!("CyberHub");
 
 /// Törli a régi nevű bejegyzést. Igazat ad, ha volt ilyen, és engedélyezve volt.
 pub fn remove_legacy() -> bool {
+    // csomagolva a valódi Run kulcsot nem érjük el (lásd fent), és a régi név úgysem fordulhat elő
+    if packaged() {
+        return false;
+    }
     let had = unsafe { RegGetValueW(HKEY_CURRENT_USER, RUN, LEGACY_NAME, RRF_RT_REG_SZ, None, None, None) } == ERROR_SUCCESS;
     let mut buf = [0u8; 12];
     let mut len = buf.len() as u32;
@@ -117,4 +135,134 @@ pub fn remove_legacy() -> bool {
         }
     }
     had && (!approved || buf[0] % 2 == 0)
+}
+
+/// Csomagolva (MSIX-ként telepítve) fut-e a program.
+pub fn packaged() -> bool {
+    use windows::Win32::Foundation::APPMODEL_ERROR_NO_PACKAGE;
+    use windows::Win32::Storage::Packaging::Appx::GetCurrentPackageFullName;
+    static PACKAGED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *PACKAGED.get_or_init(|| {
+        let mut len = 0u32;
+        // csomag nélkül APPMODEL_ERROR_NO_PACKAGE, csomagban „kevés a hely” (a névnek)
+        let r = unsafe { GetCurrentPackageFullName(&mut len, None) };
+        r != APPMODEL_ERROR_NO_PACKAGE
+    })
+}
+
+/// Bejelentkezéskor az indítási feladat indította-e el a programot. A StartupTask nem ad át
+/// parancssori kapcsolót, ezért csomagolva ez helyettesíti a `--autostart`-ot.
+pub fn launched_at_logon() -> bool {
+    use windows::ApplicationModel::Activation::ActivationKind;
+    use windows::ApplicationModel::AppInstance;
+    packaged() && task::on_mta(|| AppInstance::GetActivatedEventArgs()?.Kind()).is_ok_and(|k| k == ActivationKind::StartupTask)
+}
+
+/// Az indítási feladat (Windows.ApplicationModel.StartupTask) kezelése csomagolt futáshoz.
+mod task {
+    use windows::ApplicationModel::{StartupTask, StartupTaskState};
+    use windows::core::HSTRING;
+
+    /// A feladat azonosítója: a csomag manifestjében is ugyanez kell
+    /// (`<desktop:StartupTask TaskId="CyberShellStartup" Enabled="false" DisplayName="CyberShell" />`).
+    const TASK_ID: &str = "CyberShellStartup";
+
+    /// A WinRT-hívások külön, többszálú COM-os szálon futnak: a hívó (a fő szál) lehet COM
+    /// nélküli vagy egyszálú, ott a várakozás az aszinkron műveletre elakadhatna.
+    pub(super) fn on_mta<T: Send + 'static>(f: impl FnOnce() -> windows::core::Result<T> + Send + 'static) -> Result<T, String> {
+        std::thread::spawn(move || {
+            let _com = crate::wmi::ComThread::init();
+            f().map_err(|e| e.message().to_string())
+        })
+        .join()
+        .unwrap_or_else(|_| Err("a művelet szála leállt".into()))
+    }
+
+    fn get() -> windows::core::Result<StartupTask> {
+        StartupTask::GetAsync(&HSTRING::from(TASK_ID))?.join()
+    }
+
+    pub(super) fn state() -> Option<StartupTaskState> {
+        on_mta(|| get()?.State()).ok()
+    }
+
+    pub(super) fn enabled(s: StartupTaskState) -> bool {
+        s == StartupTaskState::Enabled || s == StartupTaskState::EnabledByPolicy
+    }
+
+    /// A program maga nem kapcsolhatja be: a felhasználó (Beállítások › Alkalmazások › Indítás,
+    /// Feladatkezelő) vagy a rendszergazda letiltotta.
+    pub(super) fn blocked(s: StartupTaskState) -> bool {
+        s == StartupTaskState::DisabledByUser || s == StartupTaskState::DisabledByPolicy
+    }
+
+    pub(super) fn set(on: bool) -> Result<(), String> {
+        let s = on_mta(move || {
+            let t = get()?;
+            if on {
+                t.RequestEnableAsync()?.join()
+            } else {
+                // a rendszergazda által bekapcsoltat nem lehet kikapcsolni
+                if t.State()? != StartupTaskState::EnabledByPolicy {
+                    t.Disable()?;
+                }
+                t.State()
+            }
+        })?;
+        message(s, on).map_or(Ok(()), Err)
+    }
+
+    /// Hibaüzenet, ha a kért állapot nem jött létre (különben `None`).
+    pub(super) fn message(s: StartupTaskState, wanted: bool) -> Option<String> {
+        if enabled(s) == wanted {
+            return None;
+        }
+        Some(
+            match s {
+                StartupTaskState::DisabledByUser => {
+                    "A Windowsban letiltottad: a Beállítások › Alkalmazások › Indítás oldalon kapcsolhatod vissza."
+                }
+                StartupTaskState::DisabledByPolicy => "A rendszergazda letiltotta az indítást a Windowszal.",
+                StartupTaskState::EnabledByPolicy => "A rendszergazda bekapcsolta, ezért nem kapcsolható ki.",
+                _ => "Nem sikerült.",
+            }
+            .into(),
+        )
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn states() {
+            assert_eq!(message(StartupTaskState::Enabled, true), None);
+            assert_eq!(message(StartupTaskState::Disabled, false), None);
+            assert_eq!(message(StartupTaskState::DisabledByUser, false), None);
+            assert!(message(StartupTaskState::DisabledByUser, true).is_some_and(|m| m.contains("Indítás")));
+            assert!(message(StartupTaskState::EnabledByPolicy, false).is_some_and(|m| m.contains("rendszergazda")));
+            assert!(message(StartupTaskState::Disabled, true).is_some());
+            assert!(blocked(StartupTaskState::DisabledByPolicy) && !blocked(StartupTaskState::Disabled));
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// Fejlesztéskor (cargo test) a program nincs csomagolva: a Run kulcs marad.
+    #[test]
+    fn not_packaged() {
+        assert!(!super::packaged());
+        assert!(!super::launched_at_logon());
+    }
+
+    /// Egymás utáni WinRT-hívások külön szálakon: a windows crate a WinRT-osztályok
+    /// gyárát eltárolja, ennek a hívások között is érvényesnek kell maradnia. Csomag nélkül
+    /// a feladat nem érhető el (hibát ad), de nem szabad összeomlania.
+    #[test]
+    fn repeated_calls() {
+        for _ in 0..3 {
+            assert!(super::task::state().is_none());
+        }
+    }
 }

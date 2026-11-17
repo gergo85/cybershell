@@ -1,0 +1,15 @@
+/* Közös hover-átmenetek: a gombok, csempék és kártyák egyformán, röviden és puhán reagálnak
+   (az időzítés a base.css --hover-delay és --hover-fade változójában van). A betöltési sorrend
+   számít: a komponensek saját átmenetét (panel, Ikonok) felülírja, a később betöltöttekét
+   (beállítások, Start menü) nem. */
+.sbtn, .ib, .seg button, .run-chip, .pw, .sys-btn, .refresh, .grip, .wall-tile,
+.ed-row, .tile, .tile-in, .label, .tile img, .pk-card, .pk-x {
+  transition-property: background-color, color, border-color, box-shadow, opacity, filter, outline-color;
+  transition-duration: var(--hover-fade);
+  transition-timing-function: ease;
+}
+:is(.sbtn, .ib, .seg button, .run-chip, .pw, .sys-btn, .refresh, .grip, .wall-tile, .ed-row, .pk-card, .pk-x):hover,
+.app:hover :is(.tile, .tile-in, .label, .tile img),
+:is(.sbtn, .pw):hover svg {
+  transition-delay: var(--hover-delay);
+}

@@ -12,10 +12,16 @@
     html.addEventListener('mouseleave', () => post({ type: 'peek-leave' }));
     const box = (r) => `left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px`;
 
+    // a program memóriahasználata (az összes folyamata), ha lekérdezhető
+    const mem = (msg) => (msg.mem ? `<span class="pk-mem" title="${esc(T('peekMem'))}">${esc(msg.mem)}</span>` : '');
+
     const render = (msg) => {
       if (msg.theme) setTheme(msg.theme);
       root.className = 'peek';
-      $('pkHead').innerHTML = `<span class="pk-name">// ${esc(msg.name || '')}</span><span class="pk-count">${T('peekWindows', { n: msg.count })}</span>`;
+      // fejléc: a program neve; jobbra a memóriahasználata, az ablakok száma és az Összes bezárása
+      $('pkHead').innerHTML = `<span class="pk-name">// ${esc(msg.name || '')}</span>
+        <span class="pk-tools">${mem(msg)}<span class="pk-count">${T('peekWindows', { n: msg.count })}</span>
+          <button class="pk-closeall" id="pkCloseAll">${svg('close')}<span>${T('peekCloseAll')}</span></button></span>`;
       $('pkItems').innerHTML = (msg.items || []).map((it) => {
         const c = it.card;
         const rel = (r) => ({ x: r.x - c.x, y: r.y - c.y, w: r.w, h: r.h });
@@ -27,7 +33,7 @@
             <div class="pk-title">${icon}<span>${esc(it.title)}</span><button class="pk-x" data-close>${svg('close')}</button></div>
             <div class="pk-box" style="${box(rel(it.box))}">${inner}</div>
           </div>`;
-      }).join('') + `<button class="pk-closeall" id="pkCloseAll">${svg('close')}<span>${T('peekCloseAll')}</span></button>`;
+      }).join('');
       // kirajzolva: a program ekkor jegyzi be a kisképeket és jeleníti meg az ablakot
       post({ type: 'peek-ready', seq: msg.seq });
     };
@@ -38,7 +44,7 @@
       if (msg.theme) setTheme(msg.theme);
       root.className = 'peek pk-menu';
       menuHwnd = msg.hwnd;
-      $('pkHead').innerHTML = `<span class="pk-name">// ${esc(msg.name || '')}</span>`;
+      $('pkHead').innerHTML = `<span class="pk-name">// ${esc(msg.name || '')}</span>${mem(msg)}`;
       $('pkItems').innerHTML = (msg.items || []).map((it) =>
         `<button class="pm-item${it.danger ? ' danger' : ''}" data-cmd="${esc(it.cmd)}">${svg(it.icon)}<span>${esc(it.label)}</span></button>`).join('');
       post({ type: 'peek-ready', seq: msg.seq });
@@ -48,11 +54,12 @@
       card.classList.add('closing');
       post({ type: 'peek-close', hwnd: Number(card.dataset.hwnd) });
     };
+    $('pkHead').addEventListener('click', (e) => {
+      if (!e.target.closest('#pkCloseAll')) return;
+      for (const c of root.querySelectorAll('.pk-card')) c.classList.add('closing');
+      post({ type: 'peek-close-all' });
+    });
     $('pkItems').addEventListener('click', (e) => {
-      if (e.target.closest('#pkCloseAll')) {
-        for (const c of root.querySelectorAll('.pk-card')) c.classList.add('closing');
-        return post({ type: 'peek-close-all' });
-      }
       const item = e.target.closest('.pm-item');
       if (item) return post({ type: 'menu-pick', cmd: item.dataset.cmd, hwnd: menuHwnd });
       const card = e.target.closest('.pk-card');
@@ -75,7 +82,7 @@
       const card = (i) => ({ x: 14 + i * 248, y: 40, w: 236, h: 170 });
       const titles = ['Új lap – Mozilla Firefox', 'GitHub · cybershell – Mozilla Firefox', 'Letöltések – Mozilla Firefox'];
       render({
-        seq: 1, name: 'Firefox', count: 3,
+        seq: 1, name: 'Firefox', mem: '1,3 GB', count: 3,
         items: titles.map((title, i) => {
           const c = card(i);
           const b = { x: c.x + 6, y: c.y + 30, w: 224, h: 134 };

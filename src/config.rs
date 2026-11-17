@@ -4,8 +4,9 @@ use std::path::Path;
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Config {
-    /// A felület nyelve: "hu", "en" vagy "auto" (alapérték: a Windows nyelve szerint – magyar
-    /// Windowson magyar, minden másnál angol). A beállításokban választott nyelv felülírja.
+    /// A felület nyelve: "hu", "en", "pl" vagy "auto" (alapérték: a Windows nyelve szerint –
+    /// magyar Windowson magyar, lengyelen lengyel, minden másnál angol). A beállításokban
+    /// választott nyelv felülírja.
     pub language: String,
     /// Igaz, ha a fájlban "auto" áll: ilyenkor a `language` a Windows nyelvéből számolt érték,
     /// mentéskor viszont "auto" kerül vissza a fájlba.
@@ -37,14 +38,20 @@ pub struct Config {
     pub all_monitors: bool,
     /// Látszódjon-e a programok neve az ikonjuk alatt.
     pub icon_labels: bool,
+    /// Súgó szövegek: az elemek fölött időzve megjelenő magyarázatok (a HTML title-ök) mindenhol.
+    pub tooltips: bool,
     pub frame: Frame,
     pub activity: Activity,
     /// Mutassa-e a Claude 5 órás és heti használatát.
     pub claude_usage: bool,
     pub weather: Weather,
+    /// A panel Hálózat moduljának beállítása (a ping célja).
+    pub network: Network,
+    /// A panel Valuta moduljának beállítása (a választható pénznemek).
+    pub currency: Currency,
     /// A dátumra kattintva megnyíló naptárban mutatott naptárak (iCal-címek).
     pub calendar: Calendar,
-    /// A jobb panel szekcióinak láthatósága.
+    /// Az információs panel moduljai: láthatóság, sorrend, nézet.
     pub sections: Sections,
     /// Megjelenés: "dark" (Cyberpunk 2077), "light" (Ghost in the Shell), "auto" (napkeltétől
     /// napnyugtáig világos, éjjel sötét) vagy "windows" (a Windows világos/sötét módját követi).
@@ -81,114 +88,145 @@ pub struct Frame {
     pub right: u32,
 }
 
+/// Az információs panel egy modulja (a felülete: ui/modules/<id>.js és .css). Új modulnál ide
+/// is fel kell venni, hogy a beállításokban ki- és bekapcsolható, rendezhető legyen.
+pub struct PanelModule {
+    /// A modul azonosítója: a config.json `sections` kulcsa és a modul `id`-je a felületen.
+    pub id: &'static str,
+    /// Látszik-e alapból.
+    pub default: Shown,
+    /// Van-e kompakt nézete (a beállítások Megjelenés kártyáján).
+    pub compact: bool,
+}
+
+/// Egy modul alapértelmezett láthatósága.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Shown {
+    Always,
+    Never,
+    /// Csak asztali gépen: laptopon (kisebb képernyő) alapból rejtett.
+    DesktopOnly,
+}
+
+/// A panel modulai az alapsorrendben. A Laptop csak akkumulátoros gépen látszik (és csak ott
+/// szerepel a beállítások listájában), a beállítástól függetlenül.
+pub const PANEL_MODULES: &[PanelModule] = &[
+    PanelModule { id: "tools", default: Shown::Always, compact: false },
+    PanelModule { id: "claude", default: Shown::Never, compact: true },
+    PanelModule { id: "codex", default: Shown::Never, compact: true },
+    PanelModule { id: "activity", default: Shown::Never, compact: false },
+    PanelModule { id: "load", default: Shown::Never, compact: false },
+    PanelModule { id: "network", default: Shown::Always, compact: true },
+    PanelModule { id: "date", default: Shown::Never, compact: true },
+    PanelModule { id: "clock", default: Shown::Always, compact: true },
+    PanelModule { id: "laptop", default: Shown::Always, compact: false },
+    PanelModule { id: "weather", default: Shown::Always, compact: false },
+    PanelModule { id: "currency", default: Shown::Never, compact: true },
+    PanelModule { id: "music", default: Shown::DesktopOnly, compact: false },
+    PanelModule { id: "volume", default: Shown::Always, compact: false },
+    PanelModule { id: "tray", default: Shown::Always, compact: false },
+    PanelModule { id: "power", default: Shown::Always, compact: false },
+];
+
+/// Az információs panel moduljainak láthatósága, sorrendje és nézete.
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Sections {
-    /// Eszköztár: Számológép, Jegyzettömb, Keresés, Képmetsző.
-    pub tools: bool,
-    pub claude: bool,
-    /// A Codex-használat (5 órás és heti keret) szekció; alapból rejtett.
-    pub codex: bool,
-    pub activity: bool,
-    pub clock: bool,
-    pub date: bool,
-    /// Az időjárás szekció (a lekérést a `weather.enabled` kapcsolja ki).
-    pub weather: bool,
-    /// A zene (Spotify) szekció.
-    pub music: bool,
-    /// A hangerő szekció.
-    pub volume: bool,
-    /// A Főkapcsoló szekció (alapból a panel végén, a MENÜ előtt).
-    pub power: bool,
-    /// A szekciók sorrendje az információs panelen (a Keresés/Indítás és a Főkapcsoló között;
-    /// a laptop szekció mindig az időjárás előtt van).
+    /// A modulok láthatósága azonosító szerint (a config.json-ban a `sections` közvetlen kulcsai,
+    /// pl. "clock": true). A `normalize` után minden modul szerepel, a `PANEL_MODULES` sorrendjében.
+    #[serde(flatten)]
+    pub visible: serde_json::Map<String, serde_json::Value>,
+    /// A modulok sorrendje a panelen (a Start és a MENÜ között).
     pub order: Vec<String>,
     /// Az Eszköztár gombjainak sorrendje: "calc", "notepad", "search", "snip".
     pub tools_order: Vec<String>,
     /// A Főkapcsoló gombjainak sorrendje: "lock", "sleep", "shutdown", "restart".
     pub power_order: Vec<String>,
-    /// Kompakt nézetben lévő szekciók: "claude" és "codex" (a nullázásig hátralévő idő és a
-    /// frissítés sora nélkül), "clock" (a másodperc-számláló nélkül), "date" (a hét nélkül).
+    /// Kompakt nézetben lévő modulok (csak a kompakt nézettel rendelkezők): a Claude és a Codex
+    /// a nullázásig hátralévő idő és a frissítés sora nélkül, az Idő a másodperc-sáv, a Dátum a
+    /// hét nélkül.
     pub compact: Vec<String>,
 }
-
-pub const COMPACT_KEYS: [&str; 4] = ["claude", "codex", "clock", "date"];
 
 pub const TOOL_KEYS: [&str; 4] = ["calc", "notepad", "search", "snip"];
 pub const POWER_KEYS: [&str; 4] = ["lock", "sleep", "shutdown", "restart"];
 
-/// Érvényes gombsorrend: minden kulcs pontosan egyszer (a hiányzók a végére kerülnek).
-fn normalize_keys(list: &mut Vec<String>, keys: &[&str]) {
+/// Érvényes lista: csak ismert kulcsok, mindegyik legfeljebb egyszer. `complete` esetén a
+/// hiányzók a végére kerülnek.
+fn normalize_keys(list: &mut Vec<String>, keys: &[&str], complete: bool) {
     let mut out: Vec<String> = Vec::new();
     for k in list.iter() {
         if keys.contains(&k.as_str()) && !out.contains(k) {
             out.push(k.clone());
         }
     }
-    for k in keys {
-        if !out.iter().any(|o| o == k) {
-            out.push(k.to_string());
+    if complete {
+        for k in keys {
+            if !out.iter().any(|o| o == k) {
+                out.push(k.to_string());
+            }
         }
     }
     *list = out;
 }
 
-pub const SECTION_KEYS: [&str; 10] = ["tools", "claude", "codex", "activity", "date", "clock", "weather", "music", "volume", "power"];
-
 impl Default for Sections {
     fn default() -> Self {
-        // Laptopon (kisebb képernyő) alapból csak az Eszköztár, az Idő, az Időjárás, a Hangerő és
-        // a Főkapcsoló látszik; asztali gépen minden, kivéve az Aktivitást.
-        let full = crate::sys::battery().is_none();
-        Sections {
-            tools: true,
-            claude: full,
-            codex: false,
-            activity: false,
-            clock: true,
-            date: full,
-            weather: true,
-            music: full,
-            volume: true,
-            power: true,
-            // alapból az idő a dátum alatt van, alul az időjárás, a zene és a hangerő
-            order: SECTION_KEYS.iter().map(|s| s.to_string()).collect(),
-            tools_order: TOOL_KEYS.iter().map(|s| s.to_string()).collect(),
-            power_order: POWER_KEYS.iter().map(|s| s.to_string()).collect(),
+        let mut s = Sections {
+            visible: serde_json::Map::new(),
+            order: Vec::new(),
+            tools_order: Vec::new(),
+            power_order: Vec::new(),
             compact: Vec::new(),
-        }
+        };
+        s.normalize();
+        s
     }
 }
 
 impl Sections {
-    /// Érvényes sorrend: minden kulcs pontosan egyszer (a hiányzók a végére kerülnek).
+    /// Látszik-e a modul (ismeretlen azonosítónál nem).
+    pub fn shows(&self, id: &str) -> bool {
+        self.visible.get(id).and_then(|v| v.as_bool()).unwrap_or(false)
+    }
+
+    /// Érvényes állapot: minden modul láthatósága megvan (ami hiányzik, az alapérték: laptopon
+    /// az asztali gépre szánt modulok rejtve), a sorrendek teljesek, ismeretlen kulcs nincs.
     pub fn normalize(&mut self) {
-        let mut order: Vec<String> = Vec::new();
-        for k in &self.order {
-            if SECTION_KEYS.contains(&k.as_str()) && !order.contains(k) {
-                order.push(k.clone());
+        // akkumulátoros gép-e (csak akkor kérdezzük, ha kell)
+        let mut laptop: Option<bool> = None;
+        let visible = PANEL_MODULES
+            .iter()
+            .map(|m| {
+                let on = self.visible.get(m.id).and_then(|v| v.as_bool()).unwrap_or_else(|| match m.default {
+                    Shown::Always => true,
+                    Shown::Never => false,
+                    Shown::DesktopOnly => !*laptop.get_or_insert_with(|| crate::sys::battery().is_some()),
+                });
+                (m.id.to_string(), serde_json::Value::Bool(on))
+            })
+            .collect();
+        self.visible = visible;
+        let ids: Vec<&str> = PANEL_MODULES.iter().map(|m| m.id).collect();
+        let first_time = self.order.is_empty();
+        normalize_keys(&mut self.order, &ids, false);
+        // az újabb modulok az alapsorrend szerinti szomszédjuk után kerülnek (pl. a Codex a
+        // Claude alá), nem a lista végére
+        for (i, id) in ids.iter().enumerate() {
+            if self.order.iter().any(|o| o == id) {
+                continue;
             }
+            let at = if first_time {
+                self.order.len()
+            } else {
+                ids[..i].iter().rev().find_map(|prev| self.order.iter().position(|o| o == prev)).map_or(0, |p| p + 1)
+            };
+            self.order.insert(at, id.to_string());
         }
-        for k in SECTION_KEYS {
-            if !order.iter().any(|o| o == k) {
-                // az Eszköztár (v1.4-ben új) alapból a Claude fölé, a Codex (v1.5) alá kerül
-                match order.iter().position(|o| o == "claude") {
-                    Some(i) if k == "tools" => order.insert(i, k.to_string()),
-                    Some(i) if k == "codex" => order.insert(i + 1, k.to_string()),
-                    _ => order.push(k.to_string()),
-                }
-            }
-        }
-        self.order = order;
-        normalize_keys(&mut self.tools_order, &TOOL_KEYS);
-        normalize_keys(&mut self.power_order, &POWER_KEYS);
-        let mut compact: Vec<String> = Vec::new();
-        for k in &self.compact {
-            if COMPACT_KEYS.contains(&k.as_str()) && !compact.contains(k) {
-                compact.push(k.clone());
-            }
-        }
-        self.compact = compact;
+        normalize_keys(&mut self.tools_order, &TOOL_KEYS, true);
+        normalize_keys(&mut self.power_order, &POWER_KEYS, true);
+        let compact: Vec<&str> = PANEL_MODULES.iter().filter(|m| m.compact).map(|m| m.id).collect();
+        normalize_keys(&mut self.compact, &compact, false);
     }
 }
 
@@ -231,6 +269,47 @@ pub struct WindowsSync {
 impl Default for WindowsSync {
     fn default() -> Self {
         WindowsSync { dark_mode: false, accent: false, accent_color: "hot".into(), terminal: false }
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Network {
+    /// A ping célja: IP-cím vagy név (pl. "1.1.1.1", "google.com").
+    pub ping_host: String,
+}
+
+impl Default for Network {
+    fn default() -> Self {
+        Network { ping_host: "1.1.1.1".into() }
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Currency {
+    /// A panel listáiban választható pénznemek ISO-kóddal (pl. "EUR"), ebben a sorrendben.
+    pub list: Vec<String>,
+}
+
+impl Default for Currency {
+    fn default() -> Self {
+        Currency { list: ["EUR", "USD", "HUF", "GBP", "CHF"].iter().map(|s| s.to_string()).collect() }
+    }
+}
+
+impl Currency {
+    /// Érvényes lista: háromjegyű nagybetűs kódok, mindegyik egyszer; legalább kettő kell
+    /// (különben az alapértelmezett lista).
+    pub fn normalize(&mut self) {
+        let mut out: Vec<String> = Vec::new();
+        for c in &self.list {
+            let c = c.trim().to_uppercase();
+            if c.len() == 3 && c.bytes().all(|b| b.is_ascii_uppercase()) && !out.contains(&c) {
+                out.push(c);
+            }
+        }
+        self.list = if out.len() >= 2 { out } else { Currency::default().list };
     }
 }
 
@@ -360,10 +439,13 @@ impl Default for Config {
             info_edge_auto: false,
             all_monitors: true,
             icon_labels: true,
+            tooltips: true,
             frame: Frame::default(),
             activity: Activity::default(),
             claude_usage: true,
             weather: Weather::default(),
+            network: Network::default(),
+            currency: Currency::default(),
             calendar: Calendar::default(),
             sections: Sections::default(),
             appearance: "dark".into(),
@@ -486,6 +568,10 @@ impl Config {
     /// Betöltés utáni rendbetétel: sorrend, nyelv, panelhelyek, tartományok, séma.
     pub fn finish(&mut self) {
         self.sections.normalize();
+        self.currency.normalize();
+        if self.network.ping_host.trim().is_empty() {
+            self.network.ping_host = Network::default().ping_host;
+        }
         self.resolve_language();
         self.normalize_edges();
         self.health.minutes = self.health.minutes.clamp(5, 480);
@@ -576,7 +662,7 @@ impl Config {
     /// Az "auto" (vagy ismeretlen) nyelv feloldása a Windows felületének nyelvére.
     pub fn resolve_language(&mut self) {
         match self.language.as_str() {
-            "hu" | "en" => self.language_auto = false,
+            "hu" | "en" | "pl" => self.language_auto = false,
             _ => {
                 self.language_auto = true;
                 self.language = crate::sys::system_language().to_string();
@@ -618,4 +704,60 @@ pub fn save(path: &Path, cfg: &Config) -> Result<(), String> {
     let tmp = path.with_extension("json.tmp");
     std::fs::write(&tmp, text).map_err(|e| format!("Nem menthető: {e}"))?;
     std::fs::rename(&tmp, path).map_err(|e| format!("Nem menthető: {e}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sections(json: &str) -> Sections {
+        let mut s: Sections = serde_json::from_str(json).unwrap();
+        s.normalize();
+        s
+    }
+
+    #[test]
+    fn modules_complete() {
+        // a megadott érték megmarad, a hiányzó az alapérték, az ismeretlen kulcs eltűnik
+        let s = sections(r#"{ "clock": false, "codex": true, "nincsilyen": true, "order": ["clock", "nincsilyen", "clock"] }"#);
+        assert!(!s.shows("clock") && s.shows("codex"));
+        assert!(s.shows("tools") && !s.shows("activity"));
+        assert!(!s.visible.contains_key("nincsilyen") && !s.shows("nincsilyen"));
+        assert_eq!(s.visible.len(), PANEL_MODULES.len());
+        // a sorrend teljes, minden modul egyszer; a hiányzók az alapsorrend szerinti szomszédjuk
+        // mellé kerülnek (az Eszköztárnak nincs előzője, így az elejére)
+        assert_eq!(s.order.len(), PANEL_MODULES.len());
+        assert_eq!(s.order.iter().filter(|o| *o == "clock").count(), 1);
+        assert_eq!(s.order[0], "tools");
+    }
+
+    #[test]
+    fn new_module_after_its_neighbour() {
+        // régi (Codex előtti) sorrend: a Codex a Claude alá kerül, nem a végére
+        let s = sections(r#"{ "order": ["power", "claude", "tools", "activity", "date", "clock", "weather", "music", "volume"] }"#);
+        assert_eq!(&s.order[..4], ["power", "claude", "codex", "tools"]);
+        // üres sorrend: az alapsorrend
+        let d = sections("{}");
+        let ids: Vec<&str> = PANEL_MODULES.iter().map(|m| m.id).collect();
+        assert_eq!(d.order, ids);
+    }
+
+    #[test]
+    fn compact_and_buttons() {
+        let s = sections(r#"{ "compact": ["clock", "tools", "clock"], "toolsOrder": ["snip", "x"] }"#);
+        // kompakt nézete csak a kompakt nézettel rendelkező modulnak lehet
+        assert_eq!(s.compact, ["clock"]);
+        assert_eq!(s.tools_order, ["snip", "calc", "notepad", "search"]);
+        assert_eq!(s.power_order, POWER_KEYS);
+    }
+
+    #[test]
+    fn json_layout() {
+        // a config.json-ban a modulok kulcsai a sections elején vannak, utánuk a sorrendek
+        let v = serde_json::to_value(sections(r#"{ "music": false }"#)).unwrap();
+        let keys: Vec<&String> = v.as_object().unwrap().keys().collect();
+        assert_eq!(keys[0], "tools");
+        assert_eq!(keys[PANEL_MODULES.len()], "order");
+        assert_eq!(v["music"], false);
+    }
 }

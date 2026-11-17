@@ -105,7 +105,11 @@ impl Hub {
         unsafe {
             let _ = ShowWindow(f.hwnd, SW_HIDE);
         }
+        let hwnd = f.hwnd;
         self.eval(self.info_edge(), &json!({ "type": "fly-state", "open": false }));
+        if !lost_focus {
+            self.refocus_later(hwnd);
+        }
     }
 
     /// A csatolt naptárak a felületnek: név és szín (a titkos címet nem küldjük ki).
@@ -196,12 +200,10 @@ impl Hub {
             return Err("dup");
         }
         const COLORS: [&str; 6] = ["#00e1ff", "#f3e600", "#ff2a6d", "#7ee787", "#b26bff", "#ffb02e"];
-        let name = msg["name"]
-            .as_str()
-            .map(str::trim)
-            .filter(|n| !n.is_empty())
-            .map(|n| n.chars().take(40).collect())
-            .unwrap_or_else(|| if url.contains("google.com") { "Google Naptár".to_string() } else { self.tr("Naptár", "Calendar") });
+        let name =
+            msg["name"].as_str().map(str::trim).filter(|n| !n.is_empty()).map(|n| n.chars().take(40).collect()).unwrap_or_else(|| {
+                if url.contains("google.com") { "Google Naptár".to_string() } else { self.tr("Naptár", "Calendar", "Kalendarz") }
+            });
         let color = COLORS[self.cfg.calendar.feeds.len() % COLORS.len()].to_string();
         log(format!("naptár csatolva: {name}"));
         self.cfg.calendar.feeds.push(config::CalendarFeed { name, url, color });

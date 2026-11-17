@@ -4,7 +4,6 @@ use crate::hub::Hub;
 use crate::hub::layout::is_vertical;
 use crate::hub::layout::popup_pos;
 use crate::log;
-use crate::web::percent_encode;
 use crate::web::push;
 use crate::{appbar, peek, wintrack};
 use serde_json::json;
@@ -41,6 +40,21 @@ pub(crate) struct PeekWin {
 }
 
 impl Hub {
+    /// Egy program memóriahasználata kiírva (pl. „412 MB”, „1,3 GB”) az előnézet és a
+    /// menü fejlécébe; az összes folyamatát összeadva, mint a Feladatkezelő.
+    fn memory_label(&self, path: &str) -> Option<String> {
+        let bytes = wintrack::memory_of_path(path)?;
+        let mb = bytes as f64 / (1024.0 * 1024.0);
+        let s = if mb < 1000.0 {
+            format!("{} MB", mb.round().max(1.0))
+        } else {
+            let gb = format!("{:.1}", mb / 1024.0);
+            let gb = if self.cfg.language == "en" { gb } else { gb.replace('.', ",") };
+            format!("{gb} GB")
+        };
+        Some(s)
+    }
+
     pub(crate) fn peek_eval(&self, payload: &serde_json::Value) {
         if let Some(p) = &self.peek {
             push(&p.webview, payload);
@@ -77,7 +91,7 @@ impl Hub {
         mine.truncate(cols * max_rows);
         let rows = mine.len().div_ceil(cols);
         let w_css = 2.0 * peek::PAD + cols as f64 * peek::CARD_W + (cols - 1) as f64 * peek::GAP;
-        let h_css = 2.0 * peek::PAD + peek::HEADER + rows as f64 * card_h + (rows - 1) as f64 * peek::GAP + peek::FOOTER;
+        let h_css = 2.0 * peek::PAD + peek::HEADER + rows as f64 * card_h + (rows - 1) as f64 * peek::GAP;
         let (w, h) = ((w_css * scale).round() as i32, (h_css * scale).round() as i32);
 
         // az ikonhoz igazítva, a munkaterületen belül
@@ -108,8 +122,7 @@ impl Hub {
             if let (Some(s), Some(t)) = (src, thumb) {
                 pending.push((win.hwnd, t.to_phys(scale), s));
             }
-            let icon =
-                if win.path.is_empty() { String::new() } else { format!("/__icon/{}", percent_encode(&win.path.replace('\\', "/"))) };
+            let icon = if win.path.is_empty() { String::new() } else { self.program_icon(&win.path) };
             items.push(json!({
                 "hwnd": win.hwnd.0 as isize,
                 "title": if win.title_raw.trim().is_empty() { wintrack::display_name(&win.path) } else { win.title_raw.clone() },
@@ -130,6 +143,7 @@ impl Hub {
                 None => mine.first().map(|w| w.path.clone()).map(|p| self.program_name(&p)).unwrap_or_default(),
             }
         };
+        let mem = mine.first().and_then(|w| self.memory_label(&w.path));
         let hwnds: Vec<isize> = mine.iter().map(|w| w.hwnd.0 as isize).collect();
         let mut target = json!({ "y": icon_y, "x": msg["x"], "bar": idx });
         if !msg["id"].is_null() {
@@ -158,6 +172,7 @@ impl Hub {
             "type": "peek",
             "seq": seq,
             "name": name,
+            "mem": mem,
             "count": items.len(),
             "items": items,
             "theme": self.theme_json(),
@@ -183,17 +198,20 @@ impl Hub {
         let zoomed = !win.iconic && unsafe { IsZoomed(win.hwnd).as_bool() };
         let mut items = Vec::new();
         if !zoomed {
-            items.push(json!({ "cmd": "max", "icon": "maximize", "label": self.tr("Teljes képernyőre", "Maximize") }));
+            items.push(json!({ "cmd": "max", "icon": "maximize", "label": self.tr("Teljes képernyőre", "Maximize", "Maksymalizuj") }));
         }
-        items.push(json!({ "cmd": "close", "icon": "close", "label": self.tr("Ablak bezárása", "Close window"), "danger": true }));
+        items.push(
+            json!({ "cmd": "close", "icon": "close", "label": self.tr("Ablak bezárása", "Close window", "Zamknij okno"), "danger": true }),
+        );
         let name = match msg["id"].as_u64() {
             Some(id) => self.cfg.apps.get(id as usize).map(|a| a.name.clone()).unwrap_or_default(),
             None => self.program_name(&win.path),
         };
+        let mem = self.memory_label(&win.path);
 
         // méret: fejléc, gombok (32 px), köztük 4 px, alul 10 px
         let n = items.len() as f64;
-        let (w_css, h_css) = (232.0, 38.0 + n * 32.0 + (n - 1.0) * 4.0 + 10.0);
+        let (w_css, h_css) = (264.0, 38.0 + n * 32.0 + (n - 1.0) * 4.0 + 10.0);
         let scale = bar_scale.max(0.5);
         let (w, h) = ((w_css * scale).round() as i32, (h_css * scale).round() as i32);
         let work = appbar::work_area_of(bar_rect);
@@ -219,6 +237,7 @@ impl Hub {
             "type": "menu",
             "seq": seq,
             "name": name,
+            "mem": mem,
             "hwnd": win.hwnd.0 as isize,
             "items": items,
             "theme": self.theme_json(),

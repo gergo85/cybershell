@@ -1,0 +1,44 @@
+/* Claude-használat; a keretek sávjait és a frissítés sorát a Codex is használja. */
+
+/* egy keret: felirat és százalék, csíkozott sáv, a visszaállásig hátralévő idő */
+.lim { display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px; }
+.lim-head { display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 9px; letter-spacing: .08em; color: var(--c-text); font-variation-settings: "wdth" 85, "wght" 600; }
+.lim-head b { font-size: 15px; letter-spacing: 0; color: var(--c-main); font-variation-settings: "wdth" 75, "wght" 650; opacity: .72; }
+.lim-bar { position: relative; height: 6px; background: var(--c-main-faint); }
+.lim-bar i {
+  position: absolute; left: 0; top: 0; bottom: 0; background: var(--c-main); opacity: .55;
+  -webkit-mask: repeating-linear-gradient(90deg, #000 0 5px, transparent 5px 7px);
+          mask: repeating-linear-gradient(90deg, #000 0 5px, transparent 5px 7px);
+}
+.lim.warn .lim-head b { color: var(--c-alt); }
+.lim.warn .lim-bar i { background: var(--c-alt); box-shadow: 0 0 8px var(--c-alt-dim); }
+.lim.hot .lim-head b { color: var(--c-hot); }
+.lim.hot .lim-bar i { background: var(--c-hot); box-shadow: 0 0 8px var(--c-hot-dim); }
+.lim-reset { font: 400 10px/1.2 var(--f-mono); letter-spacing: .02em; color: color-mix(in srgb, var(--c-alt) 70%, var(--c-text)); }
+
+/* alul: frissítés (az adat ideje) és az előfizetés */
+.usage-foot { display: flex; align-items: center; justify-content: space-between; }
+.plan { font: 700 8.5px/1 var(--f-mono); letter-spacing: .06em; color: var(--c-alt); }
+.refresh {
+  align-self: flex-start; display: flex; align-items: center; gap: 5px;
+  font: 400 9px/1 var(--f-mono); letter-spacing: .1em; color: var(--c-text-dim);
+}
+.refresh svg { width: 11px; height: 11px; stroke-width: 2; }
+.refresh:hover { color: var(--c-main); }
+.ib.login {
+  flex: none; align-self: stretch; height: 28px; margin-top: 4px; padding: 0 12px;
+  font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--c-main);
+}
+.ib.login:hover { color: var(--c-bg); }
+
+/* kompakt nézet: a visszaállás ideje és a frissítés sora nélkül */
+:is(#claudeSec, #codexSec).compact :is(.lim-reset, .usage-foot) { display: none; }
+
+/* vízszintes panelen a két keret egymás mellett, a frissítés a fejléc sorában */
+.right.horiz #claudeSec { position: relative; width: 210px; }
+.right.horiz #claudeSec h3 { padding-right: 104px; }
+.right.horiz #usage { display: grid; grid-template-columns: 1fr 1fr; column-gap: 12px; align-items: start; }
+.right.horiz #usage .ib.login { margin-top: 0; align-self: start; }
+.right.horiz .lim { margin-bottom: 0; }
+.right.horiz .usage-foot { position: absolute; top: -1px; right: 0; gap: 8px; }

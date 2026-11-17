@@ -4,7 +4,7 @@
 
 ## Start and exit
 
-- **Start:** `CyberShell.exe`. The exe works on its own: the interface and the default wallpapers are built in. On first start it creates `config.json` and the `wallpapers` folder next to itself. If there is a `ui` folder next to it, that is used instead of the built-in interface (so the look can be edited).
+- **Start:** `CyberShell.exe`. The exe works on its own: the interface and the default wallpapers are built in. On first start it creates `config.json` and the `wallpapers` folder in `%LOCALAPPDATA%\CyberShell`. Earlier versions kept these next to the exe: if it finds them there, it copies them over on first start (the originals stay where they are; from then on, edit the new copies). If there is a `ui` folder next to it, that is used instead of the built-in interface (so the look can be edited).
 - **Exit:** bottom right **// MENU** → **Exit CyberShell**, or `Ctrl+Alt+Q`, or `CyberShell.exe --quit` from the command line.
 - **Reload:** `Ctrl+Alt+R`, or MENU → **Reload**. The program re-reads `config.json` and the interface files.
 - **Start with Windows:** the MENU → **Start with Windows** switch. When on, CyberShell starts by itself at sign-in: it waits until Explorer is ready and only then reserves the screen edges. It refreshes the entry on every start, so it still starts from the right place after the folder is moved. It also enables itself in the Windows *Startup apps* list (Task Manager, Settings) – newer Windows 11 builds do not start it otherwise. If you disable it there, CyberShell treats it as off as well.

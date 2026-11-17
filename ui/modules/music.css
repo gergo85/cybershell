@@ -1,0 +1,94 @@
+/* Zene (Spotify). Az albumborító a lejátszó háttere (sötétítve, képcsöves sorokkal): így a
+   szekció alig magasabb a hangerőnél, és a panel 1080 px magas képernyőn is elfér. */
+.music.idle .mu-live, .music:not(.idle) .mu-launch { display: none; }
+
+/* a Spotify nem fut: indítógomb */
+.mu-launch {
+  height: 26px; display: flex; align-items: center; justify-content: center; gap: 5px;
+  font: 700 9px/1 var(--f-mono); letter-spacing: .06em; color: var(--c-text-dim);
+  background: color-mix(in srgb, var(--c-alt) 8%, transparent);
+  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+  transition: background-color .12s, color .12s;
+}
+.mu-launch svg { width: 13px; height: 13px; color: var(--c-alt); }
+.mu-launch:hover { background: var(--c-alt); color: var(--c-bg); }
+.mu-launch:hover svg { color: var(--c-bg); }
+
+/* a lejátszó */
+.mu-live {
+  position: relative; display: flex; flex-direction: column; gap: 3px; padding: 6px 5px 5px; overflow: hidden;
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+  background: color-mix(in srgb, var(--c-alt) 10%, var(--c-bg));
+}
+.mu-live > :not(.mu-art) { position: relative; z-index: 2; }
+.mu-art { position: absolute; inset: 0; z-index: 0; display: block; padding: 0; }
+.mu-art img { display: block; width: 100%; height: 100%; object-fit: cover; opacity: .42; filter: saturate(1.1) contrast(1.1); transition: opacity .2s; }
+.music.noart .mu-art img { visibility: hidden; }
+/* sötétítés alul (olvashatóság), képcsöves sorok (keret nélkül) */
+.mu-art::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background:
+    repeating-linear-gradient(0deg, rgba(0,0,0,.25) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, color-mix(in srgb, var(--c-bg) 25%, transparent), color-mix(in srgb, var(--c-bg) 80%, transparent) 70%);
+}
+.mu-live:hover .mu-art img { opacity: .6; }
+
+/* lejátszás közben ugráló hangszint-jelző a jobb felső sarokban */
+.mu-eq { position: absolute !important; right: 5px; top: 6px; display: flex; align-items: flex-end; gap: 2px; height: 9px; pointer-events: none; }
+.mu-eq b { width: 2px; height: 25%; background: var(--c-main); box-shadow: 0 0 4px var(--c-main-glow); }
+.music.playing .mu-eq b { animation: muEq .9s ease-in-out infinite alternate; }
+.music.playing .mu-eq b:nth-child(2) { animation-duration: .7s; animation-delay: -.3s; }
+.music.playing .mu-eq b:nth-child(3) { animation-duration: 1.1s; animation-delay: -.6s; }
+@keyframes muEq { 0% { height: 20%; } 100% { height: 100%; } }
+
+/* cím (a hosszú lassan körbefut) és előadó */
+.mu-title {
+  overflow: hidden; white-space: nowrap; margin-right: 14px; pointer-events: none;
+  font-size: 11px; line-height: 1.15; color: var(--c-text); font-variation-settings: "wdth" 85, "wght" 650;
+  text-shadow: 0 1px 3px #000;
+}
+.mu-title span { display: inline-block; }
+.mu-title.scroll { margin-right: 0; -webkit-mask: linear-gradient(90deg, transparent, #000 4px, #000 calc(100% - 6px), transparent); }
+.mu-title.scroll span { animation: muMarquee 10s ease-in-out infinite alternate; }
+@keyframes muMarquee { 0%, 18% { transform: none; } 82%, 100% { transform: translateX(var(--mq, 0)); } }
+.mu-artist { pointer-events: none; font: 400 9px/1.2 var(--f-mono); color: var(--c-alt); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 3px #000; }
+
+/* folyamatjelző (kattintva tekerhető, ha a Spotify engedi) */
+.mu-bar { padding: 3px 0 2px; }
+.mu-bar.seek { cursor: pointer; }
+.mu-bar > span { position: relative; display: block; height: 3px; background: color-mix(in srgb, var(--c-main) 22%, transparent); }
+.mu-bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--c-main); box-shadow: 0 0 6px var(--c-main-glow); transition: width .9s linear; }
+.mu-bar.seek:hover > span { background: color-mix(in srgb, var(--c-main) 36%, transparent); }
+.music.notime .mu-bar { visibility: hidden; }
+
+/* 2×2 gomb: keverés, lejátszás / előző, következő */
+.mu-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
+.mu-btns .ib { height: 22px; background: color-mix(in srgb, var(--c-bg) 55%, transparent); }
+.mu-btns .ib svg { width: 12px; height: 12px; }
+.mu-btns .mu-play { color: var(--c-main); background: color-mix(in srgb, var(--c-main) 18%, color-mix(in srgb, var(--c-bg) 55%, transparent)); }
+.mu-btns .mu-shuf { color: var(--c-text-dim); }
+.mu-btns .mu-shuf.on { color: var(--c-main); background: color-mix(in srgb, var(--c-main) 14%, color-mix(in srgb, var(--c-bg) 55%, transparent)); box-shadow: inset 0 -2px 0 var(--c-main); }
+.mu-btns .mu-shuf.unknown { opacity: .4; }
+.mu-btns .ib:hover, .mu-btns .mu-play:hover, .mu-btns .mu-shuf:hover { color: var(--c-bg); background: var(--c-main-deep); }
+
+/* világos téma */
+html[data-scheme="light"] :is(.mu-title, .mu-artist) { text-shadow: 0 0 4px color-mix(in srgb, #fff 80%, transparent); }
+html[data-scheme="light"] .mu-art img { opacity: .55; }
+html[data-scheme="light"] .mu-art::after {
+  background:
+    repeating-linear-gradient(0deg, rgba(255,255,255,.3) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, color-mix(in srgb, var(--c-bg) 30%, transparent), color-mix(in srgb, var(--c-bg) 82%, transparent) 70%);
+}
+
+/* vízszintes panelen: a gombok jobbra, a cím, az előadó és a sáv mellettük */
+.right.horiz .music { width: 250px; }
+.right.horiz .mu-live {
+  display: grid; grid-template-columns: minmax(0, 1fr) 70px; grid-template-areas: "title btns" "artist btns" "bar btns";
+  column-gap: 8px; row-gap: 2px; align-items: center; padding: 4px 5px;
+}
+.right.horiz .mu-title { grid-area: title; margin-right: 12px; }
+.right.horiz .mu-artist { grid-area: artist; }
+.right.horiz .mu-bar { grid-area: bar; }
+.right.horiz .mu-btns { grid-area: btns; }
+.right.horiz .mu-btns .ib { height: 19px; }
+.right.horiz .mu-eq { right: 82px; top: 5px; }

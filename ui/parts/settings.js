@@ -16,8 +16,10 @@
       { id: 'features', icon: 'spark' },
       { id: 'system', icon: 'pc' },
     ];
+    // a választható nyelvek, a nevük szerint ábécérendben
+    const LANGS = [['en', 'English'], ['hu', 'Magyar'], ['pl', 'Polski']].sort((a, b) => a[1].localeCompare(b[1]));
     const tabKey = (id) => `tab${id[0].toUpperCase()}${id.slice(1)}`;
-    const sw = (on) => (lang === 'hu' ? (on ? 'BE' : 'KI') : (on ? 'ON' : 'OFF'));
+    const sw = (on) => ({ hu: ['KI', 'BE'], pl: ['WYŁ', 'WŁ'] }[lang] || ['OFF', 'ON'])[on ? 1 : 0];
     // egy be/ki kapcsoló: data-bool = az adat útvonala (és a programnak küldött kulcs)
     const toggle = (path, icon, label, hint, extra = '') =>
       `<button class="sbtn toggle" data-bool="${path}"${hint ? ` title="${esc(hint)}"` : ''}${extra}>${svg(icon)}<span>${label}</span><b class="switch">–</b></button>`;
@@ -51,13 +53,14 @@
                 </button>`).join('')}
             </div>
             <div class="rail-keys">${T('tabKeys')}</div>
+            <div class="rail-code" id="railCode" aria-hidden="true"></div>
             <div class="rail-load" id="railLoad" title="${T('systemLoad').replace(/^\/\/\s*/, '')}">
               <div class="rl" id="rlCpu"><span>${T('cpuShort')}</span><i><b></b></i><em>--%</em></div>
               <div class="rl mem" id="rlMem"><span>${T('memShort')}</span><i><b></b></i><em>--%</em></div>
             </div>
             <section class="rail-credit">
               <div class="credit-by"><span>${T('madeBy')}</span><b>Szabó Gergő</b></div>
-              <div class="credit-by credit-ver"><span>${T('version')}</span><b id="appVer">v1.5</b></div>
+              <div class="credit-by credit-ver"><span>${T('version')}</span><b id="appVer">v2.0</b></div>
               <div class="credit-btns">
                 <button class="sbtn mini" data-cmd="website" title="${T('website')}">${svg('photo')}<span>${T('photoSite')}</span></button>
                 <button class="sbtn mini" data-cmd="github">${svg('github')}<span>GitHub</span></button>
@@ -120,15 +123,15 @@
                   <div><h3 class="ord-title">${svg('power')}<span>${T('sPower')}</span></h3><div class="set-list ord-list" id="ordPower"></div></div>
                 </div>
               </section>
+              <section class="set-card c-view">
+                <h2>${T('viewCard')}</h2>
+                <div class="view-grid" id="viewList"></div>
+              </section>
               </div>
               <div class="pane-col">
               <section class="set-card c-sections">
                 <h2>${T('visibleSections')}</h2>
                 <div class="set-list" id="secList"></div>
-              </section>
-              <section class="set-card c-view">
-                <h2>${T('viewCard')}</h2>
-                <div class="set-grid" id="viewList"></div>
               </section>
               </div>
             </section>
@@ -160,10 +163,10 @@
                   <div class="lang-row nb-row" title="${T('neonBorderHint')}">${svg('maximize')}<span>${T('neonBorder')}</span>
                     <div class="seg" id="nbSeg"><button data-nb="off">${T('nbOff')}</button><button data-nb="active">${T('nbActive')}</button><button data-nb="all">${T('nbAll')}</button></div>
                   </div>
-                  ${toggle('windowsSync.darkMode', 'moon', T('syncMode'), T('syncModeHint'))}
                   <div class="lang-row acc-row" title="${T('syncAccentHint')}">${svg('picker')}<span>${T('syncAccent')}</span>
                     <div class="seg" id="accSeg"><button data-acc="off">${T('nbOff')}</button><button data-acc="main">${T('accMain')}</button><button data-acc="alt">${T('accAlt')}</button><button data-acc="hot">${T('accHot')}</button></div>
                   </div>
+                  ${toggle('windowsSync.darkMode', 'moon', T('syncMode'), T('syncModeHint'))}
                   ${toggle('windowsSync.terminal', 'terminal', T('syncTerminal'), T('syncTerminalHint'))}
                 </div>
               </section>
@@ -201,6 +204,14 @@
                   <label class="ws-city url-row" id="engCustom">${svg('globe')}<span class="ws-field"><input id="engUrl" type="text" spellcheck="false" autocomplete="off" placeholder="https://…?q={q}"><button class="ws-go" id="engGo" title="${T('save')}">${svg('enter')}</button></span></label>
                 </div>
               </section>
+              <!-- a panel moduljainak saját kártyái (a modul leírásának settings része) -->
+              <div class="mod-cards">
+                ${window.HUB.modules.filter((m) => m.settings).map((m) => `
+                  <section class="set-card mod-card" id="mc-${m.id}">
+                    <h2>${T(m.settings.title)}</h2>
+                    ${m.settings.html()}
+                  </section>`).join('')}
+              </div>
               </div>
               <div class="pane-col">
               <section class="set-card health" id="hlCard">
@@ -234,10 +245,11 @@
             <section class="set-pane pane-system" data-pane="system" role="tabpanel">
               <section class="set-card c-general">
                 <h2>${T('generalCard')}</h2>
-                <div class="set-grid">
+                <div class="set-grid two">
                   <button class="sbtn toggle" data-toggle="autostart">${svg('power')}<span>${T('startWithWindows')}</span><b class="switch">–</b></button>
-                  <div class="lang-row">${svg('globe')}<span>${T('language')}</span>
-                    <div class="seg" id="langSeg"><button data-lang="en">English</button><button data-lang="hu">Magyar</button></div>
+                  ${toggle('tooltips', 'help', T('tooltips'), T('tooltipsHint'))}
+                  <div class="lang-row wide">${svg('globe')}<span>${T('language')}</span>
+                    <div class="seg" id="langSeg">${LANGS.map(([k, n]) => `<button data-lang="${k}">${n}</button>`).join('')}</div>
                   </div>
                 </div>
               </section>
@@ -279,9 +291,20 @@
     const sortableLater = []; // a húzható listák (a sortable a lenti definíció után kapcsolódik be)
     let draft = [];       // a szerkesztett ikonlista
     let original = '[]';
-    const SECTION_NAMES = { tools: T('sTools'), power: T('sPower'), claude: T('sClaude'), codex: T('sCodex'), activity: T('sActivity'), date: T('sDate'), clock: T('sClock'),
-      weather: T('sWeather'), music: T('sMusic'), volume: T('sVolume') };
-    const SECTION_HINT = { music: T('sMusicHint'), weather: T('sWeatherHint') };
+    // a panel moduljai (modules/*.js): a ki- és bekapcsolható, rendezhető modulok
+    const MODULES = window.HUB.modules.filter((m) => m.listed !== false);
+    const moduleOf = (id) => MODULES.find((m) => m.id === id);
+    // a modulok saját beállításkártyái: a kártya a frissített adatot a render(data) horgában kapja
+    const MODULE_CARDS = window.HUB.modules.filter((m) => m.settings).map((m) => {
+      const card = $(`mc-${m.id}`);
+      const hooks = m.settings.setup ? m.settings.setup({
+        el: card, demo, post,
+        $: (id) => card.querySelector(`#${id}`),
+        // a helyi adat frissítése (a program a mentés után úgyis újraküldi)
+        update: (patch) => { if (data) Object.assign(data, patch); },
+      }) || {} : {};
+      return { m, hooks };
+    });
     const get = (path) => path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), data);
     const setLocal = (path, v) => {
       const keys = path.split('.');
@@ -349,6 +372,69 @@
       selectTab(TABS[(next + TABS.length) % TABS.length].id, { focus: true });
     });
     window.addEventListener('resize', placeGlow);
+
+    // ── díszítés: halványan „futó programkód” a fülek és a terhelésjelző között ──
+    // Soronként begépelődik, a régebbi sorok felfelé kifutnak. Csak amíg a beállítások
+    // látszanak; csökkentett mozgásnál álló sorok.
+    {
+      const CODE = [
+        'fn poll(&mut self) {', '  let fg = wintrack::foreground();', '  if fg != self.last { self.redraw(); }', '}',
+        'for w in tracker.snapshot(&own) {', '  bar.mark(w.hwnd, w.active);', 'appbar::register(edge, rect)',
+        'dwm.set_border(hwnd, accent)', 'ipc.recv() -> {"type":"state"}', 'mov rax, qword ptr [rbp-0x18]',
+        '0x7ffd3a2c  48 8b 05 f1 2c 00', 'cpu.sample() -> 12.4%', 'mem.commit = 0x3f2a000', 'spawn(guard, pid)',
+        'ping 1.1.1.1 · 14 ms', 'hash = fnv1a(path) & 0xffff', "emit('state', running)", 'ex &= !WS_EX_TOOLWINDOW',
+        'queue.push(job); ok', 'let tray = tray::list();', 'webview.eval(hub.receive(msg))', 'sync wallpaper · done',
+        'if !cfg.weather.enabled { return }', 'await fetch(/__icon/…)', 'sleep(150ms); retry', 'jmp short 0x4012a0',
+        'xor eax, eax', 'ret', 'match msg["type"] {', '  "cmd" => self.run(cmd),', '  _ => {}', '}',
+        'neon.border(hwnd, 0x2a6dff)', 'peek.thumb(src, rect)', 'heartbeat · 3 s', 'watch(notify_icons)',
+      ];
+      const box = $('railCode');
+      const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const MAX_LINES = 24;
+      let pick = Math.floor(Math.random() * CODE.length);
+      const nextText = () => {
+        // általában a következő sor, néha ugrás egy véletlen helyre
+        pick = Math.random() < 0.7 ? (pick + 1) % CODE.length : Math.floor(Math.random() * CODE.length);
+        return CODE[pick];
+      };
+      const addLine = (text) => {
+        const el = document.createElement('div');
+        el.textContent = text;
+        box.append(el);
+        while (box.childElementCount > MAX_LINES) box.firstElementChild.remove();
+        return el;
+      };
+      if (still) {
+        for (let i = 0; i < 14; i++) addLine(nextText());
+      } else {
+        for (let i = 0; i < 10; i++) addLine(nextText());
+        let line = null;
+        let text = '';
+        let at = 0;
+        const step = () => {
+          let wait = 34;
+          if (root.classList.contains('shown') || demo) {
+            if (!line) {
+              text = nextText();
+              at = 0;
+              line = addLine('');
+              line.className = 'typing';
+            }
+            at += 1 + Math.floor(Math.random() * 2);
+            line.textContent = text.slice(0, at);
+            if (at >= text.length) {
+              line.className = '';
+              line = null;
+              wait = 250 + Math.random() * 900;
+            }
+          } else {
+            wait = 500;
+          }
+          setTimeout(step, wait);
+        };
+        setTimeout(step, 600);
+      }
+    }
 
     // ── megjelenés és eltűnés animációval ──
     // A beúszó animáció közben a tartalom egy pillanatra lejjebb csúszik: ilyenkor a görgetősáv
@@ -625,21 +711,19 @@
     $('engUrl').addEventListener('keydown', (e) => { if (e.key === 'Enter') { engCommit(); $('engUrl').blur(); } });
 
     // ── az Eszköztár és a Főkapcsoló gombjainak sorrendje (húzással, azonnal életbe lép) ──
-    const ORDER_ITEMS = {
-      toolsOrder: { calc: ['calc', T('toolCalc')], notepad: ['notes', T('toolNotepad')], search: ['search', T('search')], snip: ['snip', T('toolSnip')] },
-      powerOrder: { lock: ['lock', T('pwLockT')], sleep: ['moon', T('pwSleepT')], shutdown: ['power', T('pwOffT')], restart: ['reload', T('pwRestartT')] },
-    };
+    // a gombokat a modul adja (buttons, orderKey): { toolsOrder: { calc: [ikon, név], … }, … }
+    const ORDER_ITEMS = Object.fromEntries(MODULES.filter((m) => m.orderKey).map((m) =>
+      [m.orderKey, Object.fromEntries(m.buttons.map((b) => [b.key, [b.icon, T(b.title)]]))]));
     const orderOf = (key) => {
       const all = Object.keys(ORDER_ITEMS[key]);
       const cur = ((data.sections || {})[key] || []).filter((k) => all.includes(k));
       return [...cur, ...all.filter((k) => !cur.includes(k))];
     };
-    // ── Megjelenés: kompakt vagy normál nézet szekciónként ──
-    const VIEW_KEYS = [['claude', 'spark'], ['codex', 'code'], ['clock', 'clock'], ['date', 'calendar']];
+    // ── Megjelenés: kompakt vagy normál nézet a kompakt nézettel rendelkező moduloknál ──
     const renderView = () => {
       const compact = (data.sections || {}).compact || [];
-      $('viewList').innerHTML = VIEW_KEYS.map(([k, icon]) => `
-        <div class="lang-row">${svg(icon)}<span>${SECTION_NAMES[k]}</span>
+      $('viewList').innerHTML = MODULES.filter((m) => m.compact).map(({ id: k, compact: icon, name }) => `
+        <div class="lang-row">${svg(icon)}<span>${T(name)}</span>
           <div class="seg"><button data-view="${k}" data-mode="compact" class="${compact.includes(k) ? 'on' : ''}">${T('viewCompact')}</button><button data-view="${k}" data-mode="normal" class="${compact.includes(k) ? '' : 'on'}">${T('viewNormal')}</button></div>
         </div>`).join('');
     };
@@ -708,9 +792,7 @@
       const num = (v, d = 1) => Number(v).toFixed(d).replace(/\.0+$/, '').replace('.', T('gbSep'));
       // alaplap
       const b = typeof hw.board === 'object' && hw.board ? hw.board : { name: hw.board };
-      const boardSub = join(
-        b.bios && `BIOS ${b.bios}${b.biosDate ? ` (${b.biosDate})` : ''}`,
-        b.slots && T('hwSlotsMax', { n: b.slots, m: b.maxMem || '?' }));
+      const boardSub = join(b.bios && `BIOS ${b.bios}${b.biosDate ? ` (${b.biosDate})` : ''}`);
       // processzor
       const c = hw.cpu || {};
       const cpuSub = c.cores ? T('hwCores', { c: c.cores, t: c.threads || c.cores, g: c.mhz ? num(c.mhz / 1000) : '?' }) : '';
@@ -804,16 +886,17 @@
         `<button data-pos="${which}" data-edge="${e}" class="${lay[which] === e ? 'on' : ''}"${lay[other] === e ? ` disabled title="${T(which === 'icons' ? 'posTakenInfo' : 'posTakenIcons')}"` : ''}>${T(`pos_${e}`)}</button>`).join('');
       $('posIcons').innerHTML = posButtons('icons', 'info');
       $('posInfo').innerHTML = posButtons('info', 'icons');
-      const order = [...((data.sections.order && data.sections.order.length) ? data.sections.order : [])];
-      if (!order.includes('tools')) order.splice(Math.max(0, order.indexOf('claude')), 0, 'tools');
-      // a Codex (v1.5-ben új) alapból a Claude alatt van
-      if (!order.includes('codex') && order.includes('claude')) order.splice(order.indexOf('claude') + 1, 0, 'codex');
-      for (const k of Object.keys(SECTION_NAMES)) if (!order.includes(k)) order.push(k);
-      $('secList').innerHTML = order.filter((k) => SECTION_NAMES[k]).map((k) => {
-        const on = data.sections[k] !== false;
+      // a modulok a beállított sorrendben (ami hiányzik belőle, a végére kerül)
+      // (a csak laptopon látszó modul asztali gépen nem szerepel)
+      const listed = MODULES.filter((m) => !m.laptopOnly || data.laptop).map((m) => m.id);
+      const order = (data.sections.order || []).filter((k) => listed.includes(k));
+      for (const k of listed) if (!order.includes(k)) order.push(k);
+      $('secList').innerHTML = order.map((k) => {
+        const m = moduleOf(k);
+        const on = (data.sections[k] ?? m.defaultOn ?? true) !== false;
         return `<div class="sec-row" data-key="${k}">
             <span class="grip" title="${T('dragHint')}">${svg('grip')}</span>
-            <button class="sbtn toggle row ${on ? 'on' : ''}" data-section="${k}"${SECTION_HINT[k] ? ` title="${SECTION_HINT[k]}"` : ''}><span>${SECTION_NAMES[k]}</span><b class="switch">${sw(on)}</b></button>
+            <button class="sbtn toggle row ${on ? 'on' : ''}" data-section="${k}"${m.hint ? ` title="${T(m.hint)}"` : ''}><span>${T(m.name)}</span><b class="switch">${sw(on)}</b></button>
           </div>`;
       }).join('');
       renderOrder();
@@ -825,6 +908,7 @@
       renderPalettes();
       renderCalendars();
       renderEngine();
+      for (const c of MODULE_CARDS) if (c.hooks.render) c.hooks.render(data);
     };
 
     // ── sorrend húzással (Látható szekciók és Ikonok): a sor elején lévő jellel ──
@@ -1286,7 +1370,8 @@
       }
       if (b.dataset.section) {
         const k = b.dataset.section;
-        data.sections = { ...data.sections, [k]: data.sections[k] === false };
+        const on = (data.sections[k] ?? moduleOf(k).defaultOn ?? true) !== false;
+        data.sections = { ...data.sections, [k]: !on };
         renderToggles();
         if (!demo) post({ type: 'sections', sections: data.sections });
       }
@@ -1390,7 +1475,7 @@
       const q = new URLSearchParams(location.search);
       if (q.get('tab')) store.set(TAB_STORE, q.get('tab'));
       h({
-        type: 'settings', autostart: true, layout: { icons: 'left', info: 'right' }, winKey: true, clipboard: true, iconLabels: true, language: lang, appearance: 'dark',
+        type: 'settings', autostart: true, layout: { icons: 'left', info: 'right' }, winKey: true, clipboard: true, iconLabels: true, tooltips: true, laptop: true, language: lang, appearance: 'dark',
         scheme: 'dark', monitors: 2, screen: { w: 1920, h: 1080 },
         bars: { icons: 86, info: 86, frame: { top: 10, bottom: 10, left: 10, right: 10 }, range: [56, 160], frameRange: [0, 40] },
         allMonitors: true, hideTaskbar: true, activity: { autoStart: false, sound: true },
@@ -1400,8 +1485,9 @@
         themes: { dark: { ...THEMES.dark }, light: { ...THEMES.light }, defaultDark: { ...THEMES.dark }, defaultLight: { ...THEMES.light } },
         health: { enabled: true, minutes: 90, remaining: 3725, showing: false },
         weather: { city: 'Budapest', wind: true },
+        currency: { list: ['EUR', 'USD', 'HUF', 'GBP', 'CHF'] },
         sections: { tools: true, claude: true, codex: false, activity: true, clock: true, date: false, weather: true, music: true, volume: true,
-          order: ['tools', 'claude', 'activity', 'clock', 'date', 'weather', 'music', 'volume', 'power'],
+          order: ['tools', 'claude', 'codex', 'activity', 'clock', 'date', 'weather', 'music', 'volume', 'power'],
           toolsOrder: ['calc', 'notepad', 'search', 'snip'], powerOrder: ['lock', 'sleep', 'shutdown', 'restart'] },
         hardware: { cpu: { name: 'AMD Ryzen 5 3600 6-Core Processor', cores: 6, threads: 12, mhz: 3600 },
           board: { name: 'ASRock B450M Pro4', chipset: 'AMD B450', bios: 'P10.08', biosDate: '2023-11-02', slots: 4, maxMem: '128 GB' },
@@ -1420,9 +1506,9 @@
           .concat([{ id: 5, name: 'Cyberpunk', rawIcon: 'game', icon: 'game', color: '#ff3b5c', path: 'steam://rungameid/1091500', available: true }]),
         running: ['Jegyzettömb', 'Számológép', 'Windows Intéző', 'Paint', 'Microsoft Edge', 'Discord', 'Steam', 'OBS Studio', 'GIMP', 'Thunderbird', 'Telegram', 'Blender', 'Audacity', 'VLC']
           .map((name) => ({ name, path: `C:\\Apps\\${name}.exe`, img: '' })),
-        wallpapers: ['blue-hexagons', 'circuit-lines', 'dust-bridge', 'hud-interface', 'motherboard', 'tech-plates']
+        wallpapers: [...Array(12)].map((_, i) => `CyberShell_background_${pad(i + 1)}`)
           .map((n) => ({ path: `C:\\CyberShell\\wallpapers\\${n}.jpg`, url: `../wallpapers/${n}.jpg`, builtin: true })),
-        wallpaper: 'C:\\CyberShell\\wallpapers\\dust-bridge.jpg',
+        wallpaper: 'C:\\CyberShell\\wallpapers\\CyberShell_background_03.jpg',
       });
       show();
       // demó terhelés: véletlen bolyongás

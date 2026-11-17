@@ -1,13 +1,11 @@
 //! Internetkapcsolat: ha megszakad, a munkaterület tetején, középen piros sáv jelenik meg
 //! („Megszakadt a kapcsolat”) a hálózati beállításokra vivő gombbal; visszatéréskor eltűnik.
-//! Itt van a Codex-használat frissítése is (a panel Codex szekciójának).
 
 use crate::hub::Hub;
 use crate::hub::health::{HEALTH_H, HEALTH_W};
 use crate::web::push;
-use crate::{appbar, codex, log, sys, wintrack};
+use crate::{appbar, log, sys, wintrack};
 use serde_json::json;
-use std::time::{Duration, Instant};
 use windows::Win32::UI::WindowsAndMessaging::{HWND_TOPMOST, SW_HIDE, SWP_NOACTIVATE, SWP_SHOWWINDOW, SetWindowPos, ShowWindow};
 
 /// Ennyi egymást követő „nincs internet” mérés után jelzünk (3 mp-enként mérünk), hogy egy
@@ -83,16 +81,6 @@ impl Hub {
             }
             "log" => log(format!("[kapcsolat] {}", msg["text"].as_str().unwrap_or(""))),
             _ => {}
-        }
-    }
-
-    /// A Codex-használat újraolvasása és elküldése az információs panelnek (ha változott).
-    pub(crate) fn codex_send(&mut self, force: bool) {
-        self.next_codex = Instant::now() + Duration::from_secs(60);
-        let payload = codex::read().to_string();
-        if force || self.last_codex.as_deref() != Some(payload.as_str()) {
-            self.eval(self.info_edge(), &serde_json::from_str(&payload).unwrap_or_default());
-            self.last_codex = Some(payload);
         }
     }
 }

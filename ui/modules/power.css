@@ -1,0 +1,36 @@
+/* Főkapcsoló: 2×2 gomb, a leállítás és az újraindítás megerősítéssel. A gombok és a
+   megerősítés egy rácscellában vannak: a szekció magassága váltáskor sem változik. */
+.pw-panes { display: grid; }
+.pw-grid { grid-area: 1 / 1; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.pw {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  height: 38px; padding-top: 2px;
+  font-size: 8.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--c-text-dim);
+  font-variation-settings: "wdth" 80, "wght" 600;
+  background: color-mix(in srgb, var(--app, var(--c-main)) 10%, transparent);
+  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+  transition: background .15s, color .15s;
+}
+.pw svg { width: 15px; height: 15px; color: color-mix(in srgb, var(--app) 80%, var(--c-text)); }
+.pw:hover { background: var(--app); color: var(--c-bg); }
+.pw:hover svg { color: var(--c-bg); }
+.pw-confirm { grid-area: 1 / 1; display: flex; flex-direction: column; justify-content: center; gap: 6px; visibility: hidden; }
+.power.confirming .pw-grid { visibility: hidden; }
+.power.confirming .pw-confirm { visibility: visible; }
+.pw-q { font-size: 11px; line-height: 1.3; color: var(--c-hot); font-variation-settings: "wdth" 85, "wght" 600; }
+
+/* oldalt álló panelen a gombok csak ikonok (a felirat a súgóban), középre igazítva */
+.right:not(.horiz) .pw { padding-top: 0; }
+.right:not(.horiz) .pw span { display: none; }
+.right:not(.horiz) .pw svg { width: 17px; height: 17px; }
+
+/* vízszintes panelen ugyanúgy, mint az Eszköztár: 2×2 ikon felirat nélkül; a megerősítés
+   (kérdés, alatta a két gomb) ugyanebben a helyben */
+.right.horiz .power { width: 84px; }
+.right.horiz .pw { height: 24px; padding-top: 0; }
+.right.horiz .pw span { display: none; }
+.right.horiz .pw svg { width: 17px; height: 17px; color: color-mix(in srgb, var(--app) 85%, var(--c-text)); }
+.right.horiz .pw:hover svg { color: var(--c-bg); }
+.right.horiz .pw-confirm { gap: 4px; }
+.right.horiz .pw-q { font-size: 10px; line-height: 1.2; }
+.right.horiz .pw-confirm .ib { height: 22px; }
