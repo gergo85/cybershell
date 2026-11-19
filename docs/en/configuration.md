@@ -36,7 +36,7 @@ Press `Ctrl+Alt+R` after saving.
 | `allMonitors` | With `false` CyberShell appears only on the primary screen (on every screen by default). |
 | `calendar.feeds` | The attached calendars (name, iCal address, color). They can also be added and removed in the calendar. |
 | `note.text` | The text of the Note module (up to 2000 characters). It can be edited on the panel. |
-| `sections` | Visibility (`tools`, `claude`, `codex`, `activity`, `note`, `load`, `network`, `date`, `events`, `clock`, `laptop`, `peripherals`, `weather`, `currency`, `music`, `volume`, `tray`, `power`; `claude`, `codex`, `activity`, `note`, `load`, `date`, `events` and `currency` are hidden by default; `laptop` only shows on battery-powered computers, `peripherals` only with a Bluetooth device that reports its battery) and order (`order`) of the info panel modules. Anything missing from the order goes next to its neighbour in the default order. |
+| `sections` | Visibility (`tools`, `claude`, `codex`, `activity`, `note`, `load`, `network`, `clock`, `date`, `events`, `laptop`, `peripherals`, `weather`, `currency`, `music`, `volume`, `tray`, `power`; `claude`, `codex`, `activity`, `note`, `load`, `date`, `events` and `currency` are hidden by default; `music` shows only on desktop computers by default; `laptop` only shows on battery-powered computers, `peripherals` only on laptops with a Bluetooth device that reports its battery), order (`order`) and the modules shown in compact view (`compact`: `claude`, `codex`, `note`, `network`, `clock`, `date`, `events`, `weather`, `currency`) of the info panel modules. Anything missing from the order goes next to its neighbour in the default order. |
 | `startMenu.winKey` | `true` (the default): the `Win` key opens the CyberShell Start menu and `Win+S` its search. With `false` the Windows ones open. |
 | `startMenu.pinned` | IDs of the programs pinned to the Start menu (added by pinning with right-click in the menu). |
 | `startMenu.webSearch` | The web search address; `{q}` is replaced by the search text (Google by default). |
@@ -45,7 +45,7 @@ Press `Ctrl+Alt+R` after saving.
 | `frame.top`, `frame.bottom`, `frame.left`, `frame.right` | Thickness of the thin frames on each edge (where there is no panel). `0` turns it off. |
 | `weather.city` | The city for the weather (Budapest by default; can also be set in the settings). |
 | `weather.latitude`, `weather.longitude` | Exact coordinates; if given, they are used instead of the city. |
-| `weather.wind` | Whether the Weather section shows the wind (`true` by default). |
+| `weather.unit` | Temperature unit: `c` (Celsius, default) or `f` (Fahrenheit). The wind shows in the Weather section's normal view, not in compact view (an old `weather.wind: false` switches to compact view on loading). |
 | `weather.enabled` | Whether the weather is shown. |
 | `activity.minutes` | Default countdown length in minutes (20 by default). The value typed on the panel overrides it. |
 | `activity.autoStart` | Whether it starts counting by itself on start. |

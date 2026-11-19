@@ -105,7 +105,7 @@
 
 /* díszítés: halványan futó programkód a fülek és a terhelésjelző között (a szabad hely egy része) */
 .rail-code {
-  flex: 0 1 190px; min-height: 0; margin-top: auto; overflow: hidden; pointer-events: none; user-select: none;
+  flex: 0 1 300px; min-height: 0; margin-top: auto; overflow: hidden; pointer-events: none; user-select: none;
   display: flex; flex-direction: column; justify-content: flex-end; padding: 0 4px;
   font: 400 9px/14px var(--f-mono); letter-spacing: .04em; text-transform: lowercase;
   color: color-mix(in srgb, var(--c-text) 16%, transparent);
@@ -543,12 +543,11 @@ html[data-scheme="light"] .ico-cell { border-radius: 6px; }
 .ws-row > .sbtn.toggle { flex: none; min-width: 130px; }
 .ws-grid > .sbtn.toggle { min-width: 0; }
 .ws-row > .sbtn.toggle svg { color: var(--c-alt); }
-/* két oszlop: a település és alatta a megtalált hely; jobbra a Szél és alatta a Mértékegység */
+/* két oszlop: a település és alatta a megtalált hely; jobbra a Mértékegység */
 .ws-grid { display: grid; grid-template-columns: minmax(0, 1fr) 206px; gap: 8px 10px; }
 .ws-grid > .ws-city { grid-area: 1 / 1; }
-.ws-grid > #wsWind { grid-area: 1 / 2; }
 .ws-grid > .ws-found { grid-area: 2 / 1; margin-top: 0; align-self: center; }
-.ws-grid > .ws-unit { grid-area: 2 / 2; }
+.ws-grid > .ws-unit { grid-area: 1 / 2; }
 .ws-unit { cursor: default; gap: 8px; padding-right: 5px; }
 .ws-unit:hover { background: color-mix(in srgb, var(--c-main) 7%, transparent); }
 .ws-unit > svg { color: var(--c-alt); }

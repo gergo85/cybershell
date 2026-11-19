@@ -24,7 +24,6 @@
   "weather": {
     "enabled": true,
     "city": "Budapest",
-    "wind": true,
     "unit": "c"
   },
   "network": {

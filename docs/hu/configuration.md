@@ -36,7 +36,7 @@ Mentés után nyomd meg a `Ctrl+Alt+R`-t.
 | `allMonitors` | `false` esetén a CyberShell csak az elsődleges képernyőn jelenik meg (alapból mindegyiken). |
 | `calendar.feeds` | A csatolt naptárak (név, iCal-cím, szín). A naptárban is felvehetők és törölhetők. |
 | `note.text` | A Jegyzet modul szövege (legfeljebb 2000 karakter). A panelen szerkeszthető. |
-| `sections` | Az információs panel moduljainak láthatósága (`tools`, `claude`, `codex`, `activity`, `note`, `load`, `network`, `date`, `events`, `clock`, `laptop`, `peripherals`, `weather`, `currency`, `music`, `volume`, `tray`, `power`; alapból rejtett a `claude`, a `codex`, az `activity`, a `note`, a `load`, a `date`, az `events` és a `currency`; a `laptop` csak akkumulátoros gépen, a `peripherals` csak töltöttséget jelző Bluetooth-eszköznél látszik) és sorrendje (`order`). Ami a sorrendből hiányzik, az alapsorrend szerinti szomszédja mellé kerül. |
+| `sections` | Az információs panel moduljainak láthatósága (`tools`, `claude`, `codex`, `activity`, `note`, `load`, `network`, `clock`, `date`, `events`, `laptop`, `peripherals`, `weather`, `currency`, `music`, `volume`, `tray`, `power`; alapból rejtett a `claude`, a `codex`, az `activity`, a `note`, a `load`, a `date`, az `events` és a `currency`; a `music` alapból csak asztali gépen látszik; a `laptop` csak akkumulátoros gépen, a `peripherals` csak laptopon, töltöttséget jelző Bluetooth-eszköznél látszik), sorrendje (`order`) és a kompakt nézetben látszó modulok listája (`compact`: `claude`, `codex`, `note`, `network`, `clock`, `date`, `events`, `weather`, `currency`). Ami a sorrendből hiányzik, az alapsorrend szerinti szomszédja mellé kerül. |
 | `startMenu.winKey` | `true` (alapból): a `Win` billentyű a CyberShell Start menüjét, a `Win+S` a keresőjét nyitja meg. `false` esetén a Windows sajátja jön. |
 | `startMenu.pinned` | A Start menübe kitűzött programok azonosítói (a menüben jobb gombbal kitűzve kerülnek ide). |
 | `startMenu.webSearch` | A webes keresés címe, a `{q}` helyére kerül a keresett szöveg (alapból Google). |
@@ -45,7 +45,7 @@ Mentés után nyomd meg a `Ctrl+Alt+R`-t.
 | `frame.top`, `frame.bottom`, `frame.left`, `frame.right` | A vékony keretek vastagsága az adott szélen (ahol épp nincs panel). A `0` kikapcsolja. |
 | `weather.city` | A település neve az időjáráshoz (alapból Budapest; a beállításokban is megadható). |
 | `weather.latitude`, `weather.longitude` | Pontos koordináták; ha megadod, a város helyett ezt használja. |
-| `weather.wind` | Látszódjon-e a szél az Időjárás szekcióban (alapból `true`). |
+| `weather.unit` | A hőmérséklet mértékegysége: `c` (Celsius, alapból) vagy `f` (Fahrenheit). A szél az Időjárás normál nézetében látszik, kompakt nézetben nem (a régi `weather.wind: false` betöltéskor a kompakt nézetre vált). |
 | `weather.enabled` | Látszódjon-e az időjárás. |
 | `activity.minutes` | A visszaszámláló alapértelmezett hossza percben (alapból 20). A panelen beírt érték felülírja. |
 | `activity.autoStart` | Induláskor magától elkezdjen-e számolni. |

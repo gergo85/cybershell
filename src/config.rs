@@ -125,7 +125,7 @@ pub const PANEL_MODULES: &[PanelModule] = &[
     PanelModule { id: "events", default: Shown::Never, compact: true },
     PanelModule { id: "laptop", default: Shown::Always, compact: false },
     PanelModule { id: "peripherals", default: Shown::Always, compact: false },
-    PanelModule { id: "weather", default: Shown::Always, compact: false },
+    PanelModule { id: "weather", default: Shown::Always, compact: true },
     PanelModule { id: "currency", default: Shown::Never, compact: true },
     PanelModule { id: "music", default: Shown::DesktopOnly, compact: false },
     PanelModule { id: "volume", default: Shown::Always, compact: false },
@@ -334,15 +334,17 @@ pub struct Weather {
     pub latitude: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub longitude: Option<f64>,
-    /// Mutassa-e a panel Időjárás szekciója a szél sebességét és irányát.
-    pub wind: bool,
+    /// Régi (v2.0) kapcsoló: a szél kijelzése. Helyette a modul kompakt nézete (szél nélkül)
+    /// való; betöltéskor a `false` érték a kompakt nézetbe költözik, mentéskor már nem íródik ki.
+    #[serde(skip_serializing)]
+    pub wind: Option<bool>,
     /// A hőmérséklet mértékegysége: "c" (Celsius) vagy "f" (Fahrenheit).
     pub unit: String,
 }
 
 impl Default for Weather {
     fn default() -> Self {
-        Weather { enabled: true, city: "Budapest".into(), latitude: None, longitude: None, wind: true, unit: "c".into() }
+        Weather { enabled: true, city: "Budapest".into(), latitude: None, longitude: None, wind: None, unit: "c".into() }
     }
 }
 
@@ -594,6 +596,10 @@ impl Config {
 
     /// Betöltés utáni rendbetétel: sorrend, nyelv, panelhelyek, tartományok, séma.
     pub fn finish(&mut self) {
+        // a régi Szél kapcsoló kikapcsolt állása: az Időjárás kompakt nézete (szél nélkül)
+        if self.weather.wind.take() == Some(false) && !self.sections.compact.iter().any(|k| k == "weather") {
+            self.sections.compact.push("weather".into());
+        }
         self.sections.normalize();
         self.currency.normalize();
         if self.network.ping_host.trim().is_empty() {
@@ -781,6 +787,18 @@ mod tests {
         assert_eq!(s.tools_order, ["snip", "calc", "notepad", "search"]);
         assert_eq!(s.power_order, POWER_KEYS);
         assert_eq!(s.laptop_order, LAPTOP_KEYS);
+    }
+
+    #[test]
+    fn old_wind_switch_becomes_compact() {
+        // a v2.0 kikapcsolt Szél kapcsolója: az Időjárás kompakt nézete; mentéskor már nem íródik ki
+        let mut c: Config = serde_json::from_str(r#"{ "weather": { "wind": false } }"#).unwrap();
+        c.finish();
+        assert_eq!(c.sections.compact, ["weather"]);
+        assert!(serde_json::to_value(&c).unwrap()["weather"].get("wind").is_none());
+        let mut on: Config = serde_json::from_str(r#"{ "weather": { "wind": true } }"#).unwrap();
+        on.finish();
+        assert!(on.sections.compact.is_empty());
     }
 
     #[test]

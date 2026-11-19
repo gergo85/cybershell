@@ -194,7 +194,6 @@
                 <h2>${T('wsTitle')}</h2>
                 <div class="ws-row ws-grid">
                   <label class="ws-city" title="${T('wsCityHint')}">${svg('place')}<span class="ws-field"><input id="wsCity" type="text" maxlength="80" spellcheck="false" autocomplete="off" placeholder="${T('wsCityPh')}"><button class="ws-go" id="wsGo" title="${T('wsGo')}">${svg('enter')}</button></span></label>
-                  <button class="sbtn toggle" id="wsWind" title="${T('wsWindHint')}">${svg('wind')}<span>${T('wsWind')}</span><b class="switch">–</b></button>
                   <div class="ws-found" id="wsFound"></div>
                   <div class="sbtn ws-unit" title="${T('wsUnitHint')}">${svg('thermo')}<span>${T('wsUnit')}</span><div class="seg" id="wsUnit"><button data-unit="c">°C</button><button data-unit="f">°F</button></div></div>
                 </div>
@@ -396,7 +395,7 @@
       ];
       const box = $('railCode');
       const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      const MAX_LINES = 24;
+      const MAX_LINES = 26;
       let pick = Math.floor(Math.random() * CODE.length);
       const nextText = () => {
         // általában a következő sor, néha ugrás egy véletlen helyre
@@ -411,9 +410,9 @@
         return el;
       };
       if (still) {
-        for (let i = 0; i < 14; i++) addLine(nextText());
+        for (let i = 0; i < 22; i++) addLine(nextText());
       } else {
-        for (let i = 0; i < 10; i++) addLine(nextText());
+        for (let i = 0; i < 20; i++) addLine(nextText());
         let line = null;
         let text = '';
         let at = 0;
@@ -1196,10 +1195,10 @@
       post({ type: 'health-reset' });
     });
 
-    // ── Időjárás: a település (szabad szöveg), a szél kijelzése a panelen és a mértékegység (°C/°F) ──
+    // ── Időjárás: a település (szabad szöveg) és a mértékegység (°C/°F); a szél a modul
+    //    nézetétől függ (Normál: szél is, Kompakt: szél nélkül, a Panelek fül Megjelenés kártyáján) ──
     let weather = null;
     const renderWeather = () => {
-      setSwitch($('wsWind'), weather.wind !== false);
       for (const b of $('wsUnit').children) b.classList.toggle('on', b.dataset.unit === (weather.unit === 'f' ? 'f' : 'c'));
       if (document.activeElement !== $('wsCity')) $('wsCity').value = weather.city || '';
     };
@@ -1255,12 +1254,6 @@
     $('wsCity').addEventListener('keydown', (e) => {
       if (e.key === 'Enter') $('wsCity').blur();
       if (e.key === 'Escape' && weather) { $('wsCity').value = weather.city; $('wsCity').blur(); }
-    });
-    $('wsWind').addEventListener('click', () => {
-      if (!weather) return;
-      weather = { ...weather, wind: weather.wind === false };
-      renderWeather();
-      if (!demo) post({ type: 'weather', wind: weather.wind });
     });
     $('wsUnit').addEventListener('click', (e) => {
       const b = e.target.closest('[data-unit]');
@@ -1571,7 +1564,7 @@
         calendars: [{ name: 'Google Naptár', color: '#00e1ff', host: 'calendar.google.com' }, { name: 'Ünnepek', color: '#ff2a6d', host: 'calendar.google.com' }],
         themes: { dark: { ...THEMES.dark }, light: { ...THEMES.light }, defaultDark: { ...THEMES.dark }, defaultLight: { ...THEMES.light } },
         health: { enabled: true, minutes: 90, remaining: 3725, showing: false },
-        weather: { city: 'Budapest', wind: true },
+        weather: { city: 'Budapest', unit: 'c' },
         currency: { list: ['EUR', 'USD', 'HUF', 'GBP', 'CHF'] },
         sections: { tools: true, claude: true, codex: false, activity: true, clock: true, date: false, weather: true, music: true, volume: true,
           order: ['tools', 'claude', 'codex', 'activity', 'clock', 'date', 'weather', 'music', 'volume', 'power'],

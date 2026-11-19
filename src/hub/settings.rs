@@ -150,7 +150,7 @@ impl Hub {
             "clipboard": self.cfg.start_menu.clipboard,
             "appearance": self.cfg.appearance,
             "health": self.health_json(),
-            "weather": { "city": self.cfg.weather.city, "wind": self.cfg.weather.wind, "unit": self.cfg.weather.unit },
+            "weather": { "city": self.cfg.weather.city, "unit": self.cfg.weather.unit },
             "currency": self.cfg.currency,
             // akkumulátoros gép: a Laptop modul csak ekkor szerepel a Modulok listájában
             "laptop": sys::battery().is_some(),
@@ -458,7 +458,7 @@ impl Hub {
                 }
                 self.send_settings();
             }
-            // Időjárás: a település (szabad szöveg) és a szél kijelzése a panelen
+            // Időjárás: a település (szabad szöveg) és a mértékegység (°C/°F)
             "weather" => {
                 let mut changed = false;
                 if let Some(city) = msg["city"].as_str().map(str::trim).filter(|c| !c.is_empty()) {
@@ -471,12 +471,6 @@ impl Hub {
                         changed = true;
                     }
                 }
-                if let Some(wind) = msg["wind"].as_bool()
-                    && wind != self.cfg.weather.wind
-                {
-                    self.cfg.weather.wind = wind;
-                    changed = true;
-                }
                 if let Some(unit) = msg["unit"].as_str().filter(|u| ["c", "f"].contains(u))
                     && unit != self.cfg.weather.unit
                 {
@@ -484,12 +478,7 @@ impl Hub {
                     changed = true;
                 }
                 if changed {
-                    log(format!(
-                        "időjárás: {}, szél {}, °{}",
-                        self.cfg.weather.city,
-                        if self.cfg.weather.wind { "be" } else { "ki" },
-                        self.cfg.weather.unit.to_uppercase()
-                    ));
+                    log(format!("időjárás: {}, °{}", self.cfg.weather.city, self.cfg.weather.unit.to_uppercase()));
                     self.save_config();
                     self.eval(self.info_edge(), &json!({ "type": "weather", "weather": self.cfg.weather }));
                 }

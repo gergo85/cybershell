@@ -1,4 +1,5 @@
 // Időjárás: hőmérséklet, leírás, szél és a település (Open-Meteo, kulcs nélkül, 15 percenként).
+// Kompakt nézetben a szél nélkül.
 // Kattintásra a panel mellett kinyílik a részletes mai előrejelzés (parts/flyout.js).
 (() => {
   const { defineModule, $, T, svg, fetchJson, resolvePlace, wmoText, wmoIcon } = window.HUB;
@@ -10,6 +11,8 @@
     hint: 'sWeatherHint',
     className: 'weather',
     tip: 'wDetails',
+    // kompakt nézet: a szél nélkül
+    compact: 'cloud',
     html: () => `
       <div class="w-main"><span class="w-icon" id="wIcon"></span><span class="w-temp" id="wTemp">--°</span></div>
       <div class="w-desc" id="wDesc">&nbsp;</div>
@@ -46,7 +49,7 @@
           timer = setTimeout(fetchWeather, 2 * 60000);
         }
       };
-      // a beállítás (település, koordináták, szél, mértékegység, be/ki) a program init és weather üzenetéből
+      // a beállítás (település, koordináták, mértékegység, be/ki) a program init és weather üzenetéből
       const setWeather = (next) => {
         // a mértékegység váltásakor is újra le kell kérni (az Open-Meteo adja Fahrenheitben)
         const placeChanged = !wcfg || wcfg.city !== next.city || wcfg.latitude !== next.latitude || wcfg.longitude !== next.longitude || wcfg.unit !== next.unit;
@@ -54,8 +57,6 @@
         // a lekérés a config.json weather.enabled értékével kapcsolható ki
         const on = wcfg.enabled !== false;
         ctx.setAvailable(on);
-        // a szél sebessége és iránya kikapcsolható (a hibaüzenet ettől függetlenül látszik)
-        sec.classList.toggle('no-wind', wcfg.wind === false);
         if (!on) return clearTimeout(timer);
         if (placeChanged) fetchWeather();
       };
