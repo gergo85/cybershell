@@ -12,7 +12,7 @@ A CyberShell neonfényes cyberpunk HUD-dá alakítja a Windows asztalát. Az egy
 
 - **Megvan a hangulata.** A sötét téma a Cyberpunk 2077 neonfényeit idézi, a világos a Ghost in the Shell látványvilágát. Az *Auto* beállítás napkelte és napnyugta szerint vált köztük, a *Windows* a Windows világos vagy sötét módját követi.
 - **Leváltja a gyári felületet.** Az Ikonok sáv élő ablakelőnézetet ad, a `Win` billentyű pedig a CyberShell saját Start menüjét és keresőjét nyitja. A kereső számol, parancsot futtat, őrzi a vágólap előzményeit, és ékezetek nélkül vagy betűszóval is megtalálja, amit keresel.
-- **Minden egy pillantásra.** Óra, naptár Google Naptár-támogatással, időjárás, Spotify-vezérlés, hangerő, főkapcsoló, a Claude és a Codex használati korlátai, és piros jelzés, ha megszakad az internetkapcsolat.
+- **Minden egy pillantásra.** Óra, naptár Google Naptár-támogatással, a következő napok eseményei, kitűzött jegyzet, időjárás, Spotify-vezérlés, hangerő, a Bluetooth-eszközök töltöttsége, főkapcsoló, a Claude és a Codex használati korlátai, és piros jelzés, ha megszakad az internetkapcsolat.
 - **Összhangban a Windows-zal.** Kérésre a Windows sötét/világos módja, kiemelőszíne és a Windows Terminal színsémája is a témával vált, az aktív ablak körül pedig neonkeret fut.
 - **Hosszú munkanapokra.** A szünetemlékeztető és az aktivitás-visszaszámláló szól, ha ideje felállni.
 - **Átalakítható.** A panelek bármelyik képernyőszélre kerülhetnek, a szekciók sorrendje húzással állítható. A füles beállítási felületen szinte minden állítható, és minden egyetlen `config.json`-ba kerül; a megjelenés komponensenként egy CSS-fájlban, a `Ctrl+Alt+R` pedig újratölti az eredményt.

@@ -141,10 +141,23 @@
         fill();
         compute();
       };
+      // vízszintes panelen normál nézetben: ha a pénznemek alatt van hely, az árfolyam oda kerül
+      // (a szám és a változás egy sorban), különben a pénznemek mellett marad
+      const fitRate = () => {
+        if (!ctx.horiz || !sec.offsetHeight) return;
+        sec.classList.remove('rate-below');
+        if (sec.classList.contains('compact')) return;
+        sec.classList.add('rate-below');
+        const rate = $('curRate').getBoundingClientRect();
+        if (rate.bottom > sec.getBoundingClientRect().bottom + 0.5) sec.classList.remove('rate-below');
+        ctx.fit();
+      };
+      window.addEventListener('resize', fitRate);
       return {
         message(msg) {
           if (msg.type === 'init' || msg.type === 'currency') setList(msg.currency && msg.currency.list);
         },
+        sections: () => requestAnimationFrame(fitRate),
         demo: () => setList(['EUR', 'USD', 'HUF', 'GBP', 'CHF']),
       };
     },

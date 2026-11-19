@@ -12,7 +12,7 @@ CyberShell turns the Windows desktop into a neon cyberpunk HUD: a program bar on
 
 - **Looks the part.** The dark theme is Cyberpunk 2077-style neon, the light theme draws on Ghost in the Shell. *Auto* switches between them at sunrise and sunset, *Windows* follows the Windows light or dark mode.
 - **Replaces the stock interface.** The Icons bar shows live window previews, and the `Win` key opens CyberShell's own Start menu and search. The search calculates, runs commands, keeps a clipboard history, and finds what you type even without accents or with just an acronym.
-- **Everything at a glance.** Clock, calendar with Google Calendar support, weather, Spotify controls, volume, power buttons, your Claude and Codex usage limits, and a red alert when the internet connection drops.
+- **Everything at a glance.** Clock, calendar with Google Calendar support, upcoming events, a pinned note, weather, Spotify controls, volume, Bluetooth device batteries, power buttons, your Claude and Codex usage limits, and a red alert when the internet connection drops.
 - **In step with Windows.** On request the Windows dark/light mode, accent color and Windows Terminal color scheme switch with the theme, and a neon border runs around the active window.
 - **Built for long sessions.** A break reminder and an activity timer tell you when it is time to stand up.
 - **Yours to change.** Put the panels on any screen edge and reorder the sections by dragging. Almost everything can be set in the tabbed settings, and it all lives in one `config.json`; the look in one CSS file per component, and `Ctrl+Alt+R` reloads the result.

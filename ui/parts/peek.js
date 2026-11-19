@@ -67,6 +67,21 @@
       if (e.target.closest('[data-close]')) return closeCard(card);
       post({ type: 'peek-activate', hwnd: Number(card.dataset.hwnd) });
     });
+    // egy kártya fölött rövid időzés: az ablaka előtérbe kerül (mint a Windows tálcáján);
+    // a kártyáról lemenve visszakerül a helyére, kattintásra aktív lesz
+    let hoverHwnd = 0;
+    let hoverTimer = 0;
+    const hoverTo = (hwnd) => {
+      if (hwnd === hoverHwnd) return;
+      hoverHwnd = hwnd;
+      clearTimeout(hoverTimer);
+      hoverTimer = setTimeout(() => post({ type: 'peek-hover', hwnd: hoverHwnd }), hwnd ? 140 : 60);
+    };
+    $('pkItems').addEventListener('mouseover', (e) => {
+      const card = e.target.closest('.pk-card');
+      hoverTo(card && !card.classList.contains('closing') ? Number(card.dataset.hwnd) : 0);
+    });
+    $('pkItems').addEventListener('mouseleave', () => hoverTo(0));
     // középső gomb: bezárás, mint a tálcán
     $('pkItems').addEventListener('auxclick', (e) => {
       const card = e.target.closest('.pk-card');
@@ -77,6 +92,7 @@
       if (msg.type === 'peek') render(msg);
       if (msg.type === 'menu') renderMenu(msg);
       if (msg.type === 'peek-clear') { $('pkHead').innerHTML = ''; $('pkItems').innerHTML = ''; }
+      if (msg.type !== 'peek-hover') { clearTimeout(hoverTimer); hoverHwnd = 0; }
     };
     h.demo = () => {
       const card = (i) => ({ x: 14 + i * 248, y: 40, w: 236, h: 170 });

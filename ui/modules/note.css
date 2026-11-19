@@ -1,0 +1,34 @@
+/* Jegyzet: a panelen csak az eleje látszik (legfeljebb 5, kompakt nézetben 3 sor); kattintásra az oldalpanelen szerkeszthető. */
+.note-mod { position: relative; margin: -4px -4px; padding: 4px; cursor: pointer; transition: background-color .12s ease; }
+.note-mod:hover, .note-mod.open { background: color-mix(in srgb, var(--c-main) 6%, transparent); }
+.note-mod:hover h3, .note-mod.open h3 { color: var(--c-main); }
+/* a keret és a belső margó a külső dobozé, a sorokra vágás a belső elemé (belső margó nélkül),
+   így a vágás pontosan az utolsó látható sor alján van, és a következő sor teteje nem lóg be a margóba */
+.nt-clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5; line-clamp: 5; overflow: hidden; }
+.right:not(.horiz) #noteSec.compact .nt-clamp { -webkit-line-clamp: 3; line-clamp: 3; }
+.nt-text {
+  display: block;
+  padding: 4px 5px;
+  font: 400 11px/1.35 var(--f-mono); color: var(--c-text); white-space: pre-wrap; overflow-wrap: anywhere;
+  background: color-mix(in srgb, var(--c-main) 5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--c-main) 26%, transparent);
+  transition: border-color .12s ease;
+}
+.nt-text.empty { color: var(--c-text-dim); opacity: .75; }
+.note-mod:hover .nt-text, .note-mod.open .nt-text { border-color: color-mix(in srgb, var(--c-main) 55%, transparent); }
+
+/* vízszintes panelen a sorok száma a panel magasságától függ (a JS adja), a nézet a szélességet állítja */
+.right.horiz .note-mod { width: 230px; }
+.right.horiz .note-mod.compact { width: 150px; }
+
+/* az oldalpanelen nyíló szerkesztő (parts/flyout.js, "note" nézet) */
+.nt-edit {
+  flex: 1; min-height: 0; margin: 10px 14px 0 16px; resize: none; outline: none; box-sizing: border-box;
+  padding: 8px 10px;
+  font: 400 12px/1.45 var(--f-mono); color: var(--c-text); overflow-wrap: break-word;
+  background: color-mix(in srgb, var(--c-main) 5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--c-main) 30%, transparent);
+  scrollbar-width: thin; scrollbar-color: var(--c-main) transparent;
+}
+.nt-edit:focus { border-color: var(--c-main); box-shadow: 0 0 6px var(--c-main-faint); }
+.nt-edit::placeholder { color: var(--c-text-dim); opacity: .7; }

@@ -51,6 +51,8 @@ pub struct Config {
     pub currency: Currency,
     /// A dátumra kattintva megnyíló naptárban mutatott naptárak (iCal-címek).
     pub calendar: Calendar,
+    /// A panel Jegyzet moduljának szövege.
+    pub note: Note,
     /// Az információs panel moduljai: láthatóság, sorrend, nézet.
     pub sections: Sections,
     /// Megjelenés: "dark" (Cyberpunk 2077), "light" (Ghost in the Shell), "auto" (napkeltétől
@@ -115,11 +117,14 @@ pub const PANEL_MODULES: &[PanelModule] = &[
     PanelModule { id: "claude", default: Shown::Never, compact: true },
     PanelModule { id: "codex", default: Shown::Never, compact: true },
     PanelModule { id: "activity", default: Shown::Never, compact: false },
+    PanelModule { id: "note", default: Shown::Never, compact: true },
     PanelModule { id: "load", default: Shown::Never, compact: false },
     PanelModule { id: "network", default: Shown::Always, compact: true },
-    PanelModule { id: "date", default: Shown::Never, compact: true },
     PanelModule { id: "clock", default: Shown::Always, compact: true },
+    PanelModule { id: "date", default: Shown::Never, compact: true },
+    PanelModule { id: "events", default: Shown::Never, compact: true },
     PanelModule { id: "laptop", default: Shown::Always, compact: false },
+    PanelModule { id: "peripherals", default: Shown::Always, compact: false },
     PanelModule { id: "weather", default: Shown::Always, compact: false },
     PanelModule { id: "currency", default: Shown::Never, compact: true },
     PanelModule { id: "music", default: Shown::DesktopOnly, compact: false },
@@ -142,6 +147,8 @@ pub struct Sections {
     pub tools_order: Vec<String>,
     /// A Főkapcsoló gombjainak sorrendje: "lock", "sleep", "shutdown", "restart".
     pub power_order: Vec<String>,
+    /// A Laptop gombjainak sorrendje: "wifi", "battery", "network", "bluetooth".
+    pub laptop_order: Vec<String>,
     /// Kompakt nézetben lévő modulok (csak a kompakt nézettel rendelkezők): a Claude és a Codex
     /// a nullázásig hátralévő idő és a frissítés sora nélkül, az Idő a másodperc-sáv, a Dátum a
     /// hét nélkül.
@@ -150,6 +157,7 @@ pub struct Sections {
 
 pub const TOOL_KEYS: [&str; 4] = ["calc", "notepad", "search", "snip"];
 pub const POWER_KEYS: [&str; 4] = ["lock", "sleep", "shutdown", "restart"];
+pub const LAPTOP_KEYS: [&str; 4] = ["wifi", "battery", "network", "bluetooth"];
 
 /// Érvényes lista: csak ismert kulcsok, mindegyik legfeljebb egyszer. `complete` esetén a
 /// hiányzók a végére kerülnek.
@@ -177,6 +185,7 @@ impl Default for Sections {
             order: Vec::new(),
             tools_order: Vec::new(),
             power_order: Vec::new(),
+            laptop_order: Vec::new(),
             compact: Vec::new(),
         };
         s.normalize();
@@ -225,6 +234,7 @@ impl Sections {
         }
         normalize_keys(&mut self.tools_order, &TOOL_KEYS, true);
         normalize_keys(&mut self.power_order, &POWER_KEYS, true);
+        normalize_keys(&mut self.laptop_order, &LAPTOP_KEYS, true);
         let compact: Vec<&str> = PANEL_MODULES.iter().filter(|m| m.compact).map(|m| m.id).collect();
         normalize_keys(&mut self.compact, &compact, false);
     }
@@ -326,11 +336,13 @@ pub struct Weather {
     pub longitude: Option<f64>,
     /// Mutassa-e a panel Időjárás szekciója a szél sebességét és irányát.
     pub wind: bool,
+    /// A hőmérséklet mértékegysége: "c" (Celsius) vagy "f" (Fahrenheit).
+    pub unit: String,
 }
 
 impl Default for Weather {
     fn default() -> Self {
-        Weather { enabled: true, city: "Budapest".into(), latitude: None, longitude: None, wind: true }
+        Weather { enabled: true, city: "Budapest".into(), latitude: None, longitude: None, wind: true, unit: "c".into() }
     }
 }
 
@@ -338,6 +350,13 @@ impl Default for Weather {
 #[serde(rename_all = "camelCase", default)]
 pub struct Calendar {
     pub feeds: Vec<CalendarFeed>,
+}
+
+/// A panel Jegyzet modulja: egy mindig látható, szerkeszthető szöveg.
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Note {
+    pub text: String,
 }
 
 /// Egy csatolt naptár, pl. a Google Naptár „Titkos cím iCal formátumban” címe.
@@ -447,6 +466,7 @@ impl Default for Config {
             network: Network::default(),
             currency: Currency::default(),
             calendar: Calendar::default(),
+            note: Note::default(),
             sections: Sections::default(),
             appearance: "dark".into(),
             scheme: "dark".into(),
@@ -554,6 +574,8 @@ pub fn load(path: &Path) -> Result<Config, String> {
 /// a fenti és lenti, illetve az oldalsó keret.
 pub const ICONS_RANGE: (u32, u32) = (64, 96);
 pub const INFO_RANGE: (u32, u32) = (80, 128);
+/// A panelsáv vastagsága, ha fent vagy lent áll (vízszintesen ennél vastagabb nem kell).
+pub const INFO_RANGE_HORIZ: (u32, u32) = (80, 100);
 pub const FRAME_TB_RANGE: (u32, u32) = (0, 32);
 pub const FRAME_SIDE_RANGE: (u32, u32) = (0, 40);
 
@@ -565,6 +587,11 @@ pub fn is_hex_color(s: &str) -> bool {
 pub const EDGE_NAMES: [&str; 4] = ["left", "right", "top", "bottom"];
 
 impl Config {
+    /// A panelsáv megengedett vastagsága: fent vagy lent legfeljebb 100, oldalt 128 pont.
+    pub fn info_range(&self) -> (u32, u32) {
+        if matches!(self.info_edge.as_str(), "top" | "bottom") { INFO_RANGE_HORIZ } else { INFO_RANGE }
+    }
+
     /// Betöltés utáni rendbetétel: sorrend, nyelv, panelhelyek, tartományok, séma.
     pub fn finish(&mut self) {
         self.sections.normalize();
@@ -576,7 +603,8 @@ impl Config {
         self.normalize_edges();
         self.health.minutes = self.health.minutes.clamp(5, 480);
         self.left_width = self.left_width.clamp(ICONS_RANGE.0, ICONS_RANGE.1);
-        self.right_width = self.right_width.clamp(INFO_RANGE.0, INFO_RANGE.1);
+        let r = self.info_range();
+        self.right_width = self.right_width.clamp(r.0, r.1);
         self.frame.top = self.frame.top.clamp(FRAME_TB_RANGE.0, FRAME_TB_RANGE.1);
         self.frame.bottom = self.frame.bottom.clamp(FRAME_TB_RANGE.0, FRAME_TB_RANGE.1);
         self.frame.left = self.frame.left.clamp(FRAME_SIDE_RANGE.0, FRAME_SIDE_RANGE.1);
@@ -586,6 +614,9 @@ impl Config {
         }
         if !["off", "active", "all"].contains(&self.neon_border.as_str()) {
             self.neon_border = "off".into();
+        }
+        if !["c", "f"].contains(&self.weather.unit.as_str()) {
+            self.weather.unit = "c".into();
         }
         self.resolve_scheme();
     }
@@ -749,6 +780,7 @@ mod tests {
         assert_eq!(s.compact, ["clock"]);
         assert_eq!(s.tools_order, ["snip", "calc", "notepad", "search"]);
         assert_eq!(s.power_order, POWER_KEYS);
+        assert_eq!(s.laptop_order, LAPTOP_KEYS);
     }
 
     #[test]

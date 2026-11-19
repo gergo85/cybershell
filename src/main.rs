@@ -18,6 +18,7 @@ mod media;
 mod monitor;
 mod neon;
 mod peek;
+mod periph;
 mod sys;
 mod tray;
 mod usage;
@@ -83,7 +84,8 @@ const HOTKEY_RELOAD: i32 = 2;
 
 const APP_NAME: &str = "CyberShell";
 
-const WEBSITE_URL: &str = "https://szabogergo.hu/";
+/// A készítő programjai a Microsoft Store-ban (a beállítások bal alsó sarkában lévő gomb).
+const STORE_URL: &str = "https://apps.microsoft.com/search/publisher?name=Gerg%C5%91+Szab%C3%B3";
 
 const GITHUB_URL: &str = "https://github.com/gergo85/cybershell";
 
@@ -120,6 +122,8 @@ enum UserEvent {
     Media(String),
     /// A rendszerfigyelő mérése (Terhelés, Hálózat modul).
     Monitor(String),
+    /// A Bluetooth-eszközök töltöttsége (Perifériák modul, háttérszálról).
+    Periph(String),
     /// A szünetre figyelmeztető sáv üzenete.
     HealthIpc(String),
     /// A Windows színbeállításai (sötét/világos mód, kiemelőszín) megváltoztak.
@@ -390,6 +394,7 @@ fn main() {
         hide_at: None,
         refresh_at: None,
         asked_at: None,
+        shown: None,
     });
     let fly_win = popup("oldalpanel", fly_url(&cfg), (380, 560), true, UserEvent::FlyIpc).map(|(window, webview, hwnd)| FlyWin {
         window,
@@ -512,6 +517,10 @@ fn main() {
         next_net_check: Instant::now() + Duration::from_secs(5),
         last_codex: None,
         next_codex: Instant::now(),
+        last_periph: String::new(),
+        next_periph: Instant::now() + Duration::from_secs(3),
+        periph_busy: false,
+        next_cal: Instant::now() + Duration::from_secs(5),
     };
     // A telepített programok listája (a Start menünek) háttérben készül el.
     hub.apps_refresh(true);
@@ -595,6 +604,7 @@ fn main() {
                 UserEvent::AppsReady(list) => hub.on_apps_ready(list),
                 UserEvent::Media(payload) => hub.on_media(payload),
                 UserEvent::Monitor(payload) => hub.on_monitor(&payload),
+                UserEvent::Periph(payload) => hub.on_periph(payload),
                 UserEvent::HealthIpc(raw) => hub.on_health_ipc(&raw),
                 UserEvent::Clipboard => hub.send_clips(),
                 UserEvent::SystemTheme => hub.on_system_theme(),

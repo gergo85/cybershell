@@ -7,8 +7,12 @@
   // kivéve az ikonlistát, amit a Mentés gomb ment el.
   function buildSettings() {
     root.className = 'settings';
-    const ICON_CHOICES = ['browser', 'globe', 'code', 'folder', 'panels', 'terminal', 'doc', 'sheet', 'notes', 'music',
-      'photo', 'enhance', 'design', 'picker', 'video', 'mail', 'chat', 'game', 'rocket', 'spark', 'calendar', 'cloud', 'settings', 'app'];
+    // az ikonválasztó mátrixa (a program saját ikonja után), témák szerint csoportosítva
+    const ICON_CHOICES = ['browser', 'globe', 'code', 'terminal', 'folder', 'panels', 'file', 'doc', 'sheet', 'text', 'notes', 'book',
+      'clipboard', 'calc', 'mail', 'chat', 'calendar', 'clock', 'music', 'headphones', 'mic', 'video', 'film', 'photo', 'design', 'brush',
+      'enhance', 'picker', 'snip', 'game', 'rocket', 'spark', 'star', 'heart', 'cart', 'coin', 'bar', 'map', 'place', 'pin', 'cloud',
+      'download', 'server', 'pc', 'chip', 'gpu', 'ram', 'disk', 'board', 'network', 'wifi', 'bluetooth', 'printer', 'shield', 'lock',
+      'key', 'box', 'user', 'settings', 'search', 'start', 'github', 'sun', 'moon', 'app'];
     const TABS = [
       { id: 'programs', icon: 'app' },
       { id: 'panels', icon: 'panels' },
@@ -59,10 +63,10 @@
               <div class="rl mem" id="rlMem"><span>${T('memShort')}</span><i><b></b></i><em>--%</em></div>
             </div>
             <section class="rail-credit">
-              <div class="credit-by"><span>${T('madeBy')}</span><b>Szabó Gergő</b></div>
-              <div class="credit-by credit-ver"><span>${T('version')}</span><b id="appVer">v2.0</b></div>
+              <div class="credit-by"><span>${T('madeBy')}</span><b>${T('author')}</b></div>
+              <div class="credit-by credit-ver"><span>${T('version')}</span><b id="appVer">v2.1</b></div>
               <div class="credit-btns">
-                <button class="sbtn mini" data-cmd="website" title="${T('website')}">${svg('photo')}<span>${T('photoSite')}</span></button>
+                <button class="sbtn mini" data-cmd="store" title="${T('storeHint')}">${svg('store')}<span>Microsoft Store</span></button>
                 <button class="sbtn mini" data-cmd="github">${svg('github')}<span>GitHub</span></button>
               </div>
             </section>
@@ -121,6 +125,7 @@
                 <div class="ord-pair">
                   <div><h3 class="ord-title">${svg('calc')}<span>${T('sTools')}</span></h3><div class="set-list ord-list" id="ordTools"></div></div>
                   <div><h3 class="ord-title">${svg('power')}<span>${T('sPower')}</span></h3><div class="set-list ord-list" id="ordPower"></div></div>
+                  <div class="ord-laptop" id="ordLaptopCol"><h3 class="ord-title">${svg('battery')}<span>${T('sLaptop')}</span></h3><div class="set-list ord-list" id="ordLaptop"></div></div>
                 </div>
               </section>
               <section class="set-card c-view">
@@ -187,11 +192,12 @@
               <div class="pane-col">
               <section class="set-card wset" id="wsCard">
                 <h2>${T('wsTitle')}</h2>
-                <div class="ws-row">
+                <div class="ws-row ws-grid">
                   <label class="ws-city" title="${T('wsCityHint')}">${svg('place')}<span class="ws-field"><input id="wsCity" type="text" maxlength="80" spellcheck="false" autocomplete="off" placeholder="${T('wsCityPh')}"><button class="ws-go" id="wsGo" title="${T('wsGo')}">${svg('enter')}</button></span></label>
                   <button class="sbtn toggle" id="wsWind" title="${T('wsWindHint')}">${svg('wind')}<span>${T('wsWind')}</span><b class="switch">–</b></button>
+                  <div class="ws-found" id="wsFound"></div>
+                  <div class="sbtn ws-unit" title="${T('wsUnitHint')}">${svg('thermo')}<span>${T('wsUnit')}</span><div class="seg" id="wsUnit"><button data-unit="c">°C</button><button data-unit="f">°F</button></div></div>
                 </div>
-                <div class="ws-found" id="wsFound"></div>
               </section>
               <section class="set-card c-start">
                 <h2>${T('startCard')}</h2>
@@ -469,7 +475,7 @@
 
     const editable = (a) => ({
       id: a.id, name: a.name, path: a.path, args: a.args || '', icon: a.rawIcon != null ? a.rawIcon : (a.icon || ''),
-      color: a.color || '', img: a.img || '', canExeIcon: !!a.canExeIcon,
+      color: a.color || '', img: a.img || '', exeImg: a.exeImg || (a.icon === 'exe' ? a.img : '') || '', canExeIcon: !!a.canExeIcon,
       available: a.available !== false, hint: a.hint || '', autostart: !!a.autostart,
     });
     const strip = (a) => ({ id: a.id, name: a.name, path: a.path, args: a.args, icon: a.icon, color: a.color, autostart: a.autostart });
@@ -710,22 +716,29 @@
     $('engGo').addEventListener('click', engCommit);
     $('engUrl').addEventListener('keydown', (e) => { if (e.key === 'Enter') { engCommit(); $('engUrl').blur(); } });
 
-    // ── az Eszköztár és a Főkapcsoló gombjainak sorrendje (húzással, azonnal életbe lép) ──
+    // ── az Eszköztár, a Főkapcsoló és a Laptop gombjainak sorrendje (húzással, azonnal életbe lép) ──
     // a gombokat a modul adja (buttons, orderKey): { toolsOrder: { calc: [ikon, név], … }, … }
     const ORDER_ITEMS = Object.fromEntries(MODULES.filter((m) => m.orderKey).map((m) =>
-      [m.orderKey, Object.fromEntries(m.buttons.map((b) => [b.key, [b.icon, T(b.title)]]))]));
+      [m.orderKey, Object.fromEntries(m.buttons.map((b) => [b.key, [b.icon, T(b.name || b.title)]]))]));
     const orderOf = (key) => {
       const all = Object.keys(ORDER_ITEMS[key]);
       const cur = ((data.sections || {})[key] || []).filter((k) => all.includes(k));
       return [...cur, ...all.filter((k) => !cur.includes(k))];
     };
     // ── Megjelenés: kompakt vagy normál nézet a kompakt nézettel rendelkező moduloknál ──
+    // csak a bekapcsolt modulok sorai látszanak (a kikapcsolt modul beállítása megmarad, és
+    // a bekapcsolásakor rögtön megjelenik a sora)
     const renderView = () => {
-      const compact = (data.sections || {}).compact || [];
-      $('viewList').innerHTML = MODULES.filter((m) => m.compact).map(({ id: k, compact: icon, name }) => `
+      const sec = data.sections || {};
+      const compact = sec.compact || [];
+      // a sorrend ugyanaz, mint a Modulok listájában (a beállított sorrend, ami hiányzik, a végére)
+      const rank = (id) => { const i = (sec.order || []).indexOf(id); return i < 0 ? Infinity : i; };
+      const shown = MODULES.filter((m) => m.compact && (!m.laptopOnly || data.laptop) && (sec[m.id] ?? m.defaultOn ?? true) !== false)
+        .sort((a, b) => rank(a.id) - rank(b.id));
+      $('viewList').innerHTML = shown.length ? shown.map(({ id: k, compact: icon, name }) => `
         <div class="lang-row">${svg(icon)}<span>${T(name)}</span>
           <div class="seg"><button data-view="${k}" data-mode="compact" class="${compact.includes(k) ? 'on' : ''}">${T('viewCompact')}</button><button data-view="${k}" data-mode="normal" class="${compact.includes(k) ? '' : 'on'}">${T('viewNormal')}</button></div>
-        </div>`).join('');
+        </div>`).join('') : `<div class="view-empty">${T('viewEmpty')}</div>`;
     };
     $('viewList').addEventListener('click', (e) => {
       const b = e.target.closest('[data-view]');
@@ -752,17 +765,22 @@
       $('sizesReset').disabled = true;
       setValue('sizesReset', true);
     });
+    // a sorrendezhető gombsorok: [lista, kulcs]; a Laptop csak akkumulátoros gépen
+    const ORDERS = [['ordTools', 'toolsOrder'], ['ordPower', 'powerOrder'], ['ordLaptop', 'laptopOrder']];
+    const orderKeys = () => ORDERS.map(([, k]) => k).filter((k) => k !== 'laptopOrder' || data.laptop);
+    const orderIsDefault = () => orderKeys().every((k) => orderOf(k).join() === Object.keys(ORDER_ITEMS[k]).join());
     $('orderReset').addEventListener('click', () => {
       if (!data) return;
-      data.sections = { ...data.sections, toolsOrder: Object.keys(ORDER_ITEMS.toolsOrder), powerOrder: Object.keys(ORDER_ITEMS.powerOrder) };
+      data.sections = { ...data.sections, ...Object.fromEntries(ORDERS.map(([, k]) => [k, Object.keys(ORDER_ITEMS[k])])) };
       renderOrder();
       if (!demo) post({ type: 'sections', sections: data.sections });
     });
 
     const renderOrder = () => {
-      const isDefault = ['toolsOrder', 'powerOrder'].every((key) => orderOf(key).join() === Object.keys(ORDER_ITEMS[key]).join());
-      $('orderReset').disabled = isDefault;
-      for (const [id, key] of [['ordTools', 'toolsOrder'], ['ordPower', 'powerOrder']]) {
+      $('orderReset').disabled = orderIsDefault();
+      $('ordLaptopCol').hidden = !data.laptop;
+      root.querySelector('.ord-pair').classList.toggle('three', !!data.laptop);
+      for (const [id, key] of ORDERS) {
         $(id).innerHTML = orderOf(key).map((k) => {
           const [icon, name] = ORDER_ITEMS[key][k];
           return `<div class="sec-row" data-key="${k}"><span class="grip" title="${T('dragHint')}">${svg('grip')}</span>` +
@@ -770,13 +788,13 @@
         }).join('');
       }
     };
-    for (const [id, key] of [['ordTools', 'toolsOrder'], ['ordPower', 'powerOrder']]) {
+    for (const [id, key] of ORDERS) {
       sortableLater.push(() => sortable($(id), '.sec-row', (from, to, rows) => {
         const order = rows.map((r) => r.dataset.key);
         order.splice(to, 0, ...order.splice(from, 1));
         for (const k of order) $(id).appendChild(rows.find((r) => r.dataset.key === k));
         data.sections = { ...data.sections, [key]: order };
-        $('orderReset').disabled = ['toolsOrder', 'powerOrder'].every((k) => orderOf(k).join() === Object.keys(ORDER_ITEMS[k]).join());
+        $('orderReset').disabled = orderIsDefault();
         if (!demo) post({ type: 'sections', sections: data.sections });
       }));
     }
@@ -888,9 +906,12 @@
       $('posInfo').innerHTML = posButtons('info', 'icons');
       // a modulok a beállított sorrendben (ami hiányzik belőle, a végére kerül)
       // (a csak laptopon látszó modul asztali gépen nem szerepel)
-      const listed = MODULES.filter((m) => !m.laptopOnly || data.laptop).map((m) => m.id);
+      // (a listedIf a modul saját feltétele, pl. a Perifériák csak csatlakoztatott eszközzel)
+      const listed = MODULES.filter((m) => (!m.laptopOnly || data.laptop) && (!m.listedIf || m.listedIf(data))).map((m) => m.id);
       const order = (data.sections.order || []).filter((k) => listed.includes(k));
       for (const k of listed) if (!order.includes(k)) order.push(k);
+      // két oszlopban (kisebb munkaterületen) oszloponként felülről lefelé: ennyi sor kell
+      $('secList').style.setProperty('--rows', Math.ceil(order.length / 2));
       $('secList').innerHTML = order.map((k) => {
         const m = moduleOf(k);
         const on = (data.sections[k] ?? m.defaultOn ?? true) !== false;
@@ -915,6 +936,8 @@
     // A húzott sor követi az egeret, a többi sor csúszva adja át a helyét; elengedéskor a sor
     // a végleges helyére úszik, és csak ekkor rendezzük át ténylegesen a listát. Görgethető
     // listánál a lista széléhez érve görget.
+    // A lista lehet több oszlopos rács is (oszloponként felülről lefelé töltve): a sorok
+    // helyét (slotját) a húzás kezdetén lemérjük, és a húzott sorhoz legközelebbi hely a cél.
     const sortable = (list, rowSel, done) => {
       let drag = null;
       list.addEventListener('pointerdown', (e) => {
@@ -925,31 +948,48 @@
         if (!row || rows.length < 2) return;
         e.preventDefault();
         const from = rows.indexOf(row);
-        const step = rows[1].getBoundingClientRect().top - rows[0].getBoundingClientRect().top;
-        drag = { row, rows, from, to: from, startY: e.clientY, y: e.clientY, step, scroll0: list.scrollTop };
+        const slots = rows.map((r) => { const b = r.getBoundingClientRect(); return { x: b.left, y: b.top }; });
+        // egy oszlopos listában a sor csak függőlegesen mozog
+        const column = slots.every((p) => Math.abs(p.x - slots[0].x) < 1);
+        drag = { row, rows, from, to: from, startX: e.clientX, startY: e.clientY, x: e.clientX, y: e.clientY, slots, column, scroll0: list.scrollTop };
         row.classList.add('dragging');
         list.classList.add('sorting');
         grip.setPointerCapture(e.pointerId);
       });
+      // az i. sor eltolása a j. helyre
+      const shiftTo = (i, j) => {
+        const a = drag.slots[i], b = drag.slots[j];
+        return `translate(${b.x - a.x}px, ${b.y - a.y}px)`;
+      };
       const place = () => {
-        const { row, rows, from, step } = drag;
+        const { row, rows, from, slots } = drag;
         const n = rows.length;
-        const raw = drag.y - drag.startY + (list.scrollTop - drag.scroll0);
-        const dy = Math.max(-from * step, Math.min((n - 1 - from) * step, raw));
-        row.style.transform = `translateY(${dy}px)`;
-        const to = Math.max(0, Math.min(n - 1, Math.round(from + dy / step)));
+        const ys = slots.map((p) => p.y), xs = slots.map((p) => p.x);
+        const dyRaw = drag.y - drag.startY + (list.scrollTop - drag.scroll0);
+        const dy = Math.max(Math.min(...ys) - slots[from].y, Math.min(Math.max(...ys) - slots[from].y, dyRaw));
+        const dx = drag.column ? 0 : Math.max(Math.min(...xs) - slots[from].x, Math.min(Math.max(...xs) - slots[from].x, drag.x - drag.startX));
+        row.style.transform = `translate(${dx}px, ${dy}px)`;
+        // a húzott sor bal felső sarkához legközelebbi hely
+        const px = slots[from].x + dx, py = slots[from].y + dy;
+        let to = 0, best = Infinity;
+        slots.forEach((p, i) => {
+          const d = (p.x - px) ** 2 + (p.y - py) ** 2;
+          if (d < best) { best = d; to = i; }
+        });
+        to = Math.max(0, Math.min(n - 1, to));
         if (to === drag.to) return;
         drag.to = to;
         rows.forEach((r, i) => {
           if (r === row) return;
-          let shift = 0;
-          if (from < to && i > from && i <= to) shift = -step;
-          if (from > to && i >= to && i < from) shift = step;
-          r.style.transform = shift ? `translateY(${shift}px)` : '';
+          let j = i;
+          if (from < to && i > from && i <= to) j = i - 1;
+          if (from > to && i >= to && i < from) j = i + 1;
+          r.style.transform = j !== i ? shiftTo(i, j) : '';
         });
       };
       list.addEventListener('pointermove', (e) => {
         if (!drag || drag.done) return;
+        drag.x = e.clientX;
         drag.y = e.clientY;
         if (list.scrollHeight > list.clientHeight) {
           const r = list.getBoundingClientRect();
@@ -964,7 +1004,7 @@
         d.done = true;
         d.row.classList.remove('dragging');
         d.row.classList.add('settling');
-        d.row.style.transform = `translateY(${(d.to - d.from) * d.step}px)`;
+        d.row.style.transform = shiftTo(d.from, d.to);
         setTimeout(() => {
           list.classList.remove('sorting');
           for (const r of d.rows) { r.style.transform = ''; r.classList.remove('settling'); }
@@ -982,6 +1022,8 @@
       order.splice(to, 0, ...order.splice(from, 1));
       for (const k of order) $('secList').appendChild(rows.find((r) => r.dataset.key === k));
       data.sections = { ...data.sections, order };
+      // a Megjelenés kártya is ebben a sorrendben
+      renderView();
       if (!demo) post({ type: 'sections', sections: data.sections });
     });
 
@@ -996,11 +1038,6 @@
 
     const renderList = () => {
       $('edList').innerHTML = draft.map((a, i) => {
-        const opts = [
-          a.canExeIcon ? `<option value="exe"${a.icon === 'exe' ? ' selected' : ''}>${T('programIcon')}</option>` : '',
-          `<option value=""${!a.icon ? ' selected' : ''}>${T('automatic')}</option>`,
-          ...ICON_CHOICES.map((n) => `<option value="${n}"${a.icon === n ? ' selected' : ''}>${n}</option>`),
-        ].join('');
         const color = /^#[0-9a-f]{6}$/i.test(a.color) ? a.color : '#8a8f9c';
         return `
           <div class="ed-item" data-i="${i}">
@@ -1009,7 +1046,7 @@
             <span class="ed-icon"${a.color ? ` style="--app:${esc(a.color)}"` : ''}>${iconPreview(a)}</span>
             <input class="ed-name" data-field="name" value="${esc(a.name)}" maxlength="24" spellcheck="false">
             <div class="ed-path">${esc(a.path)}${a.available ? '' : `<b>${T('notInstalled')}</b>`}</div>
-            <select class="ed-sel" data-field="icon">${opts}</select>
+            <button class="ed-sel ed-pick" data-act="pick" title="${T('pickIcon')}"><span>${pickLabel(a)}</span>${svg('down')}</button>
             <input class="ed-color" type="color" data-field="color" value="${color}">
             <button class="ib auto${a.autostart ? ' on' : ''}" data-act="auto">${svg('power')}</button>
             <button class="ib danger" data-act="del">${svg('trash')}</button>
@@ -1019,6 +1056,47 @@
       renderRunning();
       updateDirty();
     };
+
+    // ── ikonválasztó: mátrix, az első elem a program saját ikonja (ha nincs neki: automatikus) ──
+    const pickLabel = (a) => T(a.icon === 'exe' ? 'programIcon' : !a.icon ? 'automatic' : window.HUB_ICONS[a.icon] ? 'builtinIcon' : 'imageIcon');
+    const icoPop = document.createElement('div');
+    icoPop.className = 'ico-pop';
+    icoPop.hidden = true;
+    root.appendChild(icoPop);
+    let picking = -1;
+    const closePicker = () => { icoPop.hidden = true; picking = -1; };
+    const openPicker = (i, btn) => {
+      if (picking === i) return closePicker();
+      const a = draft[i];
+      const first = a.canExeIcon
+        ? { v: 'exe', html: a.exeImg ? `<img src="${esc(a.exeImg)}" alt="">` : svg('app'), title: T('programIcon') }
+        : { v: '', html: iconPreview({ ...a, icon: '' }), title: T('automatic') };
+      const cells = [first, ...ICON_CHOICES.map((n) => ({ v: n, html: svg(n), title: n }))];
+      icoPop.innerHTML = `<div class="ico-head">${esc(a.name)}</div><div class="ico-grid" style="--app:${esc(a.color || 'var(--c-main)')}">${cells.map((c, k) =>
+        `<button class="ico-cell${k === 0 ? ' own' : ''}${a.icon === c.v ? ' on' : ''}" data-icon="${c.v}" title="${esc(c.title)}">${c.html}</button>`).join('')}</div>`;
+      icoPop.hidden = false;
+      picking = i;
+      // a gomb alá (ha ott nem fér el, fölé), a képernyőn belül
+      const r = btn.getBoundingClientRect(), w = icoPop.offsetWidth, h = icoPop.offsetHeight;
+      const left = Math.max(8, Math.min(r.right - w, innerWidth - w - 8));
+      const top = r.bottom + 6 + h <= innerHeight - 8 ? r.bottom + 6 : Math.max(8, r.top - 6 - h);
+      Object.assign(icoPop.style, { left: `${left}px`, top: `${top}px` });
+    };
+    icoPop.addEventListener('click', (e) => {
+      const c = e.target.closest('[data-icon]');
+      if (!c || picking < 0) return;
+      const a = draft[picking];
+      a.icon = c.dataset.icon;
+      if (a.icon === 'exe') a.img = a.exeImg;
+      closePicker();
+      renderList();
+    });
+    document.addEventListener('pointerdown', (e) => {
+      if (!icoPop.hidden && !icoPop.contains(e.target) && !e.target.closest('.ed-pick')) closePicker();
+    }, true);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !icoPop.hidden) { e.stopPropagation(); closePicker(); } }, true);
+    window.addEventListener('resize', closePicker);
+    $('edList').addEventListener('scroll', closePicker);
 
     const updateDirty = () => {
       const d = dirty();
@@ -1118,10 +1196,11 @@
       post({ type: 'health-reset' });
     });
 
-    // ── Időjárás: a település (szabad szöveg) és a szél kijelzése a panelen ──
+    // ── Időjárás: a település (szabad szöveg), a szél kijelzése a panelen és a mértékegység (°C/°F) ──
     let weather = null;
     const renderWeather = () => {
       setSwitch($('wsWind'), weather.wind !== false);
+      for (const b of $('wsUnit').children) b.classList.toggle('on', b.dataset.unit === (weather.unit === 'f' ? 'f' : 'c'));
       if (document.activeElement !== $('wsCity')) $('wsCity').value = weather.city || '';
     };
     // a cím mellett a megtalált hely teljes neve (település, megye, ország)
@@ -1183,6 +1262,13 @@
       renderWeather();
       if (!demo) post({ type: 'weather', wind: weather.wind });
     });
+    $('wsUnit').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-unit]');
+      if (!b || !weather || b.classList.contains('on')) return;
+      weather = { ...weather, unit: b.dataset.unit };
+      renderWeather();
+      if (!demo) post({ type: 'weather', unit: weather.unit });
+    });
 
     let firstLoad = true;
     const load = (msg) => {
@@ -1224,6 +1310,7 @@
       const b = e.target.closest('button');
       if (!b) return;
       const act = b.dataset.act;
+      if (act === 'pick') return openPicker(i, b);
       if (act === 'del') draft.splice(i, 1);
       if (act === 'auto') {
         const a = draft[i];
@@ -1264,7 +1351,7 @@
       if (draft.some((a) => a.path.toLowerCase() === app.path.toLowerCase())) return toast(T('alreadyListed'));
       draft.push({
         id: null, name: app.name || 'Program', path: app.path, args: app.args || '', icon: app.icon || '',
-        color: '', img: app.img || '', canExeIcon: !!app.canExeIcon, available: true, hint: '', autostart: false,
+        color: '', img: app.img || '', exeImg: app.img || '', canExeIcon: !!app.canExeIcon, available: true, hint: '', autostart: false,
       });
       renderList();
       const rows = $('edList').querySelectorAll('.ed-item');
@@ -1475,7 +1562,7 @@
       const q = new URLSearchParams(location.search);
       if (q.get('tab')) store.set(TAB_STORE, q.get('tab'));
       h({
-        type: 'settings', autostart: true, layout: { icons: 'left', info: 'right' }, winKey: true, clipboard: true, iconLabels: true, tooltips: true, laptop: true, language: lang, appearance: 'dark',
+        type: 'settings', autostart: true, layout: { icons: 'left', info: 'right' }, winKey: true, clipboard: true, iconLabels: true, tooltips: true, laptop: true, periph: 3, language: lang, appearance: 'dark',
         scheme: 'dark', monitors: 2, screen: { w: 1920, h: 1080 },
         bars: { icons: 86, info: 86, frame: { top: 10, bottom: 10, left: 10, right: 10 }, range: [56, 160], frameRange: [0, 40] },
         allMonitors: true, hideTaskbar: true, activity: { autoStart: false, sound: true },
@@ -1506,7 +1593,7 @@
           .concat([{ id: 5, name: 'Cyberpunk', rawIcon: 'game', icon: 'game', color: '#ff3b5c', path: 'steam://rungameid/1091500', available: true }]),
         running: ['Jegyzettömb', 'Számológép', 'Windows Intéző', 'Paint', 'Microsoft Edge', 'Discord', 'Steam', 'OBS Studio', 'GIMP', 'Thunderbird', 'Telegram', 'Blender', 'Audacity', 'VLC']
           .map((name) => ({ name, path: `C:\\Apps\\${name}.exe`, img: '' })),
-        wallpapers: [...Array(12)].map((_, i) => `CyberShell_background_${pad(i + 1)}`)
+        wallpapers: [...Array(8)].map((_, i) => `CyberShell_background_${pad(i + 1)}`)
           .map((n) => ({ path: `C:\\CyberShell\\wallpapers\\${n}.jpg`, url: `../wallpapers/${n}.jpg`, builtin: true })),
         wallpaper: 'C:\\CyberShell\\wallpapers\\CyberShell_background_03.jpg',
       });

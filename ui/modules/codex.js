@@ -16,7 +16,7 @@
         <span class="plan" id="codexPlan"></span>
       </div>`,
     setup(ctx) {
-      const { limitsHtml, hhmm } = window.HUB.usageLimits;
+      const { limitsHtml, hhmm, fitLimits } = window.HUB.usageLimits;
       let codex = null;
       const render = () => {
         if (!codex) return;
@@ -28,7 +28,9 @@
         $('codexUsage').innerHTML = limitsHtml(codex.limits.map((l) => ({
           ...l, label: l.key ? l.key : T('limitHours', { h: Math.round((l.minutes || 0) / 60) }),
         })));
+        fitLimits(ctx, $('codexUsage'));
       };
+      window.addEventListener('resize', () => fitLimits(ctx, $('codexUsage')));
       const message = (msg) => {
         if (msg.type !== 'codex') return;
         codex = msg;
@@ -47,6 +49,7 @@
       });
       return {
         message,
+        sections: () => requestAnimationFrame(() => fitLimits(ctx, $('codexUsage'))),
         tick: (d) => { if (d.getSeconds() % 30 === 0) render(); },
         demo: () => $('codexRefresh').click(),
       };

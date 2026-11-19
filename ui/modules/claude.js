@@ -30,7 +30,17 @@
   }).join('');
   // az adat időbélyege a frissítés gomb mellett (ÓÓ:PP)
   const hhmm = (t) => `${pad(t.getHours())}:${pad(t.getMinutes())}`;
-  window.HUB.usageLimits = { limitsHtml, hhmm };
+  // vízszintes panelen kompakt nézetben a két keret egymás alatt; ha így nem fér ki a szekcióba,
+  // egy keret egy sor lesz (a százalék a sáv mellé kerül). Normál nézetben mindig soronként van.
+  const fitLimits = (ctx, box) => {
+    if (!ctx.horiz || !ctx.el.offsetHeight) return;
+    ctx.el.classList.remove('lim-inline');
+    if (!ctx.el.classList.contains('compact')) return ctx.fit();
+    const over = box.getBoundingClientRect().bottom > ctx.el.getBoundingClientRect().bottom + 0.5;
+    ctx.el.classList.toggle('lim-inline', over && !!box.querySelector('.lim'));
+    ctx.fit();
+  };
+  window.HUB.usageLimits = { limitsHtml, hhmm, fitLimits };
 
   defineModule({
     id: 'claude',
@@ -64,7 +74,9 @@
           return;
         }
         box.innerHTML = limitsHtml(usage.limits);
+        fitLimits(ctx, box);
       };
+      window.addEventListener('resize', () => fitLimits(ctx, $('usage')));
       $('usageRefresh').addEventListener('click', () => {
         $('usageTime').textContent = `${T('refresh')}…`;
         ctx.post({ type: 'usage-refresh' });
@@ -81,6 +93,8 @@
       };
       return {
         message,
+        // a kompakt nézet és a bekapcsolás után újra kell mérni
+        sections: () => requestAnimationFrame(() => fitLimits(ctx, $('usage'))),
         // a hátralévő idők félpercenként frissülnek
         tick: (d) => { if (d.getSeconds() % 30 === 0) render(); },
         demo() {

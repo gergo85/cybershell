@@ -24,7 +24,8 @@
   "weather": {
     "enabled": true,
     "city": "Budapest",
-    "wind": true
+    "wind": true,
+    "unit": "c"
   },
   "network": {
     "pingHost": "1.1.1.1"
@@ -62,11 +63,14 @@
       "claude",
       "codex",
       "activity",
+      "note",
       "load",
       "network",
-      "date",
       "clock",
+      "date",
+      "events",
       "laptop",
+      "peripherals",
       "weather",
       "currency",
       "music",
@@ -85,6 +89,12 @@
       "sleep",
       "shutdown",
       "restart"
+    ],
+    "laptopOrder": [
+      "wifi",
+      "battery",
+      "network",
+      "bluetooth"
     ],
     "compact": []
   },
@@ -152,6 +162,16 @@
       "autostart": true
     },
     {
+      "name": "Codex",
+      "path": "shell:AppsFolder\\OpenAI.Codex_2p2nqsd0c76g0!App",
+      "icon": "terminal",
+      "match": [
+        "chatgpt.exe",
+        "codex.exe"
+      ],
+      "color": "#10a37f"
+    },
+    {
       "name": "VS Code",
       "path": "C:\\Program Files\\Microsoft VS Code\\Code.exe",
       "icon": "code",
@@ -186,13 +206,6 @@
       "path": "C:\\Program Files\\Topaz Labs LLC\\Topaz Photo AI\\Topaz Photo AI.exe",
       "icon": "enhance",
       "color": "#8b6cff"
-    },
-    {
-      "name": "ColorCop",
-      "path": "C:\\Program Files (x86)\\ColorCop\\ColorCop.exe",
-      "icon": "picker",
-      "maximize": false,
-      "color": "#ff4fa3"
     },
     {
       "name": "ArtCraft",

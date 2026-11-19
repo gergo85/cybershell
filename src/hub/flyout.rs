@@ -25,7 +25,7 @@ pub(crate) struct FlyWin {
     pub(crate) shown_at: Instant,
     /// Mikor zárult be fókuszvesztés miatt (az időjárásra kattintás ne nyissa újra rögtön).
     pub(crate) hidden_at: Option<Instant>,
-    /// Mit mutat: "weather" vagy "calendar", és melyik sáv mellett nyílt meg.
+    /// Mit mutat: "weather", "calendar", "events" vagy "note", és melyik sáv mellett nyílt meg.
     pub(crate) kind: &'static str,
     pub(crate) bar: usize,
 }
@@ -82,8 +82,11 @@ impl Hub {
             let _ = SetForegroundWindow(f.hwnd);
         }
         log(format!("oldalpanel megnyitva: {kind}"));
-        let payload = if kind == "calendar" {
-            json!({ "type": "calendar-open", "feeds": self.calendar_feed_list(), "theme": self.theme_json(), "language": self.cfg.language })
+        let payload = if kind == "note" {
+            json!({ "type": "note-open", "text": self.cfg.note.text, "theme": self.theme_json(), "language": self.cfg.language })
+        } else if kind == "calendar" || kind == "events" {
+            let t = if kind == "events" { "events-open" } else { "calendar-open" };
+            json!({ "type": t, "feeds": self.calendar_feed_list(), "theme": self.theme_json(), "language": self.cfg.language })
         } else {
             json!({ "type": "weather-open", "weather": self.cfg.weather, "theme": self.theme_json(), "language": self.cfg.language })
         };
@@ -127,12 +130,13 @@ impl Hub {
             && !force
             && at.elapsed() < Duration::from_secs(10 * 60)
         {
-            self.fly_eval(&json!({ "type": "cal-data", "feeds": serde_json::from_str::<serde_json::Value>(data).unwrap_or_default() }));
+            let payload = json!({ "type": "cal-data", "feeds": serde_json::from_str::<serde_json::Value>(data).unwrap_or_default() });
+            self.cal_broadcast(&payload);
             return;
         }
         if self.cfg.calendar.feeds.is_empty() {
             self.cal_cache = None;
-            self.fly_eval(&json!({ "type": "cal-data", "feeds": [] }));
+            self.cal_broadcast(&json!({ "type": "cal-data", "feeds": [] }));
             return;
         }
         if self.cal_busy {
@@ -183,7 +187,15 @@ impl Hub {
             .collect();
         log(format!("naptár letöltve – {}", summary.join(", ")));
         self.cal_cache = Some((Instant::now(), raw));
-        self.fly_eval(&json!({ "type": "cal-data", "feeds": feeds }));
+        self.cal_broadcast(&json!({ "type": "cal-data", "feeds": feeds }));
+    }
+
+    /// A letöltött naptárak az oldalpanelnek és (ha látszik az Események modul) az információs panelnek.
+    fn cal_broadcast(&self, payload: &serde_json::Value) {
+        self.fly_eval(payload);
+        if self.cfg.sections.shows("events") {
+            self.eval(self.info_edge(), payload);
+        }
     }
 
     /// Új naptár csatolása (Google Naptár: „Titkos cím iCal formátumban”).
@@ -230,6 +242,15 @@ impl Hub {
         let Ok(msg) = serde_json::from_str::<serde_json::Value>(raw) else { return };
         match msg["type"].as_str().unwrap_or("") {
             "close" => self.fly_hide(false),
+            // Jegyzet: a szöveg a config.json-ba kerül, és minden képernyő információs panelje megkapja
+            "note-set" => {
+                let text: String = msg["text"].as_str().unwrap_or("").chars().take(2000).collect();
+                if text != self.cfg.note.text {
+                    self.cfg.note.text = text;
+                    self.save_config();
+                    self.eval(self.info_edge(), &json!({ "type": "note", "text": self.cfg.note.text }));
+                }
+            }
             "cal-fetch" => self.calendar_fetch(msg["force"].as_bool().unwrap_or(false)),
             "cal-add" => {
                 if let Err(e) = self.calendar_add(&msg) {

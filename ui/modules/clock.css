@@ -24,6 +24,7 @@
 html[data-scheme="light"] .clock-row #hh { color: var(--c-main); }
 html[data-scheme="light"] .clock-row #mm { color: color-mix(in srgb, var(--c-text) 70%, transparent); }
 
-/* vízszintes panelen: az óra a fejléccel egy vonalban kezdődik */
-.right.horiz .clock { width: 112px; }
+/* vízszintes panelen: az óra a fejléccel egy vonalban kezdődik, a szekció az idő kijelzésének
+   szélességű, így a másodperc-sáv is pontosan olyan széles, mint az idő */
+.right.horiz .clock { width: max-content; min-width: 0; }
 .right.horiz .clock-row { justify-content: flex-start; }

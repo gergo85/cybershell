@@ -80,15 +80,22 @@ html[data-scheme="light"] .mu-art::after {
     linear-gradient(180deg, color-mix(in srgb, var(--c-bg) 30%, transparent), color-mix(in srgb, var(--c-bg) 82%, transparent) 70%);
 }
 
-/* vízszintes panelen: a gombok jobbra, a cím, az előadó és a sáv mellettük */
-.right.horiz .music { width: 250px; }
+/* vízszintes panelen (kisebb): a gombok jobbra, a cím, az előadó és a sáv mellettük; a lejátszó
+   (és az indítógomb) a panel magasságához igazodik, a gombok kitöltik a magasságát */
+.right.horiz .music { width: 196px; }
+.right.horiz .mu-launch { flex: 1; height: auto; min-height: 0; }
 .right.horiz .mu-live {
-  display: grid; grid-template-columns: minmax(0, 1fr) 70px; grid-template-areas: "title btns" "artist btns" "bar btns";
-  column-gap: 8px; row-gap: 2px; align-items: center; padding: 4px 5px;
+  flex: 1; min-height: 0;
+  display: grid; grid-template-columns: minmax(0, 1fr) 54px; grid-template-areas: "title btns" "artist btns" "bar btns";
+  grid-template-rows: 1fr auto 1fr; column-gap: 8px; row-gap: 2px; align-items: center; padding: 4px 5px;
 }
+.right.horiz .mu-title { align-self: end; }
+.right.horiz .mu-bar { align-self: start; }
 .right.horiz .mu-title { grid-area: title; margin-right: 12px; }
 .right.horiz .mu-artist { grid-area: artist; }
 .right.horiz .mu-bar { grid-area: bar; }
 .right.horiz .mu-btns { grid-area: btns; }
-.right.horiz .mu-btns .ib { height: 19px; }
-.right.horiz .mu-eq { right: 82px; top: 5px; }
+.right.horiz .mu-btns { gap: 2px; align-self: stretch; grid-auto-rows: minmax(0, 1fr); }
+.right.horiz .mu-btns .ib { height: auto; min-height: 0; }
+.right.horiz .mu-btns .ib svg { width: 10px; height: 10px; }
+.right.horiz .mu-eq { right: 66px; top: 5px; }

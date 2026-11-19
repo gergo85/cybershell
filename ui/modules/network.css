@@ -28,4 +28,5 @@
 .right.horiz .netmod h3 { grid-area: h; }
 .right.horiz .nm-rows { grid-area: rows; }
 .right.horiz .nm-spark { grid-area: spark; height: 100%; margin: 0; }
-.right.horiz #networkSec.compact { grid-template-columns: 1fr; }
+/* kompakt nézetben (grafikon nélkül) a tartalomhoz igazodó szélesség */
+.right.horiz #networkSec.compact { grid-template-columns: 1fr; width: auto; }

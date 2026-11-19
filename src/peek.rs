@@ -93,3 +93,68 @@ pub fn drop_thumb(id: isize) {
         let _ = DwmUnregisterThumbnail(id);
     }
 }
+
+/// Egy előnézeti kártya fölött időzve előtérbe hozott ablak, és ami a visszaállításához kell.
+#[derive(Clone, Copy, Debug)]
+pub struct Shown {
+    pub hwnd: isize,
+    /// Az ablak fölötti első (nem mindig legfelül lévő, látható) ablak; 0, ha ő volt legfelül.
+    pub above: isize,
+    /// Kis méretre volt téve: elengedéskor visszakerül a tálcára.
+    pub iconic: bool,
+}
+
+/// Az ablakot (aktiválás nélkül) a többi fölé hozza, mint a Windows tálcáján a kiskép
+/// fölötti időzés; a kis méretre tett ablakot ehhez visszaállítja.
+pub fn raise(h: HWND) -> Shown {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GW_HWNDPREV, GWL_EXSTYLE, GetWindow, GetWindowLongPtrW, HWND_NOTOPMOST, HWND_TOPMOST, IsIconic, IsWindowVisible, SW_SHOWNOACTIVATE,
+        SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SetWindowPos, ShowWindow, WS_EX_TOPMOST,
+    };
+    unsafe {
+        let iconic = IsIconic(h).as_bool();
+        let mut above = 0isize;
+        if !iconic {
+            let mut w = GetWindow(h, GW_HWNDPREV).ok();
+            while let Some(p) = w {
+                let topmost = (GetWindowLongPtrW(p, GWL_EXSTYLE) as u32 & WS_EX_TOPMOST.0) != 0;
+                if topmost {
+                    break;
+                }
+                if IsWindowVisible(p).as_bool() {
+                    above = p.0 as isize;
+                    break;
+                }
+                w = GetWindow(p, GW_HWNDPREV).ok();
+            }
+        }
+        if iconic {
+            let _ = ShowWindow(h, SW_SHOWNOACTIVATE);
+        }
+        let flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE;
+        let _ = SetWindowPos(h, Some(HWND_TOPMOST), 0, 0, 0, 0, flags);
+        let _ = SetWindowPos(h, Some(HWND_NOTOPMOST), 0, 0, 0, 0, flags);
+        Shown { hwnd: h.0 as isize, above, iconic }
+    }
+}
+
+/// Az előtérbe hozott ablakot visszateszi a helyére (vagy újra kis méretre).
+pub fn unraise(s: Shown) {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        IsWindow, SW_SHOWMINNOACTIVE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SetWindowPos, ShowWindow,
+    };
+    let h = HWND(s.hwnd as *mut core::ffi::c_void);
+    unsafe {
+        if !IsWindow(Some(h)).as_bool() {
+            return;
+        }
+        if s.iconic {
+            let _ = ShowWindow(h, SW_SHOWMINNOACTIVE);
+        } else if s.above != 0 {
+            let a = HWND(s.above as *mut core::ffi::c_void);
+            if IsWindow(Some(a)).as_bool() {
+                let _ = SetWindowPos(h, Some(a), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            }
+        }
+    }
+}

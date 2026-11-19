@@ -1,0 +1,21 @@
+/* Perifériák: eszközönként a név, alatta a töltöttség sávja és százaléka. */
+.pr-list { display: flex; flex-direction: column; gap: 6px; }
+.pr-dev { --app: #7ee787; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pr-name {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 700 9px/1.2 var(--f-mono); letter-spacing: .08em; color: var(--c-text-dim);
+}
+.pr-row { display: flex; align-items: center; gap: 6px; }
+.pr-bar { flex: 1; min-width: 0; height: 5px; background: color-mix(in srgb, var(--app) 18%, transparent); }
+.pr-bar i { display: block; height: 100%; background: var(--app); box-shadow: 0 0 4px var(--app); }
+.pr-pct {
+  flex: none; min-width: 3.1ch; text-align: right;
+  font: 600 12px/1 var(--f-display); font-variation-settings: "wdth" 75, "wght" 650; font-variant-numeric: tabular-nums;
+  color: color-mix(in srgb, var(--app) 85%, var(--c-text));
+}
+.pr-dev.warn { --app: #ffb02e; }
+.pr-dev.low { --app: var(--c-hot); }
+
+/* vízszintes panelen az eszközök egymás mellett */
+.right.horiz .pr-list { flex-direction: row; gap: 12px; }
+.right.horiz .pr-dev { width: 84px; }

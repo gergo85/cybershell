@@ -1,31 +1,33 @@
-/* Laptop: Wi-Fi, akkumulátor, hálózat, Bluetooth (2×2 gomb). */
+/* Laptop: Wi-Fi, akkumulátor, hálózat, Bluetooth – 2×2 ikon, mint a Főkapcsolóban; az
+   akkumulátor gombján a töltöttség százalékban (30% alatt sárga, 15% alatt piros). */
 .lap-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
 .lap {
   min-width: 0; overflow: hidden; white-space: nowrap;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
-  height: 40px; padding-top: 2px;
-  font-size: 8.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--c-text);
-  font-variation-settings: "wdth" 80, "wght" 600; font-variant-numeric: tabular-nums;
+  display: flex; align-items: center; justify-content: center;
+  height: 38px;
   background: color-mix(in srgb, var(--app, var(--c-main)) 10%, transparent);
   clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
   transition: background-color .12s ease, color .12s ease;
 }
 .lap svg { display: block; width: 17px; height: 17px; color: color-mix(in srgb, var(--app) 85%, var(--c-text)); }
-.lap .bat { display: block; height: 17px; }
-.bat-fill { fill: currentColor; stroke: none; }
-.bat-bolt { stroke: var(--c-main); stroke-width: 1.8; }
-.lap.low { --app: var(--c-hot); }
-.lap.low span:last-child { color: var(--c-hot); }
+.bat-pct {
+  font: 600 13px/1 var(--f-display); font-variation-settings: "wdth" 75, "wght" 650; font-variant-numeric: tabular-nums;
+  letter-spacing: .02em; color: color-mix(in srgb, var(--app) 85%, var(--c-text));
+}
+/* a gomb saját színe a style-ban van: az alacsony töltöttség színe felülírja */
+.lap.warn { --app: #ffb02e !important; }
+.lap.low { --app: var(--c-hot) !important; }
+.lap:is(.warn, .low) .bat-pct { color: var(--app); }
 .lap.offline svg { opacity: .35; }
-.lap:hover { background: var(--app); color: var(--c-bg); }
-.lap:hover svg { color: var(--c-bg); }
-.lap:hover .bat-bolt { stroke: var(--c-bg); }
-.lap.low:hover span:last-child { color: var(--c-bg); }
+.lap:hover { background: var(--app); }
+.lap:hover :is(svg, .bat-pct) { color: var(--c-bg); }
+html[data-scheme="light"] .lap { clip-path: none; border-radius: 7px; }
 
 /* szűkített panelen alacsonyabb gombok */
-.right.tight .lap { height: 36px; }
-.right.tighter .lap { height: 32px; gap: 2px; }
+.right.tight .lap { height: 34px; }
+.right.tighter .lap { height: 30px; }
 
-/* vízszintes panelen a négy gomb egy sorban */
-.right.horiz .laptop { width: 212px; }
-.right.horiz .lap-grid { grid-template-columns: repeat(4, 1fr); }
+/* vízszintes panelen ugyanúgy, mint a Főkapcsoló és az Eszköztár: 2×2 kis gomb */
+.right.horiz .laptop { width: 84px; }
+.right.horiz .lap { height: 24px; }
+.right.horiz .bat-pct { font-size: 11px; }

@@ -111,6 +111,24 @@ fn sync_builtin_wallpapers(dir: &Path, walls: &[(&str, &[u8])]) -> usize {
     n
 }
 
+/// A gyári háttérképek fájlnevének eleje: így ismerjük fel egy korábbi változat gyári képeit is.
+const BUILTIN_WALL_PREFIX: &str = "cybershell_background_";
+
+/// Egy korábbi változat már nem beépített gyári háttérképeinek törlése (pl. a v2.0 12 képéből
+/// a v2.1-ben 8 maradt). Csak a gyári elnevezésű képekhez nyúl, a sajátokhoz nem. Visszaadja, hányat törölt.
+fn remove_obsolete_wallpapers(dir: &Path, walls: &[(&str, &[u8])]) -> usize {
+    let Ok(rd) = std::fs::read_dir(dir) else { return 0 };
+    let mut n = 0;
+    for e in rd.flatten() {
+        let name = e.file_name().to_string_lossy().to_string();
+        let builtin_name = name.to_lowercase().starts_with(BUILTIN_WALL_PREFIX);
+        if builtin_name && !walls.iter().any(|(w, _)| w.eq_ignore_ascii_case(&name)) && std::fs::remove_file(e.path()).is_ok() {
+            n += 1;
+        }
+    }
+    n
+}
+
 /// A konfiguráció előkészítése induláskor: a régi helyről átköltöztetett adatok, a gyári
 /// háttérképek, a config.json betöltése (hibánál alapbeállítás), az „Indulás a géppel”
 /// összehangolása a Windowszal, végül a kiegészített fájl visszaírása. A `custom` a --config
@@ -128,6 +146,10 @@ pub(crate) fn prepare_config(base_dir: &Path, custom: Option<PathBuf>, legacy_au
         let n = sync_builtin_wallpapers(&wall_dir, crate::embedded::WALLPAPERS);
         if n > 0 {
             log(format!("{n} gyári háttérkép kicsomagolva vagy frissítve: {}", wall_dir.display()));
+        }
+        let old = remove_obsolete_wallpapers(&wall_dir, crate::embedded::WALLPAPERS);
+        if old > 0 {
+            log(format!("{old} korábbi gyári háttérkép törölve: {}", wall_dir.display()));
         }
     }
     let mut loaded_ok = true;
@@ -355,6 +377,20 @@ mod tests {
         assert_eq!(std::fs::read(d.join("b.jpg")).unwrap(), b"uj-b");
         assert_eq!(std::fs::read(d.join("sajat.jpg")).unwrap(), b"sajat");
         assert_eq!(sync_builtin_wallpapers(&d, walls), 0);
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn obsolete_wallpapers_removed() {
+        let d = temp("walls-old");
+        let walls: &[(&str, &[u8])] = &[("CyberShell_background_01.jpg", b"a")];
+        for f in ["CyberShell_background_01.jpg", "CyberShell_background_12.jpg", "sajat.jpg"] {
+            std::fs::write(d.join(f), "x").unwrap();
+        }
+        assert_eq!(remove_obsolete_wallpapers(&d, walls), 1);
+        assert!(d.join("CyberShell_background_01.jpg").exists());
+        assert!(!d.join("CyberShell_background_12.jpg").exists());
+        assert!(d.join("sajat.jpg").exists());
         let _ = std::fs::remove_dir_all(&d);
     }
 

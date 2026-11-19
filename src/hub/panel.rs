@@ -5,7 +5,7 @@
 use crate::hub::Hub;
 use crate::log;
 use crate::web::push;
-use crate::{apps, codex, media, monitor, sys, tray, wintrack};
+use crate::{UserEvent, apps, codex, media, monitor, periph, send, sys, tray, wintrack};
 use serde_json::json;
 use std::time::{Duration, Instant};
 use windows::Win32::System::Diagnostics::Debug::MessageBeep;
@@ -57,6 +57,10 @@ impl Hub {
             // Időjárás és Dátum: a panel mellé nyíló részletes előrejelzés, illetve naptár
             ("weather-open", _) => self.fly_open(idx, "weather", msg),
             ("calendar-open", _) => self.fly_open(idx, "calendar", msg),
+            // Események: a következő hét eseményei a panel mellett
+            ("events-open", _) => self.fly_open(idx, "events", msg),
+            // Jegyzet: a panel mellett nagyban nyílik meg szerkesztésre
+            ("note-open", _) => self.fly_open(idx, "note", msg),
             // Hangerő: a csúszka, a görgetés és a némítógomb; a százalék a hangerőkeverőt nyitja
             ("volume-set", _) => {
                 let pct = msg["pct"].as_f64().unwrap_or(0.0).round().clamp(0.0, 100.0) as u8;
@@ -245,6 +249,33 @@ impl Hub {
         for b in self.bars.iter().filter(|b| b.edge == info) {
             push(&b.webview, payload);
         }
+    }
+
+    /// A Bluetooth-eszközök töltöttségének lekérdezése háttérszálon (az eszközkezelő lassú is lehet).
+    pub(crate) fn periph_poll(&mut self) {
+        if self.periph_busy {
+            return;
+        }
+        self.periph_busy = true;
+        std::thread::spawn(|| {
+            let devices: Vec<serde_json::Value> =
+                periph::list().into_iter().map(|(name, pct)| json!({ "name": name, "pct": pct })).collect();
+            send(UserEvent::Periph(json!({ "type": "periph", "devices": devices }).to_string()));
+        });
+    }
+
+    /// A Perifériák modul adata a panelnek (csak változáskor).
+    pub(crate) fn on_periph(&mut self, payload: String) {
+        self.periph_busy = false;
+        if payload == self.last_periph {
+            return;
+        }
+        log(format!("perifériák: {payload}"));
+        let info = self.info_edge();
+        for b in self.bars.iter().filter(|b| b.edge == info) {
+            push(&b.webview, &payload);
+        }
+        self.last_periph = payload;
     }
 
     /// A Codex-használat újraolvasása és elküldése a panelnek (ha változott, vagy ha kérik).

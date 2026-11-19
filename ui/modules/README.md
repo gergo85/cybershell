@@ -80,6 +80,7 @@ vonala), `lang`, `demo`.
 | `ownsWheel` | nem | A modul maga használja a görgőt (vízszintes panelen ilyenkor nem görget a panel). |
 | `listed` | nem | `false`: a beállításokban nem szerepel, nem kapcsolható és nem rendezhető (a panelen a végére, a MENÜ elé kerül). |
 | `laptopOnly` | nem | Csak akkumulátoros gépen szerepel a beállítások listájában (mint a Laptop); a panelen a modul maga rejti el magát (`ctx.setAvailable`). |
+| `listedIf` | nem | `(data) => bool`: a modul saját feltétele, hogy szerepeljen-e a beállítások Modulok listájában (a beállítások adataiból, pl. a Perifériák: `data.periph > 0`). |
 | `buttons`, `orderKey` | nem | Rendezhető gombok (Eszköztár, Főkapcsoló): `[{ key, icon, title }]` és a config.json kulcsa. |
 | `settings` | nem | Saját kártya a beállítások Funkciók fülén: `{ title, html(), setup(sx) }`, a `setup` egy `{ render(data) }` objektumot ad vissza (lásd a Valuta modult). Az `sx`: `el`, `$(id)` (a kártyán belül), `post`, `demo`, `update(patch)` (a helyi adat frissítése). |
 

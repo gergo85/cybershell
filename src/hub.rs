@@ -174,6 +174,12 @@ pub(crate) struct Hub {
     /// A Codex-használat legutóbb elküldött állapota és a következő olvasás ideje.
     pub(crate) last_codex: Option<String>,
     pub(crate) next_codex: Instant,
+    /// A Perifériák modul legutóbb elküldött listája, a következő lekérdezés ideje, és hogy fut-e.
+    pub(crate) last_periph: String,
+    pub(crate) next_periph: Instant,
+    pub(crate) periph_busy: bool,
+    /// Az Események modulnak a naptárak következő frissítése.
+    pub(crate) next_cal: Instant,
 }
 
 /// Ezek a rendszerfolyamatok ablakai ne jelenjenek meg a futó programok között.
@@ -274,6 +280,30 @@ impl Hub {
                 self.save_config();
             }
         }
+        // Az alap ikonlista Total Commandere nincs ezen a gépen (máshol sem találtuk): helyette a
+        // Windows Fájlkezelője kerül a helyére (csak az érintetlen alapbejegyzés, és csak ha a
+        // Fájlkezelő még nincs a listában).
+        const TC_DEFAULT: &str = r"C:\Program Files\Total Commander\TOTALCMD64.EXE";
+        let has_explorer = self.cfg.apps.iter().any(|a| a.path.eq_ignore_ascii_case("explorer.exe"));
+        if !has_explorer
+            && let Some(i) =
+                (0..self.cfg.apps.len()).find(|&i| !self.available[i] && self.cfg.apps[i].path.eq_ignore_ascii_case(TC_DEFAULT))
+        {
+            let name = self.tr("Fájlkezelő", "File Explorer", "Eksplorator plików");
+            log(format!("a Total Commander nincs telepítve: helyette {name}"));
+            self.cfg.apps[i] = config::AppEntry {
+                name,
+                path: "explorer.exe".into(),
+                icon: "folder".into(),
+                maximize: Some(false),
+                color: "#f2c94c".into(),
+                autostart: self.cfg.apps[i].autostart,
+                ..Default::default()
+            };
+            self.available[i] = true;
+            self.matchers = self.cfg.apps.iter().map(Matcher::new).collect();
+            self.save_config();
+        }
         for (a, ok) in self.cfg.apps.iter().zip(&self.available) {
             if !ok {
                 log(format!("nincs telepítve, elrejtve: {} ({})", a.name, a.path));
@@ -364,6 +394,7 @@ impl Hub {
             "autostart": autostart::is_enabled(),
             "weather": c.weather,
             "currency": c.currency,
+            "note": c.note,
             "iconLabels": c.icon_labels,
             "language": c.language,
         });
@@ -385,6 +416,16 @@ impl Hub {
             }
             if let Some(c) = &self.last_codex {
                 self.eval_bar(idx, c);
+            }
+            if !self.last_periph.is_empty() {
+                self.eval_bar(idx, &self.last_periph);
+            }
+            // az Események modulnak a legutóbb letöltött naptárak (vagy hogy nincs csatolt naptár)
+            if let Some((_, data)) = &self.cal_cache {
+                let feeds = serde_json::from_str::<serde_json::Value>(data).unwrap_or_default();
+                self.eval_bar(idx, &json!({ "type": "cal-data", "feeds": feeds }).to_string());
+            } else if self.cfg.calendar.feeds.is_empty() {
+                self.eval_bar(idx, &json!({ "type": "cal-data", "feeds": [] }).to_string());
             }
             // újratöltés (pl. panelcsere) után is látszódjon, hogy a beállítások nyitva vannak
             if self.settings.as_ref().is_some_and(|s| s.visible) && self.settings_bar.is_none_or(|b| b == idx) {
@@ -484,6 +525,18 @@ impl Hub {
         if self.cfg.sections.shows("codex") && now >= self.next_codex {
             self.codex_send(false);
         }
+        // Perifériák: a Bluetooth-eszközök töltöttsége félpercenként (csak laptopon kell)
+        if self.cfg.sections.shows("peripherals") && now >= self.next_periph {
+            self.next_periph = now + Duration::from_secs(30);
+            if sys::battery().is_some() {
+                self.periph_poll();
+            }
+        }
+        // Események: a naptárak tízpercenként (a letöltés a gyorsítótárat is figyeli)
+        if self.cfg.sections.shows("events") && now >= self.next_cal {
+            self.next_cal = now + Duration::from_secs(10 * 60);
+            self.calendar_fetch(false);
+        }
         if now >= self.next_power {
             self.next_power = now + Duration::from_secs(20);
             self.send_power(false);
@@ -549,7 +602,7 @@ impl Hub {
             return;
         };
         let kind = msg["type"].as_str().unwrap_or("");
-        if !matches!(kind, "ready" | "log" | "peek" | "peek-leave" | "quick-pos" | "geo") {
+        if !matches!(kind, "ready" | "log" | "peek" | "peek-leave" | "quick-pos" | "geo" | "note-set") {
             let detail = msg["name"]
                 .as_str()
                 .map(str::to_string)

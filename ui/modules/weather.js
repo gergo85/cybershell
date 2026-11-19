@@ -27,7 +27,8 @@
           // a hely kell az Auto témához is (napkelte, napnyugta)
           if (!ctx.demo) ctx.post({ type: 'geo', lat: geo.lat, lon: geo.lon });
           const w = await fetchJson(`https://api.open-meteo.com/v1/forecast?latitude=${geo.lat}&longitude=${geo.lon}` +
-            '&current=temperature_2m,weather_code,is_day,wind_speed_10m,wind_direction_10m&timezone=auto&forecast_days=1');
+            '&current=temperature_2m,weather_code,is_day,wind_speed_10m,wind_direction_10m&timezone=auto&forecast_days=1' +
+            (wcfg.unit === 'f' ? '&temperature_unit=fahrenheit' : ''));
           const c = w.current;
           $('wIcon').innerHTML = svg(wmoIcon(c.weather_code, c.is_day));
           $('wTemp').textContent = `${Math.round(c.temperature_2m)}°`;
@@ -45,9 +46,10 @@
           timer = setTimeout(fetchWeather, 2 * 60000);
         }
       };
-      // a beállítás (település, koordináták, szél, be/ki) a program init és weather üzenetéből
+      // a beállítás (település, koordináták, szél, mértékegység, be/ki) a program init és weather üzenetéből
       const setWeather = (next) => {
-        const placeChanged = !wcfg || wcfg.city !== next.city || wcfg.latitude !== next.latitude || wcfg.longitude !== next.longitude;
+        // a mértékegység váltásakor is újra le kell kérni (az Open-Meteo adja Fahrenheitben)
+        const placeChanged = !wcfg || wcfg.city !== next.city || wcfg.latitude !== next.latitude || wcfg.longitude !== next.longitude || wcfg.unit !== next.unit;
         wcfg = next;
         // a lekérés a config.json weather.enabled értékével kapcsolható ki
         const on = wcfg.enabled !== false;

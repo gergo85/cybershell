@@ -1,0 +1,25 @@
+/* Események: 5 sor (a nap neve és az események száma). Kattintható (a következő hét listája). */
+.events { position: relative; margin: -4px -4px; padding: 4px; cursor: pointer; transition: background-color .12s ease; }
+.events:hover, .events.open { background: color-mix(in srgb, var(--c-alt) 6%, transparent); }
+.events:hover h3, .events.open h3 { color: var(--c-alt); }
+.ev-list { display: flex; flex-direction: column; gap: 3px; }
+.ev-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.ev-d { font: 700 10px/1.2 var(--f-mono); letter-spacing: .12em; color: var(--c-text-dim); }
+.ev-n {
+  font: 600 14px/1 var(--f-display); font-variation-settings: "wdth" 75, "wght" 650; font-variant-numeric: tabular-nums;
+  color: var(--c-alt);
+}
+.ev-dn { font-style: normal; font-variant-numeric: tabular-nums; }
+.ev-row.today .ev-d { color: var(--c-main); }
+.ev-row.zero .ev-n { color: var(--c-text-dim); opacity: .55; }
+.ev-note { font: 700 9px/1.3 var(--f-mono); letter-spacing: .1em; color: var(--c-text-dim); text-align: center; }
+
+/* vízszintes panelen a napok oszloponként felülről lefelé (a sorok száma a panel magasságától
+   függ, a JS adja: --rows): kompakt nézetben egy, normálban két oszlop */
+.right.horiz .ev-list { display: grid; grid-auto-flow: column; grid-template-rows: repeat(var(--rows, 3), auto); column-gap: 16px; row-gap: 3px; }
+.right.horiz .ev-row { min-width: 66px; }
+
+/* az oldalpanelen nyíló heti lista (parts/flyout.js): a mai nap múlt eseményei halványabbak,
+   a MA és a HOLNAP kiemelve */
+.cal-ev.past { opacity: .5; }
+.cal-dh .ev-today { color: var(--c-main); }

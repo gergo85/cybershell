@@ -1,7 +1,7 @@
 //! A teljes képernyős beállítások: adatok, megjelenítés, üzenetek, rendszerterhelés és háttérkép.
 
 use crate::GITHUB_URL;
-use crate::WEBSITE_URL;
+use crate::STORE_URL;
 use crate::hub::Hub;
 use crate::hub::extra_key;
 use crate::log;
@@ -61,7 +61,12 @@ impl Hub {
                 j["rawIcon"] = json!(a.icon);
                 j["match"] = json!(a.match_exe);
                 j["available"] = json!(self.available.get(i).copied().unwrap_or(true));
-                j["canExeIcon"] = json!(a.resolved_path().to_lowercase().ends_with(".exe"));
+                let exe = a.resolved_path().to_lowercase().ends_with(".exe");
+                j["canExeIcon"] = json!(exe);
+                // a program saját ikonja (az ikonválasztó első eleme), akkor is, ha most más ikon van beállítva
+                if exe {
+                    j["exeImg"] = json!(self.icon_for("exe", &a.resolved_path()).1);
+                }
                 j["autostart"] = json!(a.autostart);
                 j
             })
@@ -115,7 +120,7 @@ impl Hub {
             "bars": {
                 "icons": c.left_width, "info": c.right_width, "frame": c.frame,
                 "ranges": {
-                    "iconsWidth": config::ICONS_RANGE, "infoWidth": config::INFO_RANGE,
+                    "iconsWidth": config::ICONS_RANGE, "infoWidth": c.info_range(),
                     "frame.top": config::FRAME_TB_RANGE, "frame.bottom": config::FRAME_TB_RANGE,
                     "frame.left": config::FRAME_SIDE_RANGE, "frame.right": config::FRAME_SIDE_RANGE,
                 },
@@ -145,10 +150,16 @@ impl Hub {
             "clipboard": self.cfg.start_menu.clipboard,
             "appearance": self.cfg.appearance,
             "health": self.health_json(),
-            "weather": { "city": self.cfg.weather.city, "wind": self.cfg.weather.wind },
+            "weather": { "city": self.cfg.weather.city, "wind": self.cfg.weather.wind, "unit": self.cfg.weather.unit },
             "currency": self.cfg.currency,
             // akkumulátoros gép: a Laptop modul csak ekkor szerepel a Modulok listájában
             "laptop": sys::battery().is_some(),
+            // a csatlakoztatott, töltöttséget jelző Bluetooth-eszközök száma: a Perifériák modul
+            // csak ekkor szerepel a Modulok listájában
+            "periph": serde_json::from_str::<serde_json::Value>(&self.last_periph)
+                .ok()
+                .and_then(|v| v["devices"].as_array().map(|a| a.len()))
+                .unwrap_or(0),
             "iconLabels": self.cfg.icon_labels,
             "tooltips": self.cfg.tooltips,
             "sections": self.cfg.sections,
@@ -380,9 +391,9 @@ impl Hub {
                     self.settings_lower();
                     self.open_config();
                 }
-                "website" => {
+                "store" => {
                     self.settings_lower();
-                    wintrack::shell_open(WEBSITE_URL, "", "", false);
+                    wintrack::shell_open(STORE_URL, "", "", false);
                 }
                 "github" => {
                     self.settings_lower();
@@ -403,6 +414,9 @@ impl Hub {
                     self.cfg.icons_edge = icons.to_string();
                     self.cfg.info_edge = info.to_string();
                     self.cfg.info_edge_auto = false;
+                    // fent vagy lent a panelsáv legfeljebb 100 pont vastag
+                    let r = self.cfg.info_range();
+                    self.cfg.right_width = self.cfg.right_width.clamp(r.0, r.1);
                     if self.save_config() {
                         self.reload();
                     }
@@ -463,8 +477,19 @@ impl Hub {
                     self.cfg.weather.wind = wind;
                     changed = true;
                 }
+                if let Some(unit) = msg["unit"].as_str().filter(|u| ["c", "f"].contains(u))
+                    && unit != self.cfg.weather.unit
+                {
+                    self.cfg.weather.unit = unit.to_string();
+                    changed = true;
+                }
                 if changed {
-                    log(format!("időjárás: {}, szél {}", self.cfg.weather.city, if self.cfg.weather.wind { "be" } else { "ki" }));
+                    log(format!(
+                        "időjárás: {}, szél {}, °{}",
+                        self.cfg.weather.city,
+                        if self.cfg.weather.wind { "be" } else { "ki" },
+                        self.cfg.weather.unit.to_uppercase()
+                    ));
                     self.save_config();
                     self.eval(self.info_edge(), &json!({ "type": "weather", "weather": self.cfg.weather }));
                 }
@@ -511,6 +536,9 @@ impl Hub {
                     s.normalize();
                     self.cfg.sections = s;
                     self.configure_monitor();
+                    // az újonnan bekapcsolt Perifériák és Események azonnal kapjon adatot
+                    self.next_periph = std::time::Instant::now();
+                    self.next_cal = std::time::Instant::now();
                     if self.save_config() {
                         self.eval(self.info_edge(), &json!({ "type": "sections", "sections": self.cfg.sections }));
                     }
@@ -654,7 +682,7 @@ impl Hub {
         let num = |r: (u32, u32)| v.as_f64().map(|n| (n.round().max(0.0) as u32).clamp(r.0, r.1));
         let then = match key {
             "iconsWidth" | "infoWidth" => {
-                let Some(n) = num(if key == "iconsWidth" { config::ICONS_RANGE } else { config::INFO_RANGE }) else { return };
+                let Some(n) = num(if key == "iconsWidth" { config::ICONS_RANGE } else { self.cfg.info_range() }) else { return };
                 let slot = if key == "iconsWidth" { &mut self.cfg.left_width } else { &mut self.cfg.right_width };
                 if *slot == n {
                     return;
@@ -807,7 +835,7 @@ impl Hub {
     }
 
     /// Minden beállítás alapértékre. A programok (Ikonok), a Start menü kitűzött elemei, a
-    /// naptárak, a háttérkép, az időjárás helye és az indulás a géppel megmarad; a régi fájl
+    /// naptárak, a jegyzet, a háttérkép, az időjárás helye és mértékegysége, és az indulás a géppel megmarad; a régi fájl
     /// `config.backup.json` néven a mellé kerül.
     pub(crate) fn reset_all(&mut self) {
         let backup = self.cfg_path.with_file_name("config.backup.json");
@@ -818,6 +846,7 @@ impl Hub {
         let mut c = config::Config {
             apps: old.apps,
             calendar: old.calendar,
+            note: old.note,
             wallpaper: old.wallpaper,
             start_with_windows: old.start_with_windows,
             ..config::Config::default()
@@ -826,6 +855,7 @@ impl Hub {
         c.weather.city = old.weather.city;
         c.weather.latitude = old.weather.latitude;
         c.weather.longitude = old.weather.longitude;
+        c.weather.unit = old.weather.unit;
         c.finish();
         self.cfg = c;
         log("minden beállítás alaphelyzetbe állítva (mentés: config.backup.json)");

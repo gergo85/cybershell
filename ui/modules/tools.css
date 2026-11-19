@@ -13,6 +13,7 @@
 .right.tighter .tool { height: 28px; }
 html[data-scheme="light"] .tool { clip-path: none; border-radius: 7px; }
 
-/* vízszintes panelen */
+/* vízszintes panelen a gombok a panel magasságához igazodnak (kitöltik a szekciót) */
 .right.horiz .tools { width: 84px; }
-.right.horiz .tool { height: 24px; }
+.right.horiz .tool-grid { flex: 1; min-height: 0; grid-auto-rows: minmax(0, 1fr); }
+.right.horiz .tool { height: auto; min-height: 0; }

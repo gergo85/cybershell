@@ -1,6 +1,7 @@
-/* Valuta: összeg, a két pénznem és a megfordítás, az eredmény, az árfolyam és a 30 nap grafikonja. */
+/* Valuta: összeg, a két pénznem és a megfordítás, az eredmény, az árfolyam és a 30 nap grafikonja.
+   Az összeg és az eredmény középre igazítva (vízszintes panelen az eredmény az összeg mellett, balra). */
 .cur-amount {
-  width: 100%; height: 26px; padding: 0 6px; text-align: right;
+  width: 100%; height: 26px; padding: 0 6px; text-align: center;
   font: 600 15px/1 var(--f-display); font-variation-settings: "wdth" 75, "wght" 650; font-variant-numeric: tabular-nums;
   color: var(--c-main); background: color-mix(in srgb, var(--c-main) 6%, var(--c-bg));
   border: 1px solid var(--c-main-dim); border-radius: 0; outline: none;
@@ -17,10 +18,10 @@
 .cur-sel:hover, .cur-sel:focus { background: color-mix(in srgb, var(--c-alt) 24%, transparent); }
 .cur-sel option { background: var(--c-bg); color: var(--c-text); }
 .cur-swap { height: 22px; display: flex; align-items: center; justify-content: center; color: var(--c-alt); }
-.cur-swap svg { width: 13px; height: 13px; transform: rotate(90deg); }
+.cur-swap svg { width: 13px; height: 13px; }
 .cur-swap:hover { color: var(--c-bg); background: var(--c-alt); }
 .cur-result {
-  overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-align: right;
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-align: center;
   font: 600 14px/1.1 var(--f-display); font-variation-settings: "wdth" 75, "wght" 650; font-variant-numeric: tabular-nums;
   color: var(--c-alt);
 }
@@ -56,6 +57,16 @@ html[data-scheme="light"] :is(.cur-amount, .cur-sel, .cur-swap) { border-radius:
 .right.horiz .cur-sel { height: 24px; font-size: 11px; }
 .right.horiz .cur-swap { height: 24px; }
 .right.horiz .cur-rate { grid-area: rate; }
+/* normál nézetben az árfolyam nagyobb, a változás (%) alatta */
+.right.horiz .cur:not(.compact) .cur-rate { flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; }
+.right.horiz .cur:not(.compact) .cur-rate span {
+  font: 600 13px/1 var(--f-display); font-variation-settings: "wdth" 75, "wght" 600; font-variant-numeric: tabular-nums; color: var(--c-text);
+}
+.right.horiz .cur:not(.compact) .cur-rate em { font-size: 9px; line-height: 1; }
+/* ha van hely alatta (magasabb panel, a JS dönti el: rate-below): az árfolyam a pénznemek alá
+   kerül, a szám és a változás egy sorban */
+.right.horiz .cur.rate-below { grid-template-columns: 56px auto; grid-template-areas: "h h" "amt res" "pair pair" "rate rate"; }
+.right.horiz .cur.rate-below .cur-rate { flex-direction: row; align-items: baseline; justify-content: flex-start; gap: 6px; }
 .right.horiz .cur-spark { display: none; }
 .right.horiz #currencySec.compact { grid-template-areas: "h h h" "amt res res" "pair pair pair"; }
 

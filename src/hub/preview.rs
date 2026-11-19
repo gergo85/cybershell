@@ -37,6 +37,8 @@ pub(crate) struct PeekWin {
     pub(crate) refresh_at: Option<Instant>,
     /// Mikor kérték a megnyitást (a megjelenés idejét naplózzuk).
     pub(crate) asked_at: Option<Instant>,
+    /// Az a program-ablak, amelyik épp a kártyája fölötti időzés miatt van előtérben.
+    pub(crate) shown: Option<peek::Shown>,
 }
 
 impl Hub {
@@ -53,6 +55,13 @@ impl Hub {
             format!("{gb} GB")
         };
         Some(s)
+    }
+
+    /// Az előnézet kártyája fölött időzve előtérbe hozott ablakot visszateszi a helyére.
+    fn peek_unshow(&mut self) {
+        if let Some(s) = self.peek.as_mut().and_then(|pk| pk.shown.take()) {
+            peek::unraise(s);
+        }
     }
 
     pub(crate) fn peek_eval(&self, payload: &serde_json::Value) {
@@ -78,6 +87,7 @@ impl Hub {
             self.peek_hide();
             return;
         }
+        self.peek_unshow();
         let scale = bar_scale.max(0.5);
         let work = appbar::work_area_of(bar_rect);
 
@@ -270,6 +280,7 @@ impl Hub {
     }
 
     pub(crate) fn peek_hide(&mut self) {
+        self.peek_unshow();
         let Some(pk) = self.peek.as_mut() else { return };
         pk.seq += 1;
         pk.pending.clear();
@@ -323,8 +334,24 @@ impl Hub {
                 }
             }
             "peek-leave" => self.peek_leave(false),
+            // egy kártya fölött időzik az egér: az ablaka előtérbe kerül (mint a Windows
+            // tálcáján); a kártyáról lemenve visszakerül a helyére
+            "peek-hover" => {
+                let h = self.peek.as_ref().and_then(|pk| known(pk, hwnd));
+                if self.peek.as_ref().is_some_and(|pk| pk.shown.map(|s| s.hwnd) == h.map(|h| h.0 as isize)) {
+                    return;
+                }
+                self.peek_unshow();
+                if let (Some(h), Some(pk)) = (h, self.peek.as_mut()) {
+                    pk.shown = Some(peek::raise(h));
+                }
+            }
             "peek-activate" => {
                 let Some(h) = self.peek.as_ref().and_then(|pk| known(pk, hwnd)) else { return };
+                // a kiválasztott ablak előtérben marad
+                if let Some(pk) = self.peek.as_mut() {
+                    pk.shown = None;
+                }
                 self.peek_hide();
                 wintrack::activate(h);
                 self.last_fg = Some(h);
@@ -340,6 +367,9 @@ impl Hub {
                     peek::drop_thumb(id);
                 }
                 pk.hwnds.retain(|x| *x != h.0 as isize);
+                if pk.shown.is_some_and(|s| s.hwnd == h.0 as isize) {
+                    pk.shown = None;
+                }
                 pk.refresh_at = Some(Instant::now() + Duration::from_millis(450));
                 unsafe {
                     let _ = PostMessageW(Some(h), WM_CLOSE, WPARAM(0), LPARAM(0));
@@ -347,7 +377,8 @@ impl Hub {
             }
             // az előnézet alján: a program összes ablakának bezárása
             "peek-close-all" => {
-                let Some(pk) = self.peek.as_ref() else { return };
+                let Some(pk) = self.peek.as_mut() else { return };
+                pk.shown = None;
                 let all: Vec<isize> = pk.hwnds.clone();
                 log(format!("előnézet: összes ablak bezárása ({} db)", all.len()));
                 self.peek_hide();
