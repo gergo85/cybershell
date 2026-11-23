@@ -4,9 +4,11 @@
 
 [English](README.md) · **Magyar**
 
+> **Elérhető a [Microsoft Store-ban](https://apps.microsoft.com/detail/9nw7gcgdgr71).** Onnan telepítve automatikusan frissül, de forrásból is lefordíthatod.
+
 <p>
-  <img src="assets/screenshot-desktop.webp" width="49%" alt="A CyberShell asztala: balra az Ikonok sáv, jobbra az információs panel, a képernyő körül neonkeretek">
-  <img src="assets/screenshot-settings.png" width="49%" alt="A CyberShell beállításai, Panelek fül: elrendezés, méretek, a gombok sorrendje és a modulok listája">
+  <img src="assets/store/screenshot-desktop-hu.webp" width="49%" alt="A CyberShell asztala: balra az Ikonok sáv, jobbra az információs panel, a képernyő körül neonkeretek">
+  <img src="assets/store/screenshot-settings-hu.webp" width="49%" alt="A CyberShell beállításai, Panelek fül: elrendezés, méretek, a gombok sorrendje és a modulok listája">
 </p>
 
 A CyberShell neonfényes cyberpunk HUD-dá alakítja a Windows asztalát. Az egyik szélen a programsáv, a másikon az élő információs panel, a képernyő körül vékony, világító keretek, középen pedig az ablakaid. Ez több egy sima témánál. A CyberShell átveszi a tálca, a Start menü, a keresés és a widgetek feladatát, így az egész felület egységes, nem a gyári felületre húzott máz.

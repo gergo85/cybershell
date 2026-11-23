@@ -4,9 +4,11 @@
 
 **English** · [Magyar](README.hu.md)
 
+> **Available in the [Microsoft Store](https://apps.microsoft.com/detail/9nw7gcgdgr71).** Install it from there for automatic updates, or build it from source yourself.
+
 <p>
-  <img src="assets/screenshot-desktop.webp" width="49%" alt="The CyberShell desktop: the Icons bar on the left, the info panel on the right and neon frames around the screen">
-  <img src="assets/screenshot-settings.png" width="49%" alt="The CyberShell settings, Panels tab: layout, sizes, button order and the list of modules">
+  <img src="assets/store/screenshot-desktop-en.webp" width="49%" alt="The CyberShell desktop: the Icons bar on the left, the info panel on the right and neon frames around the screen">
+  <img src="assets/store/screenshot-settings-en.webp" width="49%" alt="The CyberShell settings, Panels tab: layout, sizes, button order and the list of modules">
 </p>
 
 CyberShell turns the Windows desktop into a neon cyberpunk HUD: a program bar on one edge, a live info panel on the other, thin glowing frames around the screen, and your windows in the middle. It is more than a theme. CyberShell takes over the job of the taskbar, the Start menu, search and the widgets, so the whole interface follows one design instead of a skin laid over the stock one.
