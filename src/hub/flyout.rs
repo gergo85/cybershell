@@ -12,7 +12,9 @@ use serde_json::json;
 use std::time::{Duration, Instant};
 use tao::window::Window;
 use windows::Win32::Foundation::HWND;
-use windows::Win32::UI::WindowsAndMessaging::{HWND_TOPMOST, SW_HIDE, SWP_SHOWWINDOW, SetForegroundWindow, SetWindowPos, ShowWindow};
+use windows::Win32::UI::WindowsAndMessaging::{
+    HWND_TOPMOST, SW_HIDE, SWP_NOACTIVATE, SWP_SHOWWINDOW, SetForegroundWindow, SetWindowPos, ShowWindow,
+};
 use wry::WebView;
 
 /// Részletes időjárás: az információs panel mellett kinyíló oldalpanel.
@@ -23,11 +25,16 @@ pub(crate) struct FlyWin {
     pub(crate) visible: bool,
     /// Mikor nyílt meg (a fókuszvesztést csak egy kis idő után figyeljük).
     pub(crate) shown_at: Instant,
+    /// Megnyitás óta megkapta-e már a fókuszt (attól kezdve zárul be, ha máshova kattintanak).
+    pub(crate) focused: bool,
     /// Mikor zárult be fókuszvesztés miatt (az időjárásra kattintás ne nyissa újra rögtön).
     pub(crate) hidden_at: Option<Instant>,
     /// Mit mutat: "weather", "calendar", "events" vagy "note", és melyik sáv mellett nyílt meg.
     pub(crate) kind: &'static str,
     pub(crate) bar: usize,
+    /// A kérő szekció közepe a sáv mentén (fizikai pixel): a tartalomhoz igazított magasságnál
+    /// (Események) ehhez képest marad a helyén.
+    pub(crate) along: i32,
 }
 
 /// Az oldalpanel mérete CSS-pixelben.
@@ -50,12 +57,19 @@ impl Hub {
             return;
         }
         // épp most zárult be, mert erre a szekcióra kattintva elvesztette a fókuszt: ez zárás volt
+        // csak ezt az egy kattintást nyeljük el, a következő újra nyit
         if !f.visible && f.kind == kind && f.hidden_at.is_some_and(|t| t.elapsed() < Duration::from_millis(450)) {
+            if let Some(f) = self.fly.as_mut() {
+                f.hidden_at = None;
+            }
             return;
         }
         let Some((bar_rect, bar_edge, bar_scale, bar_mon)) = self.bars.get(idx).map(|b| (b.rect, b.edge, b.scale, b.mon)) else { return };
+        // A teljes képernyős állapot beragadhat (pl. egy rövid ideig teljes képernyős ablak után
+        // nem jön vissza a jelzés). Ha a panelre rá lehetett kattintani, az látszik, tehát az
+        // oldalpanel is kinyílhat; a jelzést csak naplózzuk.
         if self.fullscreen.contains(&bar_mon) {
-            return;
+            log(format!("oldalpanel ({kind}): a képernyő teljes képernyősnek jelölt, de a panelre kattintottak, megnyílik"));
         }
         // nyitott beállítások: azok kiúsznak, az oldalpanel pedig megnyílik
         if self.settings.as_ref().is_some_and(|s| s.visible) {
@@ -74,16 +88,18 @@ impl Hub {
         let Some(f) = self.fly.as_mut() else { return };
         f.visible = true;
         f.shown_at = Instant::now();
+        f.focused = false;
         f.hidden_at = None;
         f.kind = kind;
         f.bar = idx;
+        f.along = (along * scale).round() as i32;
         unsafe {
             let _ = SetWindowPos(f.hwnd, Some(HWND_TOPMOST), left, top, w, h, SWP_SHOWWINDOW);
             let _ = SetForegroundWindow(f.hwnd);
         }
         log(format!("oldalpanel megnyitva: {kind}"));
         let payload = if kind == "note" {
-            json!({ "type": "note-open", "text": self.cfg.note.text, "theme": self.theme_json(), "language": self.cfg.language })
+            json!({ "type": "note-open", "note": self.cfg.note, "theme": self.theme_json(), "language": self.cfg.language })
         } else if kind == "calendar" || kind == "events" {
             let t = if kind == "events" { "events-open" } else { "calendar-open" };
             json!({ "type": t, "feeds": self.calendar_feed_list(), "theme": self.theme_json(), "language": self.cfg.language })
@@ -238,18 +254,61 @@ impl Hub {
         }
     }
 
+    /// Jegyzet: a szöveg, a teendők és a választott fül a config.json-ba kerül, és minden
+    /// képernyő információs panelje megkapja; ha a változás nem a szerkesztőből jött (pl. a
+    /// panelen pipáltak ki egy teendőt vagy fület váltottak), a nyitott szerkesztő is.
+    pub(crate) fn note_update(&mut self, change: impl FnOnce(&mut crate::config::Note), from_editor: bool) {
+        let mut n = self.cfg.note.clone();
+        change(&mut n);
+        n.normalize();
+        if n == self.cfg.note {
+            return;
+        }
+        self.cfg.note = n;
+        self.save_config();
+        self.eval(self.info_edge(), &json!({ "type": "note", "note": self.cfg.note }));
+        if !from_editor && self.fly.as_ref().is_some_and(|f| f.visible && f.kind == "note") {
+            self.fly_eval(&json!({ "type": "note-sync", "note": self.cfg.note }));
+        }
+    }
+
+    /// Az Események listája a tartalmához igazítja a magasságát (kevés eseménynél ne maradjon
+    /// üres hely alul): `css_h` a felület által mért magasság CSS-pixelben, legfeljebb a teljes.
+    pub(crate) fn fly_fit(&mut self, css_h: f64) {
+        let Some(f) = self.fly.as_ref().filter(|f| f.visible && f.kind == "events") else { return };
+        let (bar, along) = (f.bar, f.along);
+        let Some((bar_rect, bar_edge, bar_scale)) = self.bars.get(bar).map(|b| (b.rect, b.edge, b.scale)) else { return };
+        let scale = bar_scale.max(0.5);
+        let work = appbar::work_area_of(bar_rect);
+        let w = (FLY_W * scale).round() as i32;
+        let full = ((FLY_H * scale).round() as i32).min(work.bottom - work.top - 12);
+        let h = ((css_h.max(160.0) * scale).ceil() as i32).min(full);
+        let (left, top) = popup_pos(bar_rect, bar_edge, w, h, along, work);
+        if let Some(f) = self.fly.as_ref() {
+            unsafe {
+                let _ = SetWindowPos(f.hwnd, Some(HWND_TOPMOST), left, top, w, h, SWP_NOACTIVATE);
+            }
+        }
+    }
+
     pub(crate) fn on_fly_ipc(&mut self, raw: &str) {
         let Ok(msg) = serde_json::from_str::<serde_json::Value>(raw) else { return };
         match msg["type"].as_str().unwrap_or("") {
             "close" => self.fly_hide(false),
+            "fly-fit" => self.fly_fit(msg["h"].as_f64().unwrap_or(FLY_H)),
             // Jegyzet: a szöveg a config.json-ba kerül, és minden képernyő információs panelje megkapja
             "note-set" => {
                 let text: String = msg["text"].as_str().unwrap_or("").chars().take(2000).collect();
-                if text != self.cfg.note.text {
-                    self.cfg.note.text = text;
-                    self.save_config();
-                    self.eval(self.info_edge(), &json!({ "type": "note", "text": self.cfg.note.text }));
-                }
+                self.note_update(|n| n.text = text, true);
+            }
+            // Teendők: a teljes lista (hozzáadás, pipálás, törlés, sorrend után)
+            "tasks-set" => {
+                let Ok(tasks) = serde_json::from_value::<Vec<crate::config::Task>>(msg["tasks"].clone()) else { return };
+                self.note_update(|n| n.tasks = tasks, true);
+            }
+            "note-tab" => {
+                let tab = msg["tab"].as_str().unwrap_or("note").to_string();
+                self.note_update(|n| n.tab = tab, true);
             }
             "cal-fetch" => self.calendar_fetch(msg["force"].as_bool().unwrap_or(false)),
             "cal-add" => {

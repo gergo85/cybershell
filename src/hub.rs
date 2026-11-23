@@ -10,6 +10,7 @@ pub(crate) mod layout;
 pub(crate) mod net;
 pub(crate) mod panel;
 pub(crate) mod preview;
+pub(crate) mod recent;
 pub(crate) mod settings;
 pub(crate) mod start;
 pub(crate) mod sync;
@@ -134,6 +135,10 @@ pub(crate) struct Hub {
     /// A háttérprogramok (értesítési terület) legutóbb elküldött listája és a következő ellenőrzés.
     pub(crate) last_tray: String,
     pub(crate) next_tray: Instant,
+    /// Mostanában: a kereső „Gyakran használt” programjai (Start menü-azonosítók) és a
+    /// panelnek küldött utolsó lista.
+    pub(crate) recent_apps: Vec<String>,
+    pub(crate) last_recent: String,
     /// A naptárak legutóbbi letöltése (ideje és tartalma), illetve folyamatban van-e.
     pub(crate) cal_cache: Option<(Instant, String)>,
     pub(crate) cal_busy: bool,
@@ -169,6 +174,8 @@ pub(crate) struct Hub {
     pub(crate) net: Option<HealthWin>,
     pub(crate) net_misses: u8,
     pub(crate) net_offline: bool,
+    /// Az egymást követő sikeres mérések (a sáv csak a második után tűnik el).
+    pub(crate) net_oks: u8,
     pub(crate) net_dismissed: bool,
     pub(crate) next_net_check: Instant,
     /// A Codex-használat legutóbb elküldött állapota és a következő olvasás ideje.
@@ -408,6 +415,7 @@ impl Hub {
             self.send_power(true);
             self.send_volume(true);
             self.send_tray(true);
+            self.send_recent(true);
             if let Some(m) = &self.last_media {
                 self.eval_bar(idx, m);
             }
@@ -473,24 +481,30 @@ impl Hub {
     /// és az ablakelőnézet.
     pub(crate) fn tick(&mut self) {
         let now = Instant::now();
-        // a részletes időjárás bezárul, ha máshova kattintanak (elveszti a fókuszt)
-        if let Some(f) = &self.fly
+        // A felugró ablakok bezárulnak, ha máshova kattintanak (elvesztik a fókuszt). A figyelés
+        // attól kezdve él, hogy az ablak megkapta a fókuszt (a Windows ezt nem azonnal adja át, és
+        // addig nem zárhatjuk be); ha valamiért nem kapja meg, 400 ms után akkor is.
+        let fg = unsafe { GetForegroundWindow() };
+        // a részletes időjárás, a naptár, az események és a Notesz
+        if let Some(f) = self.fly.as_mut()
             && f.visible
-            && now.duration_since(f.shown_at) > Duration::from_millis(400)
         {
-            let fg = unsafe { GetForegroundWindow() };
-            if fg != f.hwnd {
+            if fg == f.hwnd {
+                f.focused = true;
+            }
+            if (f.focused || now.duration_since(f.shown_at) > Duration::from_millis(400)) && fg != f.hwnd {
                 self.fly_hide(true);
             }
         }
         // a Start menü és a kereső is bezárul, ha ugyanazon a képernyőn máshova kattintanak
         // (a másik képernyőn tett kattintás vagy ott előjövő program nyitva hagyja)
-        if let Some(l) = &self.launcher
+        if let Some(l) = self.launcher.as_mut()
             && l.visible
-            && now.duration_since(l.shown_at) > Duration::from_millis(400)
         {
-            let fg = unsafe { GetForegroundWindow() };
-            if self.launcher_lost_to(fg) {
+            if fg == l.hwnd {
+                l.focused = true;
+            }
+            if (l.focused || now.duration_since(l.shown_at) > Duration::from_millis(400)) && self.launcher_lost_to(fg) {
                 self.launcher_hide(true);
             }
         }
@@ -525,12 +539,11 @@ impl Hub {
         if self.cfg.sections.shows("codex") && now >= self.next_codex {
             self.codex_send(false);
         }
-        // Perifériák: a Bluetooth-eszközök töltöttsége félpercenként (csak laptopon kell)
+        // Perifériák: a Bluetooth-eszközök töltöttsége félpercenként (asztali gépen és laptopon is;
+        // a modul csak akkor látszik, ha van csatlakoztatott, töltöttséget jelző eszköz)
         if self.cfg.sections.shows("peripherals") && now >= self.next_periph {
             self.next_periph = now + Duration::from_secs(30);
-            if sys::battery().is_some() {
-                self.periph_poll();
-            }
+            self.periph_poll();
         }
         // Események: a naptárak tízpercenként (a letöltés a gyorsítótárat is figyeli)
         if self.cfg.sections.shows("events") && now >= self.next_cal {
@@ -602,7 +615,7 @@ impl Hub {
             return;
         };
         let kind = msg["type"].as_str().unwrap_or("");
-        if !matches!(kind, "ready" | "log" | "peek" | "peek-leave" | "quick-pos" | "geo" | "note-set") {
+        if !matches!(kind, "ready" | "log" | "peek" | "peek-leave" | "quick-pos" | "geo" | "note-set" | "tasks-set") {
             let detail = msg["name"]
                 .as_str()
                 .map(str::to_string)

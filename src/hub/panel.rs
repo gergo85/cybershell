@@ -44,6 +44,11 @@ impl Hub {
                 let path = msg["path"].as_str().unwrap_or("").to_string();
                 self.tray_open(&path);
             }
+            // Mostanában: egy gyakran használt program ablaka vagy elindítása
+            ("cmd", "recent") => {
+                let key = msg["key"].as_str().unwrap_or("").to_string();
+                self.recent_open(&key);
+            }
             // Terhelés: a Feladatkezelő
             ("cmd", "taskmgr") => {
                 self.settings_dismiss();
@@ -61,6 +66,18 @@ impl Hub {
             ("events-open", _) => self.fly_open(idx, "events", msg),
             // Jegyzet: a panel mellett nagyban nyílik meg szerkesztésre
             ("note-open", _) => self.fly_open(idx, "note", msg),
+            // Jegyzet: egy teendő kipipálása (vagy vissza) a panelen
+            ("task-toggle", _) => {
+                let i = msg["i"].as_u64().unwrap_or(u64::MAX) as usize;
+                self.note_update(
+                    |n| {
+                        if let Some(t) = n.tasks.get_mut(i) {
+                            t.done = !t.done;
+                        }
+                    },
+                    false,
+                );
+            }
             // Hangerő: a csúszka, a görgetés és a némítógomb; a százalék a hangerőkeverőt nyitja
             ("volume-set", _) => {
                 let pct = msg["pct"].as_f64().unwrap_or(0.0).round().clamp(0.0, 100.0) as u8;

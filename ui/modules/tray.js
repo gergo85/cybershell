@@ -24,6 +24,7 @@
     name: 'sTray',
     hint: 'trayHint',
     className: 'traymod',
+    defaultOn: false,
     html: () => `
       <div class="tr-grid" id="trGrid"></div>
       <div class="tr-none" id="trNone">${T('trayNone')}</div>

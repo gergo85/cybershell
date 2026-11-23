@@ -1,0 +1,24 @@
+/* Mostanában: a legutóbb megnyitott programok, az Eszköztárhoz hasonló 2 oszlopos rácsban. */
+.rc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.rc {
+  position: relative; display: flex; align-items: center; justify-content: center; min-width: 0; height: 32px;
+  background: color-mix(in srgb, var(--c-main) 7%, transparent);
+  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+  transition: background-color .12s ease;
+}
+.rc img { display: block; width: 18px; height: 18px; object-fit: contain; }
+/* ha nincs kép: a név kezdőbetűje */
+.rc b { display: none; font: 600 12px/1 var(--f-mono); color: var(--c-text-dim); }
+.rc.noimg img { display: none; }
+.rc.noimg b { display: block; }
+.rc:hover { background: color-mix(in srgb, var(--c-main) 26%, transparent); }
+.rc-none { font: 400 9px/1.3 var(--f-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--c-text-dim); }
+.rc-none[hidden] { display: none; }
+.right.tighter .rc { height: 28px; }
+html[data-scheme="light"] .rc { clip-path: none; border-radius: 7px; }
+
+/* vízszintes panelen 2 sorban, oszlopról oszlopra, négyzetes gombokkal (a panel magasságához igazodva) */
+.right.horiz .recent { width: max-content; }
+.right.horiz .rc-grid { flex: 1; min-height: 0; grid-template-columns: none; grid-template-rows: repeat(2, minmax(0, 1fr)); grid-auto-flow: column; grid-auto-columns: var(--hbtn); }
+.right.horiz .rc { height: auto; min-height: 0; }
+.right.horiz .rc-none { max-width: 84px; }

@@ -17,6 +17,7 @@ mod lifecycle;
 mod media;
 mod monitor;
 mod neon;
+mod notes;
 mod peek;
 mod periph;
 mod sys;
@@ -402,13 +403,24 @@ fn main() {
         hwnd,
         visible: false,
         shown_at: Instant::now(),
+        focused: false,
         hidden_at: None,
         kind: "weather",
         bar: 0,
+        along: 0,
     });
-    let launch_win = popup("Start menü", launcher_url(&cfg), (700, 780), true, UserEvent::LauncherIpc).map(|(window, webview, hwnd)| {
-        LaunchWin { window, webview, hwnd, visible: false, shown_at: Instant::now(), hidden_at: None, mode: "start", prev: None }
-    });
+    let launch_win =
+        popup("Start menü", launcher_url(&cfg), (700, 780), true, UserEvent::LauncherIpc).map(|(window, webview, hwnd)| LaunchWin {
+            window,
+            webview,
+            hwnd,
+            visible: false,
+            shown_at: Instant::now(),
+            focused: false,
+            hidden_at: None,
+            mode: "start",
+            prev: None,
+        });
     let health_win = popup("szünet", health_url(&cfg), (660, 66), false, UserEvent::HealthIpc).map(|(window, webview, hwnd)| HealthWin {
         window,
         webview,
@@ -491,6 +503,8 @@ fn main() {
         next_volume: Instant::now(),
         last_tray: String::new(),
         next_tray: Instant::now(),
+        recent_apps: hub::recent::load(),
+        last_recent: String::new(),
         cal_cache: None,
         cal_busy: false,
         launcher: launch_win,
@@ -513,6 +527,7 @@ fn main() {
         net: net_win,
         net_misses: 0,
         net_offline: false,
+        net_oks: 0,
         net_dismissed: false,
         next_net_check: Instant::now() + Duration::from_secs(5),
         last_codex: None,

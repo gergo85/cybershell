@@ -14,6 +14,8 @@
 .lx::before { content: ""; position: absolute; left: -1px; top: -1px; width: 64px; height: 3px; background: var(--c-main); box-shadow: 0 0 8px var(--c-main-glow); z-index: 3; }
 .lx::after { content: ""; position: absolute; right: -1px; bottom: -1px; width: 32px; height: 3px; background: var(--c-alt); box-shadow: 0 0 8px var(--c-alt-dim); z-index: 3; }
 .lx.in > :is(.lx-head, .lx-body, .lx-foot) { animation: wfIn .28s cubic-bezier(.2, .8, .2, 1) both; }
+/* elrejtve (és az újranyitás első pillanatában) a tartalom nem látszik, csak a beúszás után */
+.lx:not(.in) > :is(.lx-head, .lx-body, .lx-foot) { opacity: 0; }
 .lx.in > .lx-body { animation-delay: .03s; }
 .lx.in > .lx-foot { animation-delay: .06s; }
 .lx[data-mode="search"].in > :is(.lx-head, .lx-body, .lx-foot) { animation-name: lxDrop; }

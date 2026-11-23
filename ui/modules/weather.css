@@ -14,7 +14,7 @@
 /* álló panelen a leírás és a település középre rendezve */
 .right:not(.horiz) :is(.w-desc, .w-city) { text-align: center; }
 
-/* szél: irány (nyíl), sebesség; kompakt nézetben nincs (hibánál a sor az üzenetet mutatja) */
+/* szél: irány (nyíl), sebesség; a Szél kapcsolóval elrejthető (hibánál a sor az üzenetet mutatja) */
 .w-wind {
   display: flex; align-items: baseline; gap: 4px;
   font: 400 10px/1.2 var(--f-mono); color: var(--c-text);
@@ -22,7 +22,9 @@
 .w-wind b { font: 600 15px/1 var(--f-display); font-variation-settings: "wdth" 75, "wght" 650; color: var(--c-alt); }
 .w-wind span { color: var(--c-text-dim); }
 .w-arrow { display: inline-block; font-style: normal; font-size: 12px; line-height: 1; color: var(--c-alt); align-self: center; }
-#weatherSec.compact:not(.err) .w-wind { display: none; }
+#weatherSec.nowind:not(.err) .w-wind { display: none; }
+/* kompakt nézet: a leírás és a település nélkül (hibánál a leírás helyén a hibaüzenet marad) */
+#weatherSec.compact:not(.err) :is(.w-desc, .w-city) { display: none; }
 
 /* vízszintes panelen: fent az ikon és a hőfok, mellettük a szél; alattuk a leírás, majd a
    település; a szélessége a tartalomhoz igazodik */
@@ -36,5 +38,7 @@
 .right.horiz .w-desc { grid-area: desc; }
 .right.horiz .w-wind { grid-area: wind; }
 .right.horiz .w-city { grid-area: city; }
-/* kompakt nézetben (szél nélkül) egy oszlop */
-.right.horiz #weatherSec.compact:not(.err) { grid-template-columns: auto; grid-template-areas: "h" "main" "desc" "city"; }
+/* szél nélkül egy oszlop; kompakt nézetben csak a fejléc és a hőfok (meg a szél, ha van) */
+.right.horiz #weatherSec.nowind:not(.err) { grid-template-columns: auto; grid-template-areas: "h" "main" "desc" "city"; }
+.right.horiz #weatherSec.compact:not(.err) { grid-template-areas: "h h" "main wind"; }
+.right.horiz #weatherSec.compact.nowind:not(.err) { grid-template-areas: "h" "main"; }

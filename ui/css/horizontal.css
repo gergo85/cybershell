@@ -61,6 +61,10 @@
 .right.horiz.tight { gap: 9px; }
 .right.horiz.tighter { gap: 5px; }
 .right.horiz > .sec { flex: none; min-width: 0; }
+/* a kétsoros ikongombok (Eszköztár, Mostanában, Főkapcsoló) szélessége: a sormagasság (a panel
+   magasságából a belső margók (9 + 7), a szekció fejléce és rése (9 + 6) és a sorok közti rés (4)
+   után a fele) 1,3-szorosa, a négyzet és a régi széles téglalap között */
+.right.horiz { --hbtn: calc((100vh - 35px) / 2 * 1.3); }
 
 /* Indítás (a sor elején) és MENÜ (a végén): vízszintes felirattal, a szokásos magasságban, középre igazítva */
 .right.horiz .sys { flex: none; width: 78px; align-items: center; }

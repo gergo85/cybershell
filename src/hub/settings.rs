@@ -150,8 +150,9 @@ impl Hub {
             "clipboard": self.cfg.start_menu.clipboard,
             "appearance": self.cfg.appearance,
             "health": self.health_json(),
-            "weather": { "city": self.cfg.weather.city, "unit": self.cfg.weather.unit },
+            "weather": { "city": self.cfg.weather.city, "unit": self.cfg.weather.unit, "wind": self.cfg.weather.wind },
             "currency": self.cfg.currency,
+            "dateTime": self.cfg.date_time,
             // akkumulátoros gép: a Laptop modul csak ekkor szerepel a Modulok listájában
             "laptop": sys::battery().is_some(),
             // a csatlakoztatott, töltöttséget jelző Bluetooth-eszközök száma: a Perifériák modul
@@ -458,7 +459,7 @@ impl Hub {
                 }
                 self.send_settings();
             }
-            // Időjárás: a település (szabad szöveg) és a mértékegység (°C/°F)
+            // Időjárás: a település (szabad szöveg), a mértékegység (°C/°F) és a szél kijelzése
             "weather" => {
                 let mut changed = false;
                 if let Some(city) = msg["city"].as_str().map(str::trim).filter(|c| !c.is_empty()) {
@@ -475,6 +476,12 @@ impl Hub {
                     && unit != self.cfg.weather.unit
                 {
                     self.cfg.weather.unit = unit.to_string();
+                    changed = true;
+                }
+                if let Some(wind) = msg["wind"].as_bool()
+                    && wind != self.cfg.weather.wind
+                {
+                    self.cfg.weather.wind = wind;
                     changed = true;
                 }
                 if changed {
@@ -532,6 +539,7 @@ impl Hub {
                         self.eval(self.info_edge(), &json!({ "type": "sections", "sections": self.cfg.sections }));
                     }
                     self.send_tray(true);
+                    self.send_recent(true);
                 }
             }
             // a csak a config.json-ban szereplő beállítások (méretek, keret, színek, szinkron…)
@@ -743,6 +751,19 @@ impl Hub {
                     return;
                 }
                 self.cfg.start_menu.web_search = t.to_string();
+                Then::Nothing
+            }
+            // Dátum és idő: minden felület azonnal átvált (a téma üzenetével, újratöltés nélkül)
+            "dateTime.dateFormat" => {
+                let Some(f) = v.as_str().filter(|f| config::DATE_FORMATS.contains(f)) else { return };
+                self.cfg.date_time.date_format = f.to_string();
+                self.broadcast_theme();
+                Then::Nothing
+            }
+            "dateTime.hour12" => {
+                let Some(b) = v.as_bool() else { return };
+                self.cfg.date_time.hour12 = b;
+                self.broadcast_theme();
                 Then::Nothing
             }
             "neonBorder" => {

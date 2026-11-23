@@ -5,6 +5,11 @@
 // fordítsd le (src/hub.rs: tr).
 window.HUB_I18N = {
   hu: {
+    wsWind: 'Szél', wsWindHint: 'A szél sebessége és iránya a panel Időjárás szekciójában',
+    // dátum és idő (a beállítások Funkciók fülén; minden felület ezek szerint ír dátumot és időt)
+    dtCard: '// DÁTUM ÉS IDŐ', dtDate: 'Dátum', dtClock: 'Óra', dtAuto: 'Auto', dtAutoHint: 'A nyelv szerint: {s}',
+    dtDateHint: 'A dátum formátuma a panelen és a listákban', dtClockHint: '24 órás (14:05) vagy 12 órás (2:05 du.) óra',
+    h24: '24 órás', h12: '12 órás', am: 'de.', pm: 'du.',
     // több felületen is használt szövegek (panel, Start menü, beállítások, oldalpanel)
     search: 'Keresés', start: 'Indítás', startBtn: '// START',
     iconLabels: 'Ikonok neve', iconLabelsHint: 'A programok neve az ikonjuk alatt', lblShow: 'Mutat', lblHide: 'Rejt',
@@ -142,6 +147,10 @@ window.HUB_I18N = {
     lxPinned1: 'Kitűzve: {n}', lxUnpinned1: 'Levéve: {n}',
   },
   en: {
+    wsWind: 'Wind', wsWindHint: 'Wind speed and direction in the panel’s Weather section',
+    dtCard: '// DATE & TIME', dtDate: 'Date', dtClock: 'Clock', dtAuto: 'Auto', dtAutoHint: 'Based on the language: {s}',
+    dtDateHint: 'How dates are written on the panel and in lists', dtClockHint: '24-hour (14:05) or 12-hour (2:05 PM) clock',
+    h24: '24-hour', h12: '12-hour', am: 'AM', pm: 'PM',
     // shared by several surfaces (panel, Start menu, settings, flyout)
     search: 'Search', start: 'Start', startBtn: '// START',
     iconLabels: 'Icon names', iconLabelsHint: 'Program names under their icons', lblShow: 'Show', lblHide: 'Hide',
@@ -272,6 +281,10 @@ window.HUB_I18N = {
     lxPinned1: 'Pinned: {n}', lxUnpinned1: 'Unpinned: {n}',
   },
   pl: {
+    wsWind: 'Wiatr', wsWindHint: 'Prędkość i kierunek wiatru w sekcji Pogoda w panelu',
+    dtCard: '// DATA I CZAS', dtDate: 'Data', dtClock: 'Zegar', dtAuto: 'Auto', dtAutoHint: 'Według języka: {s}',
+    dtDateHint: 'Format daty na panelu i na listach', dtClockHint: 'Zegar 24-godzinny (14:05) lub 12-godzinny (2:05 PM)',
+    h24: '24-godz.', h12: '12-godz.', am: 'AM', pm: 'PM',
     // wspólne dla kilku powierzchni (panel, menu Start, ustawienia, panel boczny)
     search: 'Szukaj', start: 'Uruchom', startBtn: '// START',
     iconLabels: 'Nazwy ikon', iconLabelsHint: 'Nazwy programów pod ich ikonami', lblShow: 'Pokaż', lblHide: 'Ukryj',

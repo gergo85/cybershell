@@ -2,7 +2,7 @@
 
 use crate::UserEvent;
 use crate::hub::Hub;
-use crate::hub::layout::popup_pos;
+use crate::hub::layout::popup_pos_margin;
 use crate::log;
 use crate::send;
 use crate::web::percent_encode;
@@ -26,6 +26,8 @@ pub(crate) struct LaunchWin {
     pub(crate) hwnd: HWND,
     pub(crate) visible: bool,
     pub(crate) shown_at: Instant,
+    /// Megnyitás óta megkapta-e már a fókuszt (attól kezdve zárul be, ha máshova kattintanak).
+    pub(crate) focused: bool,
     pub(crate) hidden_at: Option<Instant>,
     pub(crate) mode: &'static str,
     /// Az előtte aktív ablak: a vágólapelem ide kerül beillesztésre.
@@ -65,6 +67,7 @@ impl Hub {
         // a programnevek újra a friss listából (pl. a Notepad.exe neve „Jegyzettömb”)
         self.extra_names.clear();
         self.send_launcher_data();
+        self.send_recent(false);
     }
 
     /// A menü adatai: programok, kitűzöttek, legutóbbi fájlok.
@@ -144,8 +147,12 @@ impl Hub {
             self.launcher_hide(false);
             return;
         }
-        // épp most zárult be, mert a gombra kattintva elvesztette a fókuszt: ez zárás volt
+        // épp most zárult be, mert a gombra kattintva elvesztette a fókuszt: ez a kattintás zárás
+        // volt. Csak ezt az egy kattintást nyeljük el; a következő (gyors egymásutánban is) újra nyit.
         if !l.visible && l.mode == mode && idx.is_some() && l.hidden_at.is_some_and(|t| t.elapsed() < Duration::from_millis(450)) {
+            if let Some(l) = self.launcher.as_mut() {
+                l.hidden_at = None;
+            }
             return;
         }
         let info = self.info_edge();
@@ -174,11 +181,12 @@ impl Hub {
         let work = appbar::work_area_of(bar_rect);
         let (ww, wh) = (work.right - work.left, work.bottom - work.top);
         let (w, h, left, top) = if mode == "start" {
-            let w = ((START_W * scale).round() as i32).min(ww - 12);
-            let h = ((START_H * scale).round() as i32).min(wh - 12);
-            // a panel mellett (alatta, fölötte), az Indítás gombhoz igazítva
+            let w = ((START_W * scale).round() as i32).min(ww);
+            let h = ((START_H * scale).round() as i32).min(wh);
+            // a panel mellett (alatta, fölötte), az Indítás gombhoz igazítva; a sarokban a
+            // szomszédos sávhoz vagy kerethez simul, hézag nélkül (minden elrendezésben)
             let along = self.quick_along.get(&(idx, "start")).copied().unwrap_or(0.0);
-            let (left, top) = popup_pos(bar_rect, bar_edge, w, h, (along * scale).round() as i32, work);
+            let (left, top) = popup_pos_margin(bar_rect, bar_edge, w, h, (along * scale).round() as i32, work, 0);
             (w, h, left, top)
         } else {
             let w = ((SEARCH_W * scale).round() as i32).min(ww - 24);
@@ -193,6 +201,7 @@ impl Hub {
         l.visible = true;
         l.mode = mode;
         l.shown_at = Instant::now();
+        l.focused = false;
         l.hidden_at = None;
         unsafe {
             let _ = SetWindowPos(l.hwnd, Some(HWND_TOPMOST), left, top, w, h, SWP_SHOWWINDOW);
@@ -258,7 +267,7 @@ impl Hub {
         let Ok(msg) = serde_json::from_str::<serde_json::Value>(raw) else { return };
         let kind = msg["type"].as_str().unwrap_or("");
         let text = |k: &str| msg[k].as_str().unwrap_or("").to_string();
-        if !matches!(kind, "ready" | "log") {
+        if !matches!(kind, "ready" | "log" | "frequent") {
             log(format!("Start menü: {kind} {}", msg["id"].as_str().or(msg["name"].as_str()).unwrap_or("")));
         }
         match kind {
@@ -272,6 +281,12 @@ impl Hub {
                 self.send_launcher_data();
             }
             "close" => self.launcher_hide(false),
+            // a „Gyakran használt” programok: a panel Mostanában modulja ezeket mutatja
+            "frequent" => {
+                let ids =
+                    msg["ids"].as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect()).unwrap_or_default();
+                self.on_frequent(ids);
+            }
             // vágólap-elem: beillesztés az előző ablakba, csak másolás, törlés
             "clip-paste" | "clip-copy" => {
                 let id = msg["id"].as_u64().unwrap_or(0);

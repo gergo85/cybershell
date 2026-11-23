@@ -51,8 +51,10 @@ pub struct Config {
     pub currency: Currency,
     /// A dátumra kattintva megnyíló naptárban mutatott naptárak (iCal-címek).
     pub calendar: Calendar,
-    /// A panel Jegyzet moduljának szövege.
+    /// A Notesz: a jegyzet szövege, a teendők és a legutóbb választott fül.
     pub note: Note,
+    /// Dátum és idő: a dátum formátuma és a 12 vagy 24 órás óra (minden felületen).
+    pub date_time: DateTime,
     /// Az információs panel moduljai: láthatóság, sorrend, nézet.
     pub sections: Sections,
     /// Megjelenés: "dark" (Cyberpunk 2077), "light" (Ghost in the Shell), "auto" (napkeltétől
@@ -114,6 +116,7 @@ pub enum Shown {
 /// szerepel a beállítások listájában), a beállítástól függetlenül.
 pub const PANEL_MODULES: &[PanelModule] = &[
     PanelModule { id: "tools", default: Shown::Always, compact: false },
+    PanelModule { id: "recent", default: Shown::Never, compact: true },
     PanelModule { id: "claude", default: Shown::Never, compact: true },
     PanelModule { id: "codex", default: Shown::Never, compact: true },
     PanelModule { id: "activity", default: Shown::Never, compact: false },
@@ -129,7 +132,7 @@ pub const PANEL_MODULES: &[PanelModule] = &[
     PanelModule { id: "currency", default: Shown::Never, compact: true },
     PanelModule { id: "music", default: Shown::DesktopOnly, compact: false },
     PanelModule { id: "volume", default: Shown::Always, compact: false },
-    PanelModule { id: "tray", default: Shown::Always, compact: false },
+    PanelModule { id: "tray", default: Shown::Never, compact: false },
     PanelModule { id: "power", default: Shown::Always, compact: false },
 ];
 
@@ -334,17 +337,15 @@ pub struct Weather {
     pub latitude: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub longitude: Option<f64>,
-    /// Régi (v2.0) kapcsoló: a szél kijelzése. Helyette a modul kompakt nézete (szél nélkül)
-    /// való; betöltéskor a `false` érték a kompakt nézetbe költözik, mentéskor már nem íródik ki.
-    #[serde(skip_serializing)]
-    pub wind: Option<bool>,
+    /// Mutassa-e a panel a szél sebességét és irányát (a beállítások Szél kapcsolója).
+    pub wind: bool,
     /// A hőmérséklet mértékegysége: "c" (Celsius) vagy "f" (Fahrenheit).
     pub unit: String,
 }
 
 impl Default for Weather {
     fn default() -> Self {
-        Weather { enabled: true, city: "Budapest".into(), latitude: None, longitude: None, wind: None, unit: "c".into() }
+        Weather { enabled: true, city: "Budapest".into(), latitude: None, longitude: None, wind: true, unit: "c".into() }
     }
 }
 
@@ -354,11 +355,64 @@ pub struct Calendar {
     pub feeds: Vec<CalendarFeed>,
 }
 
-/// A panel Jegyzet modulja: egy mindig látható, szerkeszthető szöveg.
-#[derive(Deserialize, Serialize, Clone, Debug, Default)]
+/// A panel Jegyzet modulja két füllel: egy szabad szöveg (Jegyzet) és egy teendőlista
+/// (Teendők). A `tab` a legutóbb választott fül: "note" vagy "tasks".
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Note {
     pub text: String,
+    pub tasks: Vec<Task>,
+    pub tab: String,
+}
+
+impl Default for Note {
+    fn default() -> Self {
+        Note { text: String::new(), tasks: Vec::new(), tab: "note".into() }
+    }
+}
+
+/// Egy teendő: a szövege, és hogy kész-e.
+#[derive(Deserialize, Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Task {
+    pub text: String,
+    pub done: bool,
+}
+
+/// Legfeljebb ennyi teendő, és egy teendő legfeljebb ennyi karakter.
+pub const MAX_TASKS: usize = 100;
+pub const MAX_TASK_LEN: usize = 200;
+
+impl Note {
+    /// Érvényes állapot: ismert fül, nem üres és nem túl hosszú teendők, legfeljebb 100.
+    pub fn normalize(&mut self) {
+        if self.tab != "tasks" {
+            self.tab = "note".into();
+        }
+        self.text = self.text.chars().take(2000).collect();
+        for t in &mut self.tasks {
+            t.text = t.text.trim().chars().take(MAX_TASK_LEN).collect();
+        }
+        self.tasks.retain(|t| !t.text.is_empty());
+        self.tasks.truncate(MAX_TASKS);
+    }
+}
+
+/// Dátum és idő: a dátum formátuma ("auto": a nyelv szerint; "ymd": 2026. 11. 20.; "iso":
+/// 2026-11-20; "dmy": 20.11.2026; "mdy": 11/20/2026) és hogy 12 órás-e az óra (de./du., AM/PM).
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase", default)]
+pub struct DateTime {
+    pub date_format: String,
+    pub hour12: bool,
+}
+
+pub const DATE_FORMATS: [&str; 5] = ["auto", "ymd", "iso", "dmy", "mdy"];
+
+impl Default for DateTime {
+    fn default() -> Self {
+        DateTime { date_format: "auto".into(), hour12: false }
+    }
 }
 
 /// Egy csatolt naptár, pl. a Google Naptár „Titkos cím iCal formátumban” címe.
@@ -469,6 +523,7 @@ impl Default for Config {
             currency: Currency::default(),
             calendar: Calendar::default(),
             note: Note::default(),
+            date_time: DateTime::default(),
             sections: Sections::default(),
             appearance: "dark".into(),
             scheme: "dark".into(),
@@ -596,12 +651,9 @@ impl Config {
 
     /// Betöltés utáni rendbetétel: sorrend, nyelv, panelhelyek, tartományok, séma.
     pub fn finish(&mut self) {
-        // a régi Szél kapcsoló kikapcsolt állása: az Időjárás kompakt nézete (szél nélkül)
-        if self.weather.wind.take() == Some(false) && !self.sections.compact.iter().any(|k| k == "weather") {
-            self.sections.compact.push("weather".into());
-        }
         self.sections.normalize();
         self.currency.normalize();
+        self.note.normalize();
         if self.network.ping_host.trim().is_empty() {
             self.network.ping_host = Network::default().ping_host;
         }
@@ -623,6 +675,9 @@ impl Config {
         }
         if !["c", "f"].contains(&self.weather.unit.as_str()) {
             self.weather.unit = "c".into();
+        }
+        if !DATE_FORMATS.contains(&self.date_time.date_format.as_str()) {
+            self.date_time.date_format = "auto".into();
         }
         self.resolve_scheme();
     }
@@ -772,7 +827,10 @@ mod tests {
     fn new_module_after_its_neighbour() {
         // régi (Codex előtti) sorrend: a Codex a Claude alá kerül, nem a végére
         let s = sections(r#"{ "order": ["power", "claude", "tools", "activity", "date", "clock", "weather", "music", "volume"] }"#);
-        assert_eq!(&s.order[..4], ["power", "claude", "codex", "tools"]);
+        assert_eq!(&s.order[..5], ["power", "claude", "codex", "tools", "recent"]);
+        // a v2.1-es sorrend: a Mostanában az Eszköztár alá
+        let v21 = sections(r#"{ "order": ["claude", "tools", "codex", "activity", "clock", "weather"] }"#);
+        assert_eq!(&v21.order[..3], ["claude", "tools", "recent"]);
         // üres sorrend: az alapsorrend
         let d = sections("{}");
         let ids: Vec<&str> = PANEL_MODULES.iter().map(|m| m.id).collect();
@@ -790,15 +848,26 @@ mod tests {
     }
 
     #[test]
-    fn old_wind_switch_becomes_compact() {
-        // a v2.0 kikapcsolt Szél kapcsolója: az Időjárás kompakt nézete; mentéskor már nem íródik ki
+    fn note_normalize() {
+        let mut n: Note =
+            serde_json::from_str(r#"{ "text": "x", "tab": "valami", "tasks": [{ "text": "  tej " }, { "text": "   ", "done": true }] }"#)
+                .unwrap();
+        n.normalize();
+        assert_eq!(n.tab, "note");
+        assert_eq!(n.tasks, vec![Task { text: "tej".into(), done: false }]);
+        // a régi (v2.1) jegyzet: csak szöveg
+        let old: Config = serde_json::from_str(r#"{ "note": { "text": "régi" } }"#).unwrap();
+        assert_eq!((old.note.text.as_str(), old.note.tab.as_str(), old.note.tasks.len()), ("régi", "note", 0));
+    }
+
+    #[test]
+    fn wind_switch() {
+        // a Szél kapcsoló: alapból be, a kikapcsolt állás megmarad (és nem a kompakt nézetbe kerül)
         let mut c: Config = serde_json::from_str(r#"{ "weather": { "wind": false } }"#).unwrap();
         c.finish();
-        assert_eq!(c.sections.compact, ["weather"]);
-        assert!(serde_json::to_value(&c).unwrap()["weather"].get("wind").is_none());
-        let mut on: Config = serde_json::from_str(r#"{ "weather": { "wind": true } }"#).unwrap();
-        on.finish();
-        assert!(on.sections.compact.is_empty());
+        assert!(!c.weather.wind && c.sections.compact.is_empty());
+        assert_eq!(serde_json::to_value(&c).unwrap()["weather"]["wind"], false);
+        assert!(Config::default().weather.wind);
     }
 
     #[test]

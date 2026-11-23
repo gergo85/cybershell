@@ -27,9 +27,11 @@
 /* vízszintes panelen ugyanúgy, mint az Eszköztár: 2×2 ikon felirat nélkül; a megerősítés
    (kérdés, alatta a két gomb) ugyanebben a helyben */
 /* a gombok a panel magasságához igazodnak (kitöltik a szekciót) */
-.right.horiz .power { width: 84px; }
+/* négyzetes gombok; a megerősítés kérdése és két gombja idejére szélesebb */
+.right.horiz .power { width: calc(var(--hbtn) * 2 + 4px); }
+.right.horiz .power.confirming { width: 84px; }
 .right.horiz .pw-panes { flex: 1; min-height: 0; }
-.right.horiz .pw-grid { grid-auto-rows: minmax(0, 1fr); }
+.right.horiz .pw-grid { grid-template-columns: repeat(2, var(--hbtn)); grid-auto-rows: minmax(0, 1fr); }
 .right.horiz .pw { height: auto; min-height: 0; padding-top: 0; }
 .right.horiz .pw span { display: none; }
 .right.horiz .pw svg { width: 17px; height: 17px; color: color-mix(in srgb, var(--app) 85%, var(--c-text)); }

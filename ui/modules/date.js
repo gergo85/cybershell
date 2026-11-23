@@ -1,7 +1,7 @@
-// Dátum: év, hónap és nap, alatta a hét sorszáma (ISO 8601). Kattintásra a panel mellett
+// Dátum: év, hónap és nap (a Dátum és idő beállítás formátumában), alatta a hét sorszáma (ISO 8601). Kattintásra a panel mellett
 // kinyílik a naptár (parts/flyout.js).
 (() => {
-  const { defineModule, $, T, pad } = window.HUB;
+  const { defineModule, $, T, dateLines } = window.HUB;
 
   // a hét sorszáma (ISO 8601: a hét hétfőn kezdődik, az év első hete a januári csütörtököt tartalmazza)
   const isoWeek = (d) => {
@@ -31,8 +31,9 @@
       });
       return {
         tick(d) {
-          $('dy').textContent = T('dateYear', { y: d.getFullYear() });
-          $('dmd').textContent = T('dateMonthDay', { m: pad(d.getMonth() + 1), d: pad(d.getDate()) });
+          const [top, bottom] = dateLines(d);
+          $('dy').textContent = top;
+          $('dmd').textContent = bottom;
           $('week').textContent = T('week', { n: isoWeek(d) });
         },
         // a dátum kiemelve, amíg a naptár nyitva van
@@ -42,9 +43,9 @@
       };
     },
     strings: {
-      hu: { secDate: '// DÁTUM', sDate: 'Dátum', week: '{n}. HÉT', dateYear: '{y}.', dateMonthDay: '{m}. {d}.', calOpen: 'Naptár' },
-      en: { secDate: '// DATE', sDate: 'Date', week: 'WEEK {n}', dateYear: '{y}', dateMonthDay: '{m}-{d}', calOpen: 'Calendar' },
-      pl: { secDate: '// DATA', sDate: 'Data', week: 'TYDZ. {n}', dateYear: '{y}', dateMonthDay: '{d}.{m}', calOpen: 'Kalendarz' },
+      hu: { secDate: '// DÁTUM', sDate: 'Dátum', week: '{n}. HÉT', calOpen: 'Naptár' },
+      en: { secDate: '// DATE', sDate: 'Date', week: 'WEEK {n}', calOpen: 'Calendar' },
+      pl: { secDate: '// DATA', sDate: 'Data', week: 'TYDZ. {n}', calOpen: 'Kalendarz' },
     },
   });
 })();

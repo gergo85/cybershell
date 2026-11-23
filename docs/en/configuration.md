@@ -35,7 +35,7 @@ Press `Ctrl+Alt+R` after saving.
 | `tooltips` | Help texts: with `false` no hover explanations appear anywhere (`true` by default). |
 | `allMonitors` | With `false` CyberShell appears only on the primary screen (on every screen by default). |
 | `calendar.feeds` | The attached calendars (name, iCal address, color). They can also be added and removed in the calendar. |
-| `note.text` | The text of the Note module (up to 2000 characters). It can be edited on the panel. |
+| `note` | The Notebook: `text` (the note, up to 2000 characters), `tasks` (the to-dos: `text` and `done`, up to 100), `tab` (the last chosen tab: `note` or `tasks`). Changed on the panel and in the editor. |
 | `sections` | Visibility (`tools`, `claude`, `codex`, `activity`, `note`, `load`, `network`, `clock`, `date`, `events`, `laptop`, `peripherals`, `weather`, `currency`, `music`, `volume`, `tray`, `power`; `claude`, `codex`, `activity`, `note`, `load`, `date`, `events` and `currency` are hidden by default; `music` shows only on desktop computers by default; `laptop` only shows on battery-powered computers, `peripherals` only on laptops with a Bluetooth device that reports its battery), order (`order`) and the modules shown in compact view (`compact`: `claude`, `codex`, `note`, `network`, `clock`, `date`, `events`, `weather`, `currency`) of the info panel modules. Anything missing from the order goes next to its neighbour in the default order. |
 | `startMenu.winKey` | `true` (the default): the `Win` key opens the CyberShell Start menu and `Win+S` its search. With `false` the Windows ones open. |
 | `startMenu.pinned` | IDs of the programs pinned to the Start menu (added by pinning with right-click in the menu). |

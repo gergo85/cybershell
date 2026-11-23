@@ -2,7 +2,7 @@
 // a keretek rózsaszínre váltanak. A hossz a szekcióban állítható. Több képernyőnél minden
 // panel ugyanazt a visszaszámlálót mutatja (a helyi tárolón át).
 (() => {
-  const { defineModule, $, T, svg, pad, store, setAlert } = window.HUB;
+  const { defineModule, $, T, svg, pad, hhmm, store, setAlert } = window.HUB;
   const KEY = 'cybershell.activity';
   const KEY_MIN = 'cybershell.activity.minutes';
 
@@ -81,7 +81,7 @@
         sec.classList.toggle('paused', !act.running && !act.alert);
         if (act.running) {
           const end = new Date(act.endAt);
-          $('actInfo').textContent = T('actMoveAt', { t: `${pad(end.getHours())}:${pad(end.getMinutes())}` });
+          $('actInfo').textContent = T('actMoveAt', { t: hhmm(end) });
         } else if (!act.alert) {
           $('actInfo').textContent = T('actPaused');
         }

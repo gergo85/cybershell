@@ -153,8 +153,8 @@
 .set-pane { display: none; gap: 20px; min-height: 100%; }
 .set-pane.on { display: grid; align-content: start; }
 .set-pane.enter { animation: paneIn .38s cubic-bezier(.2, .8, .2, 1) both; }
-.set-pane.enter > .set-card, .set-pane.enter > .pane-col > .set-card { animation: cardIn .45s cubic-bezier(.2, .8, .2, 1) both; }
-.set-pane.enter > .pane-col > .set-card + .set-card { animation-delay: .06s; }
+.set-pane.enter > .set-card, .set-pane.enter > .pane-col > .set-card, .set-pane.enter .feat-cols > .set-card { animation: cardIn .45s cubic-bezier(.2, .8, .2, 1) both; }
+.set-pane.enter > .pane-col > .set-card + .set-card, .set-pane.enter .feat-cols > .set-card + .set-card { animation-delay: .06s; }
 .set-pane.enter > .set-card:nth-child(2) { animation-delay: .04s; }
 .set-pane.enter > .set-card:nth-child(3) { animation-delay: .08s; }
 .set-pane.enter > .set-card:nth-child(4) { animation-delay: .12s; }
@@ -178,12 +178,16 @@
 .c-theme { grid-area: theme; }
 .c-win { grid-area: win; }
 .pane-look .wall { grid-area: wall; }
-/* 04 Funkciók */
-.pane-features.on { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+/* 04 Funkciók: a kártyák a panel moduljainak sorrendjében, két hasábban (először a bal hasáb
+   fentről lefelé, aztán a jobb); a kártyák a saját tartalmukhoz igazodnak */
+.pane-features.on { grid-template-columns: minmax(0, 1fr); }
+.feat-cols { columns: 2; column-gap: 20px; }
+.feat-cols > .set-card { break-inside: avoid; margin-bottom: 20px; }
+.feat-cols > .set-card:last-child { margin-bottom: 0; }
+.c-dt .dt-row .seg button { min-width: 0; padding: 0 8px; font-size: 10.5px; letter-spacing: .02em; font-variant-numeric: tabular-nums; }
 /* két önálló oszlop: a kártyák a saját tartalmukhoz igazodnak, nem egymáshoz */
 .pane-col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
 /* a panel moduljainak kártyái a hasábban, a többi kártya közé illesztve */
-.mod-cards { display: contents; }
 /* 05 Rendszer */
 .pane-system.on { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "general config" "hw hw" "load load"; }
 .c-hw { grid-area: hw; }
@@ -269,7 +273,7 @@
 
 /* ───────────── 01 Programok: ikonszerkesztő ───────────── */
 .set-main { display: flex; flex-direction: column; min-height: 0; }
-.ed-head, .ed-row { display: grid; align-items: center; gap: 12px; grid-template-columns: 40px minmax(140px, 200px) minmax(120px, 1fr) 160px 42px 40px 34px; }
+.ed-head, .ed-row { display: grid; align-items: center; gap: 12px; grid-template-columns: 40px minmax(140px, 200px) minmax(120px, 1fr) 42px 40px 34px; }
 .ed-head {
   padding: 0 28px 8px 42px;
   font: 400 10px/1 var(--f-mono); letter-spacing: .14em; color: var(--c-text-dim); text-transform: uppercase;
@@ -288,26 +292,22 @@
 }
 .ed-icon svg { width: 20px; height: 20px; }
 .ed-icon img { width: 22px; height: 22px; object-fit: contain; }
-.ed-name, .ed-sel {
+.ed-name {
   height: 32px; padding: 0 10px; font: inherit; font-size: 13px; color: var(--c-text);
   background: var(--c-bg); border: 1px solid color-mix(in srgb, var(--c-main) 22%, transparent); border-radius: 0; outline: none;
   user-select: text; -webkit-user-select: text;
 }
-.ed-name:focus, .ed-sel:focus { border-color: var(--c-main); box-shadow: 0 0 6px var(--c-main-glow); }
-.ed-sel { padding: 0 6px; }
-.ed-sel option { background: var(--c-bg); color: var(--c-text); }
-/* az ikonválasztó gombja és a mátrix (az első elem a program saját ikonja) */
-.ed-pick { display: flex; align-items: center; gap: 6px; text-align: left; cursor: pointer; }
-.ed-pick span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
-.ed-pick svg { flex: none; width: 13px; height: 13px; color: var(--c-text-dim); }
-.ed-pick:hover { border-color: var(--c-main); }
+.ed-name:focus { border-color: var(--c-main); box-shadow: 0 0 6px var(--c-main-glow); }
+/* az ikonra kattintva nyílik a választó mátrix (az első elem a program saját ikonja) */
+.ed-icon.ed-pick { cursor: pointer; transition: background-color .12s ease, box-shadow .12s ease; }
+.ed-icon.ed-pick:hover, .ed-icon.ed-pick.open { background: color-mix(in srgb, var(--app, var(--c-main)) 30%, var(--c-bg)); color: var(--c-text); }
 .ico-pop {
-  position: fixed; z-index: 50; width: 404px; padding: 10px;
+  position: fixed; z-index: 50; width: 492px; max-width: calc(100vw - 16px); padding: 10px;
   background: var(--c-bg); border: 1px solid var(--c-main); box-shadow: 0 10px 30px rgba(0, 0, 0, .6), 0 0 12px var(--c-main-faint);
 }
 .ico-pop[hidden] { display: none; }
 .ico-head { margin: 0 2px 8px; font: 400 11px/1.2 var(--f-mono); letter-spacing: .1em; color: var(--c-text-dim); text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ico-grid { display: grid; grid-template-columns: repeat(10, 36px); gap: 2px; }
+.ico-grid { display: grid; grid-template-columns: repeat(12, 36px); gap: 2px; max-height: min(420px, calc(100vh - 120px)); overflow-y: auto; scrollbar-gutter: stable; }
 .ico-cell {
   width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer;
   color: color-mix(in srgb, var(--app) 70%, var(--c-text)); background: color-mix(in srgb, var(--c-main) 4%, transparent);
@@ -548,6 +548,8 @@ html[data-scheme="light"] .ico-cell { border-radius: 6px; }
 .ws-grid > .ws-city { grid-area: 1 / 1; }
 .ws-grid > .ws-found { grid-area: 2 / 1; margin-top: 0; align-self: center; }
 .ws-grid > .ws-unit { grid-area: 1 / 2; }
+.ws-grid > .ws-wind { grid-area: 2 / 2; }
+.ws-wind > svg { color: var(--c-alt); }
 .ws-unit { cursor: default; gap: 8px; padding-right: 5px; }
 .ws-unit:hover { background: color-mix(in srgb, var(--c-main) 7%, transparent); }
 .ws-unit > svg { color: var(--c-alt); }
@@ -708,7 +710,8 @@ html[data-scheme="light"] .ico-cell { border-radius: 6px; }
   .pane-panels.on { grid-template-columns: minmax(0, 1fr); }
   .pane-look.on, .pane-features.on, .pane-system.on { grid-template-columns: minmax(0, 1fr); grid-template-areas: none; }
   .pane-look.on > *, .pane-features.on > *, .pane-system.on > * { grid-area: auto; }
-  .ed-head, .ed-row { grid-template-columns: 40px minmax(110px, 160px) minmax(80px, 1fr) 130px 42px 40px 34px; }
+  .feat-cols { columns: 1; }
+  .ed-head, .ed-row { grid-template-columns: 40px minmax(110px, 160px) minmax(80px, 1fr) 42px 40px 34px; }
 }
 @media (max-height: 820px) {
   .rt-text small { display: none; }

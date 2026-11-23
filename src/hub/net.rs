@@ -1,16 +1,22 @@
 //! Internetkapcsolat: ha megszakad, a munkaterület tetején, középen piros sáv jelenik meg
-//! („Megszakadt a kapcsolat”) a hálózati beállításokra vivő gombbal; visszatéréskor eltűnik.
+//! („Megszakadt a kapcsolat”) a hálózati beállításokra vivő gombbal. Addig látszik, amíg vissza
+//! nem jön a kapcsolat, vagy be nem zárják: máshova kattintva sem tűnik el (3 mp-enként újra
+//! előre kerül).
 
 use crate::hub::Hub;
 use crate::hub::health::{HEALTH_H, HEALTH_W};
 use crate::web::push;
 use crate::{appbar, log, sys, wintrack};
 use serde_json::json;
-use windows::Win32::UI::WindowsAndMessaging::{HWND_TOPMOST, SW_HIDE, SWP_NOACTIVATE, SWP_SHOWWINDOW, SetWindowPos, ShowWindow};
+use windows::Win32::UI::WindowsAndMessaging::{
+    HWND_TOPMOST, SW_HIDE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SetWindowPos, ShowWindow,
+};
 
 /// Ennyi egymást követő „nincs internet” mérés után jelzünk (3 mp-enként mérünk), hogy egy
 /// pillanatnyi kimaradás (pl. Wi-Fi-váltás) ne villantsa fel a sávot.
 const OFFLINE_AFTER: u8 = 2;
+/// Ennyi egymást követő sikeres mérés után tűnik el a sáv (egy téves „van internet” jelzés miatt ne).
+const ONLINE_AFTER: u8 = 2;
 
 impl Hub {
     /// Időzített mérés a fő ciklusból.
@@ -18,19 +24,38 @@ impl Hub {
         let Some(ok) = sys::internet_ok() else { return };
         if ok {
             self.net_misses = 0;
-            if self.net_offline {
+            self.net_oks = self.net_oks.saturating_add(1);
+            if self.net_offline && self.net_oks >= ONLINE_AFTER {
                 self.net_offline = false;
                 self.net_dismissed = false;
                 log("internetkapcsolat helyreállt");
                 self.net_hide();
+            } else if self.net_offline {
+                self.net_keep();
             }
             return;
         }
+        self.net_oks = 0;
         self.net_misses = self.net_misses.saturating_add(1);
         if self.net_misses >= OFFLINE_AFTER && !self.net_offline {
             self.net_offline = true;
             log("internetkapcsolat megszakadt");
             self.net_show();
+        } else if self.net_offline {
+            self.net_keep();
+        }
+    }
+
+    /// Amíg nincs kapcsolat és nem zárták be: a sáv látható és minden más fölött marad (ha
+    /// közben valami eltakarta vagy elrejtette, visszajön), aktiválás és újraanimálás nélkül.
+    fn net_keep(&mut self) {
+        if self.net_dismissed {
+            return;
+        }
+        let Some(n) = self.net.as_mut() else { return };
+        n.visible = true;
+        unsafe {
+            let _ = SetWindowPos(n.hwnd, Some(HWND_TOPMOST), 0, 0, 0, 0, SWP_SHOWWINDOW | SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE);
         }
     }
 

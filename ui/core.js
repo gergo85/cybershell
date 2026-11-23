@@ -68,9 +68,38 @@
     }
   };
 
+  // ── dátum és idő (a beállítások Funkciók fülén): a dátum formátuma és a 12 vagy 24 órás óra ──
+  // "auto": a nyelv szerint (magyarul 2026. 11. 20., angolul 2026-11-20, lengyelül 20.11.2026)
+  const DATE_FORMATS = ['auto', 'ymd', 'iso', 'dmy', 'mdy'];
+  const dt = { format: DATE_FORMATS.includes(q.get('df')) ? q.get('df') : 'auto', h12: q.get('h12') === '1' };
+  const dateFormat = (f = dt.format) => (f === 'auto' ? { hu: 'ymd', pl: 'dmy' }[lang] || 'iso' : f);
+  // a dátum két sorban (a Dátum modulhoz): [felső, alsó]
+  const dateLines = (d, f) => {
+    const y = String(d.getFullYear()), m = pad(d.getMonth() + 1), n = pad(d.getDate());
+    return {
+      ymd: [`${y}.`, `${m}. ${n}.`], iso: [y, `${m}-${n}`], dmy: [`${n}.${m}.`, y], mdy: [`${m}/${n}`, y],
+    }[dateFormat(f)];
+  };
+  // a dátum egy sorban, év nélkül is (pl. a vágólap elemeinél)
+  const fmtDate = (d, { year = true, f } = {}) => {
+    const y = d.getFullYear(), m = pad(d.getMonth() + 1), n = pad(d.getDate());
+    switch (dateFormat(f)) {
+      case 'ymd': return year ? `${y}. ${m}. ${n}.` : `${m}. ${n}.`;
+      case 'dmy': return year ? `${n}.${m}.${y}` : `${n}.${m}.`;
+      case 'mdy': return year ? `${m}/${n}/${y}` : `${m}/${n}`;
+      default: return year ? `${y}-${m}-${n}` : `${m}-${n}`;
+    }
+  };
+  // óra és perc: 14:05, illetve 12 órás órával 2:05 du. (a jelölés a nyelv szerint)
+  const ampm = (d) => T(d.getHours() < 12 ? 'am' : 'pm');
+  const hour = (d) => (dt.h12 ? String(d.getHours() % 12 || 12) : pad(d.getHours()));
+  const hhmm = (d) => (dt.h12 ? `${hour(d)}:${pad(d.getMinutes())} ${ampm(d)}` : `${pad(d.getHours())}:${pad(d.getMinutes())}`);
+
   const setTheme = (t) => {
     if (!t) return;
     if (typeof t.tips === 'boolean') setTips(t.tips);
+    if (DATE_FORMATS.includes(t.dateFormat)) dt.format = t.dateFormat;
+    if (typeof t.hour12 === 'boolean') dt.h12 = t.hour12;
     for (const k of ['main', 'alt', 'hot', 'bg', 'text']) if (t[k]) css.setProperty(`--theme-${k}`, t[k]);
     if (t.scheme) document.documentElement.dataset.scheme = t.scheme;
   };
@@ -151,7 +180,7 @@
   };
 
   window.HUB = {
-    $, q, part, side, horiz, lang, locale, decimal, T, root, css, send, demo, post, setGeometry, setTheme, THEMES, setAlert, svg, esc, pad, appColor, store, fetchJson, resolvePlace, wmo, wmoText, wmoIcon, sparkPath,
+    $, q, part, side, horiz, lang, locale, decimal, T, dt, DATE_FORMATS, dateFormat, dateLines, fmtDate, hour, ampm, hhmm, root, css, send, demo, post, setGeometry, setTheme, THEMES, setAlert, svg, esc, pad, appColor, store, fetchJson, resolvePlace, wmo, wmoText, wmoIcon, sparkPath,
     modules, defineModule,
     // a felületépítők (parts/*.js) ide jegyzik be magukat
     parts: {},

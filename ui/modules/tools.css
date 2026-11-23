@@ -14,6 +14,7 @@
 html[data-scheme="light"] .tool { clip-path: none; border-radius: 7px; }
 
 /* vízszintes panelen a gombok a panel magasságához igazodnak (kitöltik a szekciót) */
-.right.horiz .tools { width: 84px; }
-.right.horiz .tool-grid { flex: 1; min-height: 0; grid-auto-rows: minmax(0, 1fr); }
+/* vízszintes panelen négyzetes gombok: a sorok kitöltik a magasságot, az oszlopok ugyanolyan szélesek */
+.right.horiz .tools { width: max-content; }
+.right.horiz .tool-grid { flex: 1; min-height: 0; grid-template-columns: repeat(2, var(--hbtn)); grid-auto-rows: minmax(0, 1fr); }
 .right.horiz .tool { height: auto; min-height: 0; }

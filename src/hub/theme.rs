@@ -6,11 +6,12 @@ use serde_json::json;
 use wry::WebView;
 
 impl Hub {
-    /// A most használt téma a felületeknek: színek, a séma neve és hogy látszanak-e a súgó
-    /// szövegek (a title-ök).
+    /// A most használt téma a felületeknek: színek, a séma neve, hogy látszanak-e a súgó
+    /// szövegek (a title-ök), valamint a dátum formátuma és a 12 órás óra.
     pub(crate) fn theme_json(&self) -> serde_json::Value {
         let t = self.cfg.active_theme();
-        json!({ "main": t.main, "alt": t.alt, "hot": t.hot, "bg": t.bg, "text": t.text, "scheme": self.cfg.scheme, "tips": self.cfg.tooltips })
+        json!({ "main": t.main, "alt": t.alt, "hot": t.hot, "bg": t.bg, "text": t.text, "scheme": self.cfg.scheme, "tips": self.cfg.tooltips,
+            "dateFormat": self.cfg.date_time.date_format, "hour12": self.cfg.date_time.hour12 })
     }
 
     /// Téma- vagy sémaváltás: minden felület azonnal átszíneződik (újratöltés nélkül).

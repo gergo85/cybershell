@@ -21,35 +21,45 @@ use wry::http::header::CONTENT_TYPE;
 use wry::http::{Request, Response};
 use wry::{WebContext, WebView, WebViewBuilder, WebViewBuilderExtWindows};
 
-/// Kikapcsolt súgó szövegeknél a felület címébe kerülő jelzés (a felület így már az első
-/// kirajzoláskor title nélkül jelenik meg).
-pub(crate) fn tips_param(cfg: &Config) -> &'static str {
-    if cfg.tooltips { "" } else { "&tips=0" }
+/// A felület címébe kerülő beállítások, hogy már az első kirajzolás jó legyen: kikapcsolt súgó
+/// szövegeknél a jelzés (title nélkül jelenik meg), valamint a dátum formátuma és a 12 órás óra.
+pub(crate) fn ui_params(cfg: &Config) -> String {
+    let mut s = String::new();
+    if !cfg.tooltips {
+        s.push_str("&tips=0");
+    }
+    if cfg.date_time.date_format != "auto" {
+        s.push_str(&format!("&df={}", cfg.date_time.date_format));
+    }
+    if cfg.date_time.hour12 {
+        s.push_str("&h12=1");
+    }
+    s
 }
 
 pub(crate) fn settings_url(cfg: &Config) -> String {
-    format!("cybershell://localhost/hub.html?part=settings&lang={}&scheme={}{}", cfg.language, cfg.scheme, tips_param(cfg))
+    format!("cybershell://localhost/hub.html?part=settings&lang={}&scheme={}{}", cfg.language, cfg.scheme, ui_params(cfg))
 }
 
 pub(crate) fn peek_url(cfg: &Config) -> String {
-    format!("cybershell://localhost/hub.html?part=peek&lang={}&scheme={}{}", cfg.language, cfg.scheme, tips_param(cfg))
+    format!("cybershell://localhost/hub.html?part=peek&lang={}&scheme={}{}", cfg.language, cfg.scheme, ui_params(cfg))
 }
 
 pub(crate) fn fly_url(cfg: &Config) -> String {
-    format!("cybershell://localhost/hub.html?part=fly&lang={}&scheme={}{}", cfg.language, cfg.scheme, tips_param(cfg))
+    format!("cybershell://localhost/hub.html?part=fly&lang={}&scheme={}{}", cfg.language, cfg.scheme, ui_params(cfg))
 }
 
 pub(crate) fn health_url(cfg: &Config) -> String {
-    format!("cybershell://localhost/hub.html?part=health&lang={}&scheme={}{}", cfg.language, cfg.scheme, tips_param(cfg))
+    format!("cybershell://localhost/hub.html?part=health&lang={}&scheme={}{}", cfg.language, cfg.scheme, ui_params(cfg))
 }
 
 /// A „Megszakadt a kapcsolat” sáv (a szünet-sáv felülete, más tartalommal).
 pub(crate) fn net_url(cfg: &Config) -> String {
-    format!("cybershell://localhost/hub.html?part=health&kind=net&lang={}&scheme={}{}", cfg.language, cfg.scheme, tips_param(cfg))
+    format!("cybershell://localhost/hub.html?part=health&kind=net&lang={}&scheme={}{}", cfg.language, cfg.scheme, ui_params(cfg))
 }
 
 pub(crate) fn launcher_url(cfg: &Config) -> String {
-    format!("cybershell://localhost/hub.html?part=launcher&lang={}&scheme={}{}", cfg.language, cfg.scheme, tips_param(cfg))
+    format!("cybershell://localhost/hub.html?part=launcher&lang={}&scheme={}{}", cfg.language, cfg.scheme, ui_params(cfg))
 }
 
 /// Egy már futó felület újratöltéséhez: a wry csak az első betöltésnél (`with_url`) írja át

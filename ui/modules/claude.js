@@ -1,7 +1,7 @@
 // Claude-használat: az 5 órás és a heti keret kihasználtsága (a program kérdezi le a
 // claude.ai-tól vagy a Claude Code állapotsorából). A keretek rajzolóját a Codex is használja.
 (() => {
-  const { defineModule, $, T, svg, esc, pad } = window.HUB;
+  const { defineModule, $, T, svg, esc, pad, hhmm } = window.HUB;
 
   // a visszaállásig hátralévő idő (pl. „2 ó 15 p”)
   const rel = (iso) => {
@@ -29,7 +29,6 @@
       </div>`;
   }).join('');
   // az adat időbélyege a frissítés gomb mellett (ÓÓ:PP)
-  const hhmm = (t) => `${pad(t.getHours())}:${pad(t.getMinutes())}`;
   // vízszintes panelen kompakt nézetben a két keret egymás alatt; ha így nem fér ki a szekcióba,
   // egy keret egy sor lesz (a százalék a sáv mellé kerül). Normál nézetben mindig soronként van.
   const fitLimits = (ctx, box) => {

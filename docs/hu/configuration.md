@@ -35,7 +35,7 @@ Mentés után nyomd meg a `Ctrl+Alt+R`-t.
 | `tooltips` | Súgó szövegek: `false` esetén sehol nem jelennek meg az elemek fölött időzve felbukkanó magyarázatok (alapból `true`). |
 | `allMonitors` | `false` esetén a CyberShell csak az elsődleges képernyőn jelenik meg (alapból mindegyiken). |
 | `calendar.feeds` | A csatolt naptárak (név, iCal-cím, szín). A naptárban is felvehetők és törölhetők. |
-| `note.text` | A Jegyzet modul szövege (legfeljebb 2000 karakter). A panelen szerkeszthető. |
+| `note` | A Notesz: `text` (a jegyzet, legfeljebb 2000 karakter), `tasks` (a teendők: `text` és `done`, legfeljebb 100), `tab` (a legutóbb választott fül: `note` vagy `tasks`). A panelen és a szerkesztőben módosul. |
 | `sections` | Az információs panel moduljainak láthatósága (`tools`, `claude`, `codex`, `activity`, `note`, `load`, `network`, `clock`, `date`, `events`, `laptop`, `peripherals`, `weather`, `currency`, `music`, `volume`, `tray`, `power`; alapból rejtett a `claude`, a `codex`, az `activity`, a `note`, a `load`, a `date`, az `events` és a `currency`; a `music` alapból csak asztali gépen látszik; a `laptop` csak akkumulátoros gépen, a `peripherals` csak laptopon, töltöttséget jelző Bluetooth-eszköznél látszik), sorrendje (`order`) és a kompakt nézetben látszó modulok listája (`compact`: `claude`, `codex`, `note`, `network`, `clock`, `date`, `events`, `weather`, `currency`). Ami a sorrendből hiányzik, az alapsorrend szerinti szomszédja mellé kerül. |
 | `startMenu.winKey` | `true` (alapból): a `Win` billentyű a CyberShell Start menüjét, a `Win+S` a keresőjét nyitja meg. `false` esetén a Windows sajátja jön. |
 | `startMenu.pinned` | A Start menübe kitűzött programok azonosítói (a menüben jobb gombbal kitűzve kerülnek ide). |

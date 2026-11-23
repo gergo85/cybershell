@@ -8,6 +8,9 @@
 .clock-row #hh { color: color-mix(in srgb, var(--c-main) 72%, transparent); text-shadow: 0 0 8px color-mix(in srgb, var(--c-main) 22%, transparent); }
 .clock-row .colon { margin: 0 1px; position: relative; top: -2px; color: color-mix(in srgb, var(--c-text) 45%, transparent); }
 .clock-row #mm { color: color-mix(in srgb, var(--c-text) 68%, transparent); }
+/* 12 órás órával a napszak (de./du., AM/PM) kicsiben a perc mellett */
+.clock-row .ampm { margin-left: 2px; align-self: flex-start; font: 700 8px/1 var(--f-mono); letter-spacing: .04em; text-transform: uppercase; color: var(--c-alt-dim); }
+.clock-row .ampm[hidden] { display: none; }
 
 /* a perc másodpercei: 12 szakasz, az éppen futó kiemelve */
 .sec-line { display: flex; align-items: center; gap: 6px; }

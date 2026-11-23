@@ -161,10 +161,20 @@ pub(crate) fn prepare_config(base_dir: &Path, custom: Option<PathBuf>, legacy_au
             let c = default_config();
             if !cfg_path.exists() {
                 let _ = config::save(&cfg_path, &c);
+            } else {
+                // a beolvashatatlan fájlt félretesszük, mielőtt egy későbbi mentés felülírná
+                let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+                let keep = cfg_path.with_file_name(format!("config.unreadable-{ts}.json"));
+                match std::fs::copy(&cfg_path, &keep) {
+                    Ok(_) => log(format!("a beolvashatatlan config.json félretéve: {}", keep.display())),
+                    Err(e) => log(format!("a beolvashatatlan config.json nem tehető félre: {e}")),
+                }
             }
             c
         }
     };
+    // egy köztes build notes.json-ja: a Notesz visszakerül a config.json-ba
+    let notes_taken = loaded_ok && crate::notes::take_over(&mut cfg.note);
     // „Indulás a géppel”: a konfigurációs fájl az irányadó. Ha még nincs benne,
     // a Windows jelenlegi beállítását vesszük át. Bekapcsolt állapotban a bejegyzést
     // mindig frissítjük (aktuális exe-útvonal, az Intézőre váró indítás).
@@ -212,7 +222,7 @@ pub(crate) fn prepare_config(base_dir: &Path, custom: Option<PathBuf>, legacy_au
         }
     }
     // A fájlba minden opció kerüljön bele (a hiányzókat alapértékkel kiegészítjük).
-    if loaded_ok && (autostart_changed || wallpaper_moved || config::needs_rewrite(&cfg_path, &cfg)) {
+    if loaded_ok && (autostart_changed || wallpaper_moved || notes_taken || config::needs_rewrite(&cfg_path, &cfg)) {
         match config::save(&cfg_path, &cfg) {
             Ok(()) => log("konfigurációs fájl kiegészítve az összes opcióval"),
             Err(e) => log(e),

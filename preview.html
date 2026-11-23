@@ -59,7 +59,7 @@
     const r = rects[e];
     Object.assign(f.style, { left: `${r.x}px`, top: `${r.y}px`, width: `${r.w}px`, height: `${r.h}px` });
     f.id = part === 'strip' ? `strip-${e}` : part;
-    f.src = `ui/hub.html?part=${part}&side=${e}&l=${thick('left')}&t=${thick('top')}&r=${thick('right')}&b=${thick('bottom')}&ia=${ia}&ib=${ib}&scheme=${p.get('scheme') || 'dark'}&lang=${p.get('lang') || 'hu'}`;
+    f.src = `ui/hub.html?part=${part}&side=${e}&l=${thick('left')}&t=${thick('top')}&r=${thick('right')}&b=${thick('bottom')}&ia=${ia}&ib=${ib}&scheme=${p.get('scheme') || 'dark'}&lang=${p.get('lang') || 'hu'}${['df', 'h12'].filter((k) => p.get(k)).map((k) => `&${k}=${p.get(k)}`).join('')}`;
     stage.appendChild(f);
   }
   if (p.get('scheme') === 'light') {

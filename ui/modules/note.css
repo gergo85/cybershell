@@ -9,7 +9,7 @@
 .nt-text {
   display: block;
   padding: 4px 5px;
-  font: 400 11px/1.35 var(--f-mono); color: var(--c-text); white-space: pre-wrap; overflow-wrap: anywhere;
+  font: 400 11px/15px var(--f-mono); color: var(--c-text); white-space: pre-wrap; overflow-wrap: anywhere;
   background: color-mix(in srgb, var(--c-main) 5%, transparent);
   border: 1px solid color-mix(in srgb, var(--c-main) 26%, transparent);
   transition: border-color .12s ease;
@@ -19,6 +19,10 @@
 
 /* vízszintes panelen a sorok száma a panel magasságától függ (a JS adja), a nézet a szélességet állítja */
 .right.horiz .note-mod { width: 230px; }
+/* a jegyzet, illetve a teendők doboza kitölti a panel magasságát */
+.right.horiz :is(.nt-text, .nt-twrap) { flex: 1; min-height: 0; box-sizing: border-box; }
+.right.horiz .nt-text { overflow: hidden; }
+.right.horiz .nt-tasks { flex: 1; min-height: 0; overflow: hidden; }
 .right.horiz .note-mod.compact { width: 150px; }
 
 /* az oldalpanelen nyíló szerkesztő (parts/flyout.js, "note" nézet) */
@@ -32,3 +36,100 @@
 }
 .nt-edit:focus { border-color: var(--c-main); box-shadow: 0 0 6px var(--c-main-faint); }
 .nt-edit::placeholder { color: var(--c-text-dim); opacity: .7; }
+
+/* a panel a szerkesztőben legutóbb választott fület mutatja */
+.note-mod[data-tab="note"] .nt-twrap, .note-mod[data-tab="tasks"] .nt-text { display: none; }
+
+/* álló panelen a két fül pontosan ugyanakkora (5, kompakt nézetben 3 sornyi), így váltáskor nem
+   ugrál a panel: a jegyzet doboza, illetve a teendők doboza a kész / összes sávval együtt */
+.right:not(.horiz) .note-mod { --nt-lines: 5; }
+.right:not(.horiz) .note-mod.compact { --nt-lines: 3; }
+.right:not(.horiz) :is(.nt-text, .nt-twrap) { box-sizing: border-box; height: calc(var(--nt-lines) * 15px + 10px); }
+.right:not(.horiz) .nt-text { overflow: hidden; }
+.right:not(.horiz) .nt-tasks { flex: 1; min-height: 0; overflow: hidden; }
+.nt-twrap { display: flex; flex-direction: column; }
+
+/* teendők a panelen: jelölőnégyzet és egysoros szöveg; a négyzetre kattintva kipipálható */
+.nt-tasks {
+  display: flex; flex-direction: column; padding: 4px 4px;
+  font: 400 11px/15px var(--f-mono); color: var(--c-text);
+  background: color-mix(in srgb, var(--c-main) 5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--c-main) 26%, transparent);
+  transition: border-color .12s ease;
+}
+.note-mod:hover .nt-tasks, .note-mod.open .nt-tasks { border-color: color-mix(in srgb, var(--c-main) 55%, transparent); }
+.nt-row[hidden] { display: none; }
+.nt-row { flex: none; display: flex; align-items: center; gap: 4px; min-width: 0; height: 15px; }
+.nt-row span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nt-row.done span { color: var(--c-text-dim); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--c-text-dim) 70%, transparent); }
+.nt-none { color: var(--c-text-dim); white-space: normal; opacity: .75; overflow: hidden; }
+/* a doboz alatt: a kész / összes teendő vékony sávval (és hány nem fért ki a panelre) */
+.nt-prog { flex: none; display: flex; align-items: center; gap: 6px; height: 8px; margin-top: 4px; font: 400 8.5px/1 var(--f-mono); letter-spacing: .04em; color: var(--c-text-dim); white-space: nowrap; }
+.nt-prog[hidden] { display: none; }
+.nt-prog i { flex: 1; min-width: 0; height: 3px; background: var(--c-main-faint); }
+.nt-prog b { display: block; height: 100%; background: var(--c-alt-dim); transition: width .2s ease; }
+.nt-prog.all { color: var(--c-alt); }
+.nt-prog.all b { background: var(--c-alt); }
+.nt-box {
+  flex: none; display: inline-block; width: 9px; height: 9px; cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--c-alt) 75%, transparent); transition: background-color .12s ease, border-color .12s ease;
+}
+.nt-box:hover { border-color: var(--c-alt); background: color-mix(in srgb, var(--c-alt) 25%, transparent); }
+.done > .nt-box {
+  background: var(--c-alt) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 5.2l2 2L8 3' fill='none' stroke='%23000' stroke-width='1.6'/%3E%3C/svg%3E") center / 100% no-repeat;
+  border-color: var(--c-alt);
+}
+html[data-scheme="light"] .nt-box { border-radius: 2px; }
+
+/* a szerkesztő (oldalpanel) fülei és a teendőlista */
+.nt-ftabs { flex: none; display: flex; gap: 4px; margin: 10px 14px 0 16px; }
+.nt-ftabs button {
+  display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px;
+  font: 400 10.5px/1 var(--f-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--c-text-dim);
+  background: color-mix(in srgb, var(--c-main) 5%, transparent); border-bottom: 2px solid transparent;
+  transition: background-color .12s ease, color .12s ease;
+}
+.nt-ftabs svg { width: 14px; height: 14px; }
+.nt-ftabs button:hover { color: var(--c-text); background: color-mix(in srgb, var(--c-main) 12%, transparent); }
+.nt-ftabs button.on { color: var(--c-main); border-bottom-color: var(--c-main); background: color-mix(in srgb, var(--c-main) 10%, transparent); }
+.nt-ftabs b { font-weight: 400; color: var(--c-alt); }
+#vNote[data-tab="note"] .nt-tpane, #vNote[data-tab="tasks"] .nt-edit { display: none; }
+.nt-tpane { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; margin: 10px 14px 0 16px; }
+.nt-add { flex: none; display: flex; gap: 0; }
+.nt-add input {
+  flex: 1; min-width: 0; height: 32px; padding: 0 10px; outline: none;
+  font: 400 12px/1 var(--f-mono); color: var(--c-text);
+  background: color-mix(in srgb, var(--c-main) 5%, transparent); border: 1px solid color-mix(in srgb, var(--c-main) 30%, transparent);
+}
+.nt-add input:focus { border-color: var(--c-main); box-shadow: 0 0 6px var(--c-main-faint); }
+.nt-add button { flex: none; width: 34px; display: flex; align-items: center; justify-content: center; color: var(--c-bg); background: var(--c-main-deep, var(--c-main)); }
+.nt-add button svg { width: 15px; height: 15px; }
+.nt-add button:hover { background: var(--c-main); }
+.nt-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; scrollbar-width: thin; scrollbar-color: var(--c-main) transparent; }
+.nt-item {
+  flex: none; display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 4px 0 2px;
+  background: color-mix(in srgb, var(--c-main) 5%, transparent); border: 1px solid transparent;
+}
+.nt-item:hover { background: color-mix(in srgb, var(--c-main) 10%, transparent); }
+.nt-item.dragging { position: relative; z-index: 2; background: color-mix(in srgb, var(--c-alt) 14%, var(--c-bg)); border-color: var(--c-alt); box-shadow: 0 6px 18px rgba(0, 0, 0, .5); }
+.nt-grip { flex: none; width: 18px; height: 28px; display: flex; align-items: center; justify-content: center; color: var(--c-text-dim); cursor: grab; touch-action: none; }
+.nt-grip svg { width: 13px; height: 13px; }
+.nt-item.dragging .nt-grip { cursor: grabbing; }
+.nt-item .nt-box { width: 13px; height: 13px; }
+.nt-item input {
+  flex: 1; min-width: 0; height: 26px; padding: 0 4px; outline: none; border: 1px solid transparent; background: transparent;
+  font: 400 12px/1 var(--f-mono); color: var(--c-text);
+}
+.nt-item input:focus { border-color: color-mix(in srgb, var(--c-main) 45%, transparent); background: var(--c-bg); }
+.nt-item.done input { color: var(--c-text-dim); text-decoration: line-through; }
+.nt-del { flex: none; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; color: var(--c-text-dim); opacity: 0; transition: opacity .12s, background-color .12s, color .12s; }
+.nt-del svg { width: 12px; height: 12px; }
+.nt-item:hover .nt-del, .nt-del:focus { opacity: 1; }
+.nt-del:hover { background: var(--c-hot); color: var(--c-bg); }
+.nt-empty { margin: 18px 4px; font-size: 12px; line-height: 1.5; color: var(--c-text-dim); text-align: center; }
+.nt-clear { padding: 0; font: inherit; color: var(--c-alt); text-decoration: none; }
+.nt-clear:hover { color: var(--c-main); }
+.nt-clear[hidden] { display: none; }
+html[data-scheme="light"] .nt-item, html[data-scheme="light"] .nt-ftabs button { border-radius: 5px; }
+/* a szerkesztő lábléce: balra a karakterszám / kész teendők, jobbra a Mentve, illetve a törlés */
+#ntState { margin-left: auto; text-align: right; }

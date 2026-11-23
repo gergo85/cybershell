@@ -1,5 +1,5 @@
 (() => {
-  const { $, lang, T, root, demo, post, setTheme, THEMES, svg, esc, pad, store, fetchJson } = window.HUB;
+  const { $, lang, T, root, demo, post, setTheme, THEMES, svg, esc, pad, store, fetchJson, DATE_FORMATS, fmtDate, dateFormat } = window.HUB;
 
   // ───────────── beállítások (a munkaterületen, animálva, fülekre bontva) ─────────────
   // Bal oldalt a fülek sávja (Programok, Panelek, Megjelenés, Funkciók, Rendszer), alatta a
@@ -8,11 +8,16 @@
   function buildSettings() {
     root.className = 'settings';
     // az ikonválasztó mátrixa (a program saját ikonja után), témák szerint csoportosítva
-    const ICON_CHOICES = ['browser', 'globe', 'code', 'terminal', 'folder', 'panels', 'file', 'doc', 'sheet', 'text', 'notes', 'book',
-      'clipboard', 'calc', 'mail', 'chat', 'calendar', 'clock', 'music', 'headphones', 'mic', 'video', 'film', 'photo', 'design', 'brush',
-      'enhance', 'picker', 'snip', 'game', 'rocket', 'spark', 'star', 'heart', 'cart', 'coin', 'bar', 'map', 'place', 'pin', 'cloud',
-      'download', 'server', 'pc', 'chip', 'gpu', 'ram', 'disk', 'board', 'network', 'wifi', 'bluetooth', 'printer', 'shield', 'lock',
-      'key', 'box', 'user', 'settings', 'search', 'start', 'github', 'sun', 'moon', 'app'];
+    const ICON_CHOICES = [
+      'browser', 'globe', 'link', 'code', 'terminal', 'bug', 'robot', 'database', 'folder', 'archive', 'panels', 'grid', 'list', 'layers',
+      'file', 'doc', 'sheet', 'text', 'notes', 'book', 'news', 'bookmark', 'clipboard', 'calc', 'pie', 'trend', 'translate',
+      'mail', 'inbox', 'send', 'chat', 'bell', 'calendar', 'clock', 'timer', 'music', 'headphones', 'mic', 'podcast', 'video', 'film',
+      'photo', 'camera', 'design', 'palette', 'brush', 'pen', 'scissors', 'enhance', 'picker', 'snip', 'cube', 'game', 'dice', 'trophy',
+      'crown', 'ghost', 'smile', 'rocket', 'spark', 'star', 'heart', 'fire', 'bolt', 'bulb', 'leaf', 'coffee', 'gift', 'cart', 'tag',
+      'coin', 'wallet', 'bank', 'briefcase', 'school', 'bar', 'map', 'place', 'pin', 'flag', 'compass', 'target', 'home', 'car', 'plane',
+      'anchor', 'planet', 'cloud', 'download', 'server', 'pc', 'laptop', 'monitor', 'phone', 'keyboard', 'mouse', 'chip', 'gpu', 'ram',
+      'disk', 'board', 'plug', 'network', 'wifi', 'bluetooth', 'printer', 'qr', 'shield', 'lock', 'key', 'eye', 'box', 'user', 'fitness',
+      'settings', 'wrench', 'search', 'hash', 'start', 'github', 'sun', 'moon', 'app'];
     const TABS = [
       { id: 'programs', icon: 'app' },
       { id: 'panels', icon: 'panels' },
@@ -64,7 +69,7 @@
             </div>
             <section class="rail-credit">
               <div class="credit-by"><span>${T('madeBy')}</span><b>${T('author')}</b></div>
-              <div class="credit-by credit-ver"><span>${T('version')}</span><b id="appVer">v2.1</b></div>
+              <div class="credit-by credit-ver"><span>${T('version')}</span><b id="appVer">v2.2</b></div>
               <div class="credit-btns">
                 <button class="sbtn mini" data-cmd="store" title="${T('storeHint')}">${svg('store')}<span>Microsoft Store</span></button>
                 <button class="sbtn mini" data-cmd="github">${svg('github')}<span>GitHub</span></button>
@@ -77,7 +82,7 @@
             <section class="set-pane" data-pane="programs" role="tabpanel">
               <main class="set-card set-main">
                 <h2>${T('icons')}</h2>
-                <div class="ed-head"><span></span><span>${T('colName')}</span><span>${T('colProgram')}</span><span>${T('colIcon')}</span><span>${T('colColor')}</span><span>${T('colAuto')}</span><span></span></div>
+                <div class="ed-head"><span>${T('colIcon')}</span><span>${T('colName')}</span><span>${T('colProgram')}</span><span>${T('colColor')}</span><span>${T('colAuto')}</span><span></span></div>
                 <div class="ed-list" id="edList"></div>
                 <div class="ed-add">
                   <button class="sbtn" id="edBrowse">${svg('plus')}<span>${T('addProgram')}</span></button>
@@ -188,17 +193,19 @@
             </section>
 
             <!-- 04 FUNKCIÓK -->
+            <!-- a kártyák a panel moduljainak sorrendjében (data-mod: a modul azonosítója; renderFeatures) -->
             <section class="set-pane pane-features" data-pane="features" role="tabpanel">
-              <div class="pane-col">
-              <section class="set-card wset" id="wsCard">
+              <div class="feat-cols" id="featCols">
+              <section class="set-card wset" id="wsCard" data-mod="weather">
                 <h2>${T('wsTitle')}</h2>
                 <div class="ws-row ws-grid">
                   <label class="ws-city" title="${T('wsCityHint')}">${svg('place')}<span class="ws-field"><input id="wsCity" type="text" maxlength="80" spellcheck="false" autocomplete="off" placeholder="${T('wsCityPh')}"><button class="ws-go" id="wsGo" title="${T('wsGo')}">${svg('enter')}</button></span></label>
                   <div class="ws-found" id="wsFound"></div>
+                  <button class="sbtn toggle ws-wind" id="wsWind" title="${T('wsWindHint')}">${svg('wind')}<span>${T('wsWind')}</span><b class="switch">–</b></button>
                   <div class="sbtn ws-unit" title="${T('wsUnitHint')}">${svg('thermo')}<span>${T('wsUnit')}</span><div class="seg" id="wsUnit"><button data-unit="c">°C</button><button data-unit="f">°F</button></div></div>
                 </div>
               </section>
-              <section class="set-card c-start">
+              <section class="set-card c-start" data-mod="start">
                 <h2>${T('startCard')}</h2>
                 <div class="set-grid">
                   <button class="sbtn toggle" data-toggle="winKey" title="${T('winKeyHint')}">${svg('start')}<span>${T('winKey')}</span><b class="switch">–</b></button>
@@ -209,17 +216,22 @@
                   <label class="ws-city url-row" id="engCustom">${svg('globe')}<span class="ws-field"><input id="engUrl" type="text" spellcheck="false" autocomplete="off" placeholder="https://…?q={q}"><button class="ws-go" id="engGo" title="${T('save')}">${svg('enter')}</button></span></label>
                 </div>
               </section>
+              <section class="set-card c-dt" data-mod="clock date">
+                <h2>${T('dtCard')}</h2>
+                <div class="set-grid">
+                  <div class="lang-row dt-row" title="${T('dtDateHint')}">${svg('calendar')}<span>${T('dtDate')}</span><div class="seg" id="dfSeg"></div></div>
+                  <div class="lang-row" title="${T('dtClockHint')}">${svg('clock')}<span>${T('dtClock')}</span>
+                    <div class="seg" id="h12Seg"><button data-h12="0">${T('h24')}</button><button data-h12="1">${T('h12')}</button></div>
+                  </div>
+                </div>
+              </section>
               <!-- a panel moduljainak saját kártyái (a modul leírásának settings része) -->
-              <div class="mod-cards">
-                ${window.HUB.modules.filter((m) => m.settings).map((m) => `
-                  <section class="set-card mod-card" id="mc-${m.id}">
-                    <h2>${T(m.settings.title)}</h2>
-                    ${m.settings.html()}
-                  </section>`).join('')}
-              </div>
-              </div>
-              <div class="pane-col">
-              <section class="set-card health" id="hlCard">
+              ${window.HUB.modules.filter((m) => m.settings).map((m) => `
+                <section class="set-card mod-card" id="mc-${m.id}" data-mod="${m.id}">
+                  <h2>${T(m.settings.title)}</h2>
+                  ${m.settings.html()}
+                </section>`).join('')}
+              <section class="set-card health" id="hlCard" data-mod="health">
                 <h2>${T('health')}</h2>
                 <div class="hl-row">
                   <button class="sbtn toggle" id="hlToggle">${svg('heart')}<span>${T('hBreak')}</span><b class="switch">–</b></button>
@@ -228,14 +240,14 @@
                   <button class="sbtn mini icon" id="hlReset" title="${T('hRestartHint')}">${svg('reload')}</button>
                 </div>
               </section>
-              <section class="set-card c-act">
+              <section class="set-card c-act" data-mod="activity">
                 <h2>${T('activityCard')}</h2>
                 <div class="set-grid two">
                   ${toggle('activity.autoStart', 'play', T('actAuto'), T('actAutoHint'))}
                   ${toggle('activity.sound', 'volume', T('actSound'), T('actSoundHint'))}
                 </div>
               </section>
-              <section class="set-card c-cal">
+              <section class="set-card c-cal" data-mod="events">
                 <h2>${T('calCard')}</h2>
                 <div class="cal-list" id="calList"></div>
                 <div class="cal-add">
@@ -678,6 +690,54 @@
     $('calUrl').addEventListener('keydown', (e) => { if (e.key === 'Enter') calAdd(); });
     $('calHelp').addEventListener('click', () => (demo ? toast('Demo: Google') : post({ type: 'cal-help' })));
 
+    // ── Funkciók fül: a kártyák a panel moduljainak sorrendjében (ahogy a Panelek fülön állnak) ──
+    // A Start menü kártyája elöl (a panel tetején a Start gomb), az Egészség a végén; a Dátum és
+    // idő ott, ahol az Idő vagy a Dátum modul közül az előbbi.
+    const renderFeatures = () => {
+      const ids = window.HUB.modules.map((m) => m.id);
+      const order = [...((data && data.sections && data.sections.order) || []), ...ids];
+      const rank = (card) => {
+        const mods = card.dataset.mod.split(' ');
+        if (mods[0] === 'start') return -1;
+        if (mods[0] === 'health') return 1e6;
+        const at = mods.map((m) => order.indexOf(m)).filter((i) => i >= 0);
+        return at.length ? Math.min(...at) : 1e5;
+      };
+      const cards = [...$('featCols').children].map((c, i) => ({ c, r: rank(c), i }));
+      cards.sort((a, b) => a.r - b.r || a.i - b.i);
+      for (const { c } of cards) $('featCols').appendChild(c);
+    };
+
+    // ── Dátum és idő: a dátum formátuma (a mai dátum mintaként) és a 12 vagy 24 órás óra ──
+    const renderDateTime = () => {
+      const dtc = (data && data.dateTime) || { dateFormat: 'auto', hour12: false };
+      const today = new Date();
+      $('dfSeg').innerHTML = DATE_FORMATS.map((f) => {
+        const label = f === 'auto' ? T('dtAuto') : fmtDate(today, { f });
+        const tip = f === 'auto' ? ` title="${esc(T('dtAutoHint', { s: fmtDate(today, { f: dateFormat('auto') }) }))}"` : '';
+        return `<button data-df="${f}"${tip} class="${dtc.dateFormat === f ? 'on' : ''}">${esc(label)}</button>`;
+      }).join('');
+      for (const b of $('h12Seg').children) b.classList.toggle('on', (b.dataset.h12 === '1') === !!dtc.hour12);
+    };
+    const setDateTime = (patch) => {
+      data.dateTime = { dateFormat: 'auto', hour12: false, ...data.dateTime, ...patch };
+      renderDateTime();
+      // a beállítások saját felülete is azonnal átvált (a többit a program értesíti)
+      setTheme({ dateFormat: data.dateTime.dateFormat, hour12: data.dateTime.hour12 });
+      const [key, value] = Object.entries(patch)[0];
+      setValue(`dateTime.${key}`, value);
+    };
+    $('dfSeg').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-df]');
+      if (!b || !data || b.classList.contains('on')) return;
+      setDateTime({ dateFormat: b.dataset.df });
+    });
+    $('h12Seg').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-h12]');
+      if (!b || !data || b.classList.contains('on')) return;
+      setDateTime({ hour12: b.dataset.h12 === '1' });
+    });
+
     // ── webes kereső ──
     const engineOf = (url) => Object.keys(WEB_SEARCH).find((k) => WEB_SEARCH[k] === url) || 'custom';
     let engCustomOpen = false;
@@ -1021,8 +1081,9 @@
       order.splice(to, 0, ...order.splice(from, 1));
       for (const k of order) $('secList').appendChild(rows.find((r) => r.dataset.key === k));
       data.sections = { ...data.sections, order };
-      // a Megjelenés kártya is ebben a sorrendben
+      // a Megjelenés kártya és a Funkciók fül is ebben a sorrendben
       renderView();
+      renderFeatures();
       if (!demo) post({ type: 'sections', sections: data.sections });
     });
 
@@ -1042,10 +1103,9 @@
           <div class="ed-item" data-i="${i}">
           <span class="grip" title="${T('dragHint')}">${svg('grip')}</span>
           <div class="ed-row${a.available ? '' : ' missing'}" data-i="${i}">
-            <span class="ed-icon"${a.color ? ` style="--app:${esc(a.color)}"` : ''}>${iconPreview(a)}</span>
+            <button class="ed-icon ed-pick" data-act="pick" title="${T('pickIcon')}: ${pickLabel(a)}"${a.color ? ` style="--app:${esc(a.color)}"` : ''}>${iconPreview(a)}</button>
             <input class="ed-name" data-field="name" value="${esc(a.name)}" maxlength="24" spellcheck="false">
             <div class="ed-path">${esc(a.path)}${a.available ? '' : `<b>${T('notInstalled')}</b>`}</div>
-            <button class="ed-sel ed-pick" data-act="pick" title="${T('pickIcon')}"><span>${pickLabel(a)}</span>${svg('down')}</button>
             <input class="ed-color" type="color" data-field="color" value="${color}">
             <button class="ib auto${a.autostart ? ' on' : ''}" data-act="auto">${svg('power')}</button>
             <button class="ib danger" data-act="del">${svg('trash')}</button>
@@ -1056,16 +1116,21 @@
       updateDirty();
     };
 
-    // ── ikonválasztó: mátrix, az első elem a program saját ikonja (ha nincs neki: automatikus) ──
+    // ── ikonválasztó: az ikonra kattintva nyíló mátrix, az első elem a program saját ikonja (ha nincs neki: automatikus) ──
     const pickLabel = (a) => T(a.icon === 'exe' ? 'programIcon' : !a.icon ? 'automatic' : window.HUB_ICONS[a.icon] ? 'builtinIcon' : 'imageIcon');
     const icoPop = document.createElement('div');
     icoPop.className = 'ico-pop';
     icoPop.hidden = true;
     root.appendChild(icoPop);
     let picking = -1;
-    const closePicker = () => { icoPop.hidden = true; picking = -1; };
+    const closePicker = () => {
+      icoPop.hidden = true;
+      picking = -1;
+      for (const b of $('edList').querySelectorAll('.ed-pick.open')) b.classList.remove('open');
+    };
     const openPicker = (i, btn) => {
       if (picking === i) return closePicker();
+      closePicker();
       const a = draft[i];
       const first = a.canExeIcon
         ? { v: 'exe', html: a.exeImg ? `<img src="${esc(a.exeImg)}" alt="">` : svg('app'), title: T('programIcon') }
@@ -1075,9 +1140,10 @@
         `<button class="ico-cell${k === 0 ? ' own' : ''}${a.icon === c.v ? ' on' : ''}" data-icon="${c.v}" title="${esc(c.title)}">${c.html}</button>`).join('')}</div>`;
       icoPop.hidden = false;
       picking = i;
-      // a gomb alá (ha ott nem fér el, fölé), a képernyőn belül
+      btn.classList.add('open');
+      // az ikon alá (ha ott nem fér el, fölé), a képernyőn belül
       const r = btn.getBoundingClientRect(), w = icoPop.offsetWidth, h = icoPop.offsetHeight;
-      const left = Math.max(8, Math.min(r.right - w, innerWidth - w - 8));
+      const left = Math.max(8, Math.min(r.left, innerWidth - w - 8));
       const top = r.bottom + 6 + h <= innerHeight - 8 ? r.bottom + 6 : Math.max(8, r.top - 6 - h);
       Object.assign(icoPop.style, { left: `${left}px`, top: `${top}px` });
     };
@@ -1195,13 +1261,19 @@
       post({ type: 'health-reset' });
     });
 
-    // ── Időjárás: a település (szabad szöveg) és a mértékegység (°C/°F); a szél a modul
-    //    nézetétől függ (Normál: szél is, Kompakt: szél nélkül, a Panelek fül Megjelenés kártyáján) ──
+    // ── Időjárás: a település (szabad szöveg), a mértékegység (°C/°F) és a Szél kapcsoló ──
     let weather = null;
     const renderWeather = () => {
       for (const b of $('wsUnit').children) b.classList.toggle('on', b.dataset.unit === (weather.unit === 'f' ? 'f' : 'c'));
       if (document.activeElement !== $('wsCity')) $('wsCity').value = weather.city || '';
+      setSwitch($('wsWind'), weather.wind !== false);
     };
+    $('wsWind').addEventListener('click', () => {
+      if (!weather) return;
+      weather = { ...weather, wind: weather.wind === false };
+      renderWeather();
+      if (!demo) post({ type: 'weather', wind: weather.wind });
+    });
     // a cím mellett a megtalált hely teljes neve (település, megye, ország)
     const setFound = (text, bad, ok) => {
       const f = $('wsFound');
@@ -1280,6 +1352,8 @@
       if (msg.version) $('appVer').textContent = msg.version;
       if (!data.sections) data.sections = { claude: true, activity: true, clock: true, date: true };
       renderToggles();
+      renderFeatures();
+      renderDateTime();
       renderWalls();
       // ha épp szerkesztesz, a listádat nem írjuk felül
       if (!dirty() || !draft.length) {
@@ -1564,10 +1638,10 @@
         calendars: [{ name: 'Google Naptár', color: '#00e1ff', host: 'calendar.google.com' }, { name: 'Ünnepek', color: '#ff2a6d', host: 'calendar.google.com' }],
         themes: { dark: { ...THEMES.dark }, light: { ...THEMES.light }, defaultDark: { ...THEMES.dark }, defaultLight: { ...THEMES.light } },
         health: { enabled: true, minutes: 90, remaining: 3725, showing: false },
-        weather: { city: 'Budapest', unit: 'c' },
+        weather: { city: 'Budapest', unit: 'c', wind: true },
         currency: { list: ['EUR', 'USD', 'HUF', 'GBP', 'CHF'] },
-        sections: { tools: true, claude: true, codex: false, activity: true, clock: true, date: false, weather: true, music: true, volume: true,
-          order: ['tools', 'claude', 'codex', 'activity', 'clock', 'date', 'weather', 'music', 'volume', 'power'],
+        sections: { tools: true, recent: true, claude: true, codex: false, activity: true, clock: true, date: false, weather: true, music: true, volume: true,
+          order: ['tools', 'recent', 'claude', 'codex', 'activity', 'clock', 'date', 'weather', 'music', 'volume', 'power'],
           toolsOrder: ['calc', 'notepad', 'search', 'snip'], powerOrder: ['lock', 'sleep', 'shutdown', 'restart'] },
         hardware: { cpu: { name: 'AMD Ryzen 5 3600 6-Core Processor', cores: 6, threads: 12, mhz: 3600 },
           board: { name: 'ASRock B450M Pro4', chipset: 'AMD B450', bios: 'P10.08', biosDate: '2023-11-02', slots: 4, maxMem: '128 GB' },

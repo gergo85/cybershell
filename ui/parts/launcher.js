@@ -1,5 +1,5 @@
 (() => {
-  const { $, q, lang, locale, decimal, T, root, css, demo, post, setTheme, svg, esc, store } = window.HUB;
+  const { $, q, lang, locale, decimal, T, root, css, demo, post, setTheme, svg, esc, store, fmtDate, hhmm } = window.HUB;
 
   // ───────────── saját Start menü és kereső ─────────────
   // Egy felület, két elrendezés: "start" (az információs panel mellett: kitűzött és gyakori
@@ -117,12 +117,26 @@
       const keys = Object.keys(use);
       if (keys.length > 400) keys.sort((a, b) => use[a].t - use[b].t).slice(0, keys.length - 400).forEach((k) => delete use[k]);
       store.set(USE_KEY, use);
+      reportFrequent();
     };
     const frecency = (key) => {
       const u = use[key];
       if (!u) return 0;
       const days = (Date.now() - u.t) / 86400000;
       return Math.min(24, Math.log2(1 + u.n) * 6) * (days < 1 ? 1 : days < 7 ? 0.8 : days < 30 ? 0.55 : 0.3);
+    };
+    // a gyakran használt programok (a kereső üres állapotában és a panel Mostanában moduljában)
+    const frequentApps = (n) => apps.filter((a) => use[`app:${a.id}`])
+      .sort((a, b) => frecency(`app:${b.id}`) - frecency(`app:${a.id}`)).slice(0, n);
+    // a lista a programnak is megy (a panel Mostanában modulja ezt mutatja), csak változáskor
+    let lastFrequent = '';
+    const reportFrequent = () => {
+      if (!apps.length) return;
+      const ids = frequentApps(8).map((a) => a.id);
+      const s = ids.join(',');
+      if (s === lastFrequent) return;
+      lastFrequent = s;
+      post({ type: 'frequent', ids });
     };
 
     // ── ikonok ──
@@ -258,7 +272,7 @@
       const groups = [];
       if (!t) {
         // üres kereső: a gyakran használt programok és a legutóbbi fájlok
-        const freq = apps.filter((a) => use[appKey(a)]).sort((a, b) => frecency(appKey(b)) - frecency(appKey(a))).slice(0, 8);
+        const freq = frequentApps(8);
         if (freq.length) groups.push({ title: T('lxFrequent'), items: freq.map(appItem), cols: 2 });
         if (clips && clips.length) groups.push({ title: T('lxClip'), items: clips.slice(0, 5).map(clipItem), clear: 'clip' });
         if (recent.length) groups.push({ title: T('lxRecent'), items: recent.slice(0, 6).map(fileItem), clear: 'recent' });
@@ -329,7 +343,7 @@
       if (m < 60) return T('lxMinAgo', { m });
       if (m < 24 * 60) return T('lxHourAgo', { h: Math.floor(m / 60) });
       const d = new Date(ms);
-      return `${d.getMonth() + 1}.${String(d.getDate()).padStart(2, '0')}. ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+      return `${fmtDate(d, { year: false })} ${hhmm(d)}`;
     };
     // a szöveg egy sorban (a szóközök összevonva), alatta a forrás, az idő és a hossz
     const clipItem = (c) => ({
@@ -416,7 +430,7 @@
       const pins = pinned.map(byId).filter(Boolean);
       $('lxPins').innerHTML = pins.map(tileHtml).join('') || `<div class="lx-empty small">${T('lxNoPins')}</div>`;
       $('lxPinHint').style.display = pins.length ? 'none' : '';
-      const freq = apps.filter((a) => use[appKey(a)]).sort((a, b) => frecency(appKey(b)) - frecency(appKey(a))).slice(0, 5);
+      const freq = frequentApps(5);
       $('lxFreq').innerHTML = freq.map(rowHtml).join('') || `<div class="lx-empty small">${T('lxNoFrequent')}</div>`;
       // a Start menüben is törölhető az egész lista (mint a keresőben)
       $('lxRecentHead').innerHTML = `${T('lxRecent')}${recent.length ? clearBtn('recent') : ''}`;
@@ -765,31 +779,47 @@
       if (msg.theme) setTheme(msg.theme);
       if (msg.type === 'launcher-open') open(msg.mode);
       if (msg.type === 'launcher-data') {
+        // megnyitáskor (és a programlista háttérbeli frissülésekor) ugyanaz az adat jön újra:
+        // ilyenkor nem rajzoljuk újra a menüt, mert az ikonok újratöltése villódzást okozna
+        const key = JSON.stringify([msg.apps, msg.pinned, msg.recent, msg.clips, !!msg.loading]);
+        const changed = key !== lastData;
+        lastData = key;
         apps = msg.apps || [];
         pinned = msg.pinned || [];
         recent = msg.recent || [];
         if (msg.clips !== undefined) clips = msg.clips;
         loading = !!msg.loading && !apps.length;
         $('lxUser').textContent = (msg.user || '').toUpperCase();
-        // a Windows-fiók profilképe az ikon helyén (ha nincs, vagy nem tölthető be, marad az ikon)
-        if (msg.userPic) {
+        // a Windows-fiók profilképe az ikon helyén (ha nincs, vagy nem tölthető be, marad az ikon);
+        // csak egyszer töltjük be, nem minden megnyitáskor
+        if (msg.userPic && !userPicLoaded) {
+          userPicLoaded = true;
           const img = new Image();
           img.className = 'lx-pic';
           img.alt = '';
           img.onload = () => $('lxAvatar').replaceChildren(img);
+          img.onerror = () => { userPicLoaded = false; };
           img.src = `/__userpic?${Date.now()}`;
         }
-        renderHome();
-        if (root.classList.contains('typing')) renderResults();
+        if (changed) {
+          renderHome();
+          if (root.classList.contains('typing')) renderResults();
+        }
+        reportFrequent();
       }
+      // a panel Mostanában moduljából indított program is használatnak számít
+      if (msg.type === 'launcher-use' && msg.id) bump(`app:${msg.id}`);
       if (msg.type === 'launcher-clips') {
         clips = msg.clips;
         if (root.classList.contains('typing')) renderResults();
       }
       if (msg.type === 'launcher-pins') { pinned = msg.pinned || []; renderHome(); }
       if (msg.type === 'launcher-toast') toast(msg.text);
-      if (msg.type === 'launcher-hidden') { closeMenu(); input.value = ''; }
+      // elrejtéskor a tartalom is eltűnik: újranyitáskor ne villanjon fel a régi állapot a beúszás előtt
+      if (msg.type === 'launcher-hidden') { closeMenu(); input.value = ''; root.classList.remove('in'); }
     };
+    let lastData = '';
+    let userPicLoaded = false;
     h.demo = () => {
       const names = ['Firefox', 'Google Chrome', 'Visual Studio Code', 'Spotify', 'Claude', 'Adobe Lightroom Classic', 'Adobe Photoshop 2026',
         'Topaz Photo AI', 'Word', 'Excel', 'Outlook', 'OneNote', 'Discord', 'Steam', 'Számológép', 'Jegyzettömb', 'Paint', 'Fényképek',

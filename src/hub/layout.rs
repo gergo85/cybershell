@@ -131,7 +131,7 @@ pub(crate) fn bar_url(part: &str, edge: Edge, cfg: &Config) -> String {
         thickness_of(cfg, Edge::Bottom),
         cfg.language,
         cfg.scheme,
-        crate::web::tips_param(cfg)
+        crate::web::ui_params(cfg)
     )
 }
 
@@ -139,14 +139,20 @@ pub(crate) fn bar_url(part: &str, edge: Edge, cfg: &Config) -> String {
 /// fölötte; a sáv mentén `along` (fizikai pixel a sáv tetejétől, illetve bal szélétől) köré
 /// középre igazítva, a munkaterületen belül.
 pub(crate) fn popup_pos(bar_rect: RECT, edge: Edge, w: i32, h: i32, along: i32, work: RECT) -> (i32, i32) {
+    popup_pos_margin(bar_rect, edge, w, h, along, work, 6)
+}
+
+/// Mint a `popup_pos`, de a munkaterület szélétől `margin` távolságra tart (0: a szomszédos
+/// sávhoz vagy kerethez simul, mint a Start menü).
+pub(crate) fn popup_pos_margin(bar_rect: RECT, edge: Edge, w: i32, h: i32, along: i32, work: RECT, margin: i32) -> (i32, i32) {
     if is_vertical(edge) {
         let x = if edge == Edge::Left { bar_rect.right } else { bar_rect.left - w };
         let cy = bar_rect.top + along;
-        (x, (cy - h / 2).clamp(work.top + 6, (work.bottom - h - 6).max(work.top)))
+        (x, (cy - h / 2).clamp(work.top + margin, (work.bottom - h - margin).max(work.top)))
     } else {
         let y = if edge == Edge::Top { bar_rect.bottom } else { bar_rect.top - h };
         let cx = bar_rect.left + along;
-        ((cx - w / 2).clamp(work.left + 6, (work.right - w - 6).max(work.left)), y)
+        ((cx - w / 2).clamp(work.left + margin, (work.right - w - margin).max(work.left)), y)
     }
 }
 
