@@ -110,33 +110,6 @@ pub fn disabled_in_windows() -> bool {
     approved_state() == Some(false)
 }
 
-/// A program régi neve (v1.2-ig CyberHub). Az átnevezés után a régi „Run” bejegyzés
-/// és engedélyező érték megmaradna, és bejelentkezéskor a régi exe-t is indítaná.
-const LEGACY_NAME: PCWSTR = w!("CyberHub");
-
-/// Törli a régi nevű bejegyzést. Igazat ad, ha volt ilyen, és engedélyezve volt.
-pub fn remove_legacy() -> bool {
-    // csomagolva a valódi Run kulcsot nem érjük el (lásd fent), és a régi név úgysem fordulhat elő
-    if packaged() {
-        return false;
-    }
-    let had = unsafe { RegGetValueW(HKEY_CURRENT_USER, RUN, LEGACY_NAME, RRF_RT_REG_SZ, None, None, None) } == ERROR_SUCCESS;
-    let mut buf = [0u8; 12];
-    let mut len = buf.len() as u32;
-    let approved = unsafe {
-        RegGetValueW(HKEY_CURRENT_USER, APPROVED, LEGACY_NAME, RRF_RT_REG_BINARY, None, Some(buf.as_mut_ptr() as *mut _), Some(&mut len))
-    } == ERROR_SUCCESS;
-    for path in [RUN, APPROVED] {
-        if let Ok(key) = open(path) {
-            unsafe {
-                let _ = RegDeleteValueW(key, LEGACY_NAME);
-                let _ = RegCloseKey(key);
-            }
-        }
-    }
-    had && (!approved || buf[0] % 2 == 0)
-}
-
 /// Csomagolva (MSIX-ként telepítve) fut-e a program.
 pub fn packaged() -> bool {
     use windows::Win32::Foundation::APPMODEL_ERROR_NO_PACKAGE;

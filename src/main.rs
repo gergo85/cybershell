@@ -44,7 +44,6 @@ use crate::hub::settings::SettingsWin;
 use crate::hub::start::LaunchWin;
 use crate::lifecycle::emergency_cleanup;
 use crate::lifecycle::guard;
-use crate::lifecycle::migrate_legacy;
 use crate::lifecycle::recover_stale;
 use crate::lifecycle::statusline;
 use crate::web::fly_url;
@@ -278,7 +277,6 @@ fn main() {
         }
         std::mem::forget(_m);
     }
-    let legacy_autostart = migrate_legacy();
 
     // Az előző futás naplóját megtartjuk (cybershell.prev.log), hogy egy sikertelen
     // indítás nyoma ne vesszen el.
@@ -302,9 +300,6 @@ fn main() {
     }
     let started_at = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     log(format!("indulás (unix idő: {started_at}), paraméterek: {:?}, verzió: {}", &args[1..], version_label()));
-    if legacy_autostart {
-        log("a régi CyberHub „Indulás a géppel” bejegyzése törölve, a CyberShell veszi át");
-    }
 
     // Bejelentkezéskori indulás (a Run kulcs a --autostart kapcsolóval indít, csomagolva az
     // indítási feladat kapcsoló nélkül): megvárjuk, amíg az Intéző és a tálca elkészül, különben
@@ -340,7 +335,7 @@ fn main() {
     if !ui_dir.join("hub.html").exists() {
         log("nincs ui mappa az exe mellett: a beágyazott felület töltődik be");
     }
-    let (cfg, cfg_path) = lifecycle::prepare_config(&base_dir, value("--config").map(PathBuf::from), legacy_autostart);
+    let (cfg, cfg_path) = lifecycle::prepare_config(&base_dir, value("--config").map(PathBuf::from));
     let hide_taskbar = cfg.hide_taskbar && !flag("--keep-taskbar");
     let exit_after = value("--exit-after").and_then(|s| s.parse::<u64>().ok()).map(Duration::from_secs);
     log(format!("mappa: {}", base_dir.display()));

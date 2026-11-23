@@ -43,7 +43,7 @@ When installed as a package, *Start with Windows* uses the package's startup tas
 ## Source code layout
 
 - `ui\hub.html`: the interface skeleton; `ui\core.js`: shared helpers; `ui\parts\*.js`: one file per surface (Icons, panel, frames, settings, Start menu, pop-up, preview, break bar); `ui\hub.js`: the loader that picks one by the address. Texts are in `ui\i18n.js`, line icons in `ui\icons.js`.
-- `src\main.rs`: entry point and event loop; `src\web.rs`: serving the interfaces and pop-up windows; `src\lifecycle.rs`: start, shutdown, migration from the old name.
+- `src\main.rs`: entry point and event loop; `src\web.rs`: serving the interfaces and pop-up windows; `src\lifecycle.rs`: start and shutdown.
 - `ui\ical.js`: the shared iCal parser (used by the calendar and the Events module).
 - `ui\modules\`: the info panel modules, one `.js` and one `.css` file each; how to write a new module: `ui\modules\README.md` (Hungarian).
 - `src\hub.rs` and `src\hub\`: the central state of the program, by topic: layout (`layout`), Icons (`icons`), panel (`panel`), Claude (`claude`), settings (`settings`), preview (`preview`), pop-up (`flyout`), Start menu (`start`), Health (`health`), theme (`theme`), Windows sync and neon border (`sync`).

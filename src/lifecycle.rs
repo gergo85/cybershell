@@ -1,9 +1,7 @@
-//! Indulás és leállás körüli teendők: átállás a régi névről, egy korábbi futás maradványainak
-//! eltakarítása, az őrfolyamat, vészleállás, alapbeállítás és a Claude Code állapotsor-parancsa.
+//! Indulás és leállás körüli teendők: egy korábbi futás maradványainak eltakarítása,
+//! az őrfolyamat, vészleállás, alapbeállítás és a Claude Code állapotsor-parancsa.
 
-use crate::APP_NAME;
 use crate::CLEANUP;
-use crate::HOTKEY_EXIT;
 use crate::LOG;
 use crate::config::Config;
 use crate::data_dir;
@@ -12,42 +10,11 @@ use crate::state_path;
 use crate::{appbar, autostart, config, usage};
 use serde_json::json;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
-use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, WPARAM};
+use std::time::Duration;
+use windows::Win32::Foundation::{CloseHandle, HWND};
 use windows::Win32::System::Threading::{INFINITE, OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject};
-use windows::Win32::UI::WindowsAndMessaging::{FindWindowW, PostMessageW, WM_HOTKEY};
+use windows::Win32::UI::WindowsAndMessaging::FindWindowW;
 use windows::core::w;
-
-/// Átállás a régi névről (v1.2-ig CyberHub): ha a régi program még fut, szabályosan
-/// leállítjuk; az adatmappáját (claude.ai-belépés, napló) átnevezzük, a régi
-/// „Indulás a géppel” bejegyzést töröljük. Igazat ad, ha a régi bejegyzés be volt kapcsolva.
-pub(crate) fn migrate_legacy() -> bool {
-    unsafe {
-        if let Ok(h) = FindWindowW(None, w!("CyberHub left"))
-            && !h.is_invalid()
-        {
-            let _ = PostMessageW(Some(h), WM_HOTKEY, WPARAM(HOTKEY_EXIT as usize), LPARAM(0));
-            let t0 = Instant::now();
-            while t0.elapsed() < Duration::from_secs(8) && FindWindowW(None, w!("CyberHub left")).is_ok_and(|h| !h.is_invalid()) {
-                std::thread::sleep(Duration::from_millis(150));
-            }
-            // az őrfolyamat és a WebView2 is engedje el a mappát
-            std::thread::sleep(Duration::from_millis(1200));
-        }
-    }
-    if let Ok(base) = std::env::var("LOCALAPPDATA").map(PathBuf::from) {
-        let (old, new) = (base.join("CyberHub"), base.join(APP_NAME));
-        if old.is_dir() && !new.exists() {
-            for _ in 0..10 {
-                if std::fs::rename(&old, &new).is_ok() {
-                    break;
-                }
-                std::thread::sleep(Duration::from_millis(500));
-            }
-        }
-    }
-    autostart::remove_legacy()
-}
 
 /// Átállás az adatmappára: a `config.json` és a `wallpapers` mappa korábban az exe mellett
 /// volt (`old`), most az adatmappában (`new`, %LOCALAPPDATA%\CyberShell) van, mert a
@@ -133,7 +100,7 @@ fn remove_obsolete_wallpapers(dir: &Path, walls: &[(&str, &[u8])]) -> usize {
 /// háttérképek, a config.json betöltése (hibánál alapbeállítás), az „Indulás a géppel”
 /// összehangolása a Windowszal, végül a kiegészített fájl visszaírása. A `custom` a --config
 /// kapcsoló fájlja (ilyenkor nincs költöztetés). Visszaadja a beállítást és a fájl helyét.
-pub(crate) fn prepare_config(base_dir: &Path, custom: Option<PathBuf>, legacy_autostart: bool) -> (Config, PathBuf) {
+pub(crate) fn prepare_config(base_dir: &Path, custom: Option<PathBuf>) -> (Config, PathBuf) {
     // A beállítások és a háttérképek az adatmappában vannak (a program mappája lehet
     // írásvédett); a korábban az exe mellett tartottakat az első induláskor átmásoljuk.
     let walls_moved = custom.is_none() && migrate_data(base_dir, &data_dir());
@@ -178,7 +145,7 @@ pub(crate) fn prepare_config(base_dir: &Path, custom: Option<PathBuf>, legacy_au
     // „Indulás a géppel”: a konfigurációs fájl az irányadó. Ha még nincs benne,
     // a Windows jelenlegi beállítását vesszük át. Bekapcsolt állapotban a bejegyzést
     // mindig frissítjük (aktuális exe-útvonal, az Intézőre váró indítás).
-    let registered = autostart::is_enabled() || legacy_autostart;
+    let registered = autostart::is_enabled();
     let mut autostart_changed = false;
     match cfg.start_with_windows {
         None => cfg.start_with_windows = Some(registered),

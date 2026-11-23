@@ -44,7 +44,7 @@ Csomagként telepítve az „Indulás a géppel” a Run kulcs helyett a csomag 
 ## A forráskód felépítése
 
 - `ui\hub.html`: a felület váza; `ui\core.js`: közös segédek; `ui\parts\*.js`: felületenként egy fájl (Ikonok, panel, keretek, beállítások, Start menü, oldalpanel, előnézet, szünet-sáv); `ui\hub.js`: az indító, ami a cím szerint választ közülük. A szövegek az `ui\i18n.js`-ben, a vonalikonok az `ui\icons.js`-ben vannak.
-- `src\main.rs`: a belépési pont és az eseményhurok; `src\web.rs`: a felületek kiszolgálása és a felugró ablakok; `src\lifecycle.rs`: indulás, leállás, átállás a régi névről.
+- `src\main.rs`: a belépési pont és az eseményhurok; `src\web.rs`: a felületek kiszolgálása és a felugró ablakok; `src\lifecycle.rs`: indulás és leállás.
 - `ui\ical.js`: a közös iCal-értelmező (a naptár és az Események modul használja).
 - `ui\modules\`: az információs panel moduljai, modulonként egy `.js` és egy `.css` fájl; új modul írásának leírása: `ui\modules\README.md`.
 - `src\hub.rs` és `src\hub\`: a program központi állapota, témák szerint: elrendezés (`layout`), Ikonok (`icons`), panel (`panel`), Claude (`claude`), beállítások (`settings`), előnézet (`preview`), oldalpanel (`flyout`), Start menü (`start`), Egészség (`health`), téma (`theme`), igazodás a Windowshoz és neonkeret (`sync`).

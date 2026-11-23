@@ -47,6 +47,4 @@ No `CyberShell.exe` yet? [Build it from source](docs/en/development.md#building-
 
 CyberShell is free for everyone, at home and at work, and its source code is public. You may use, change and share it, but you may not sell it or charge money for it, support and hosting fees included. The terms are in [LICENSE](LICENSE): the MIT License with the Commons Clause condition.
 
-> From v1.3 the app is called CyberShell (formerly CyberHub). On first start it shuts down a still running CyberHub cleanly and takes over its data folder (including the claude.ai sign-in) and its "Start with Windows" setting.
-
 *CyberShell is an independent project inspired by Cyberpunk 2077 and Ghost in the Shell. It is not affiliated with CD PROJEKT RED or the rights holders of either.*

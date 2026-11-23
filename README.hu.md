@@ -47,6 +47,4 @@ Nincs még `CyberShell.exe`? [Fordítsd le forrásból](docs/hu/development.md#f
 
 A CyberShell mindenkinek ingyenes, otthon és munkahelyen is, a forráskódja pedig nyilvános. Használhatod, módosíthatod és megoszthatod, de eladni vagy pénzt kérni érte nem szabad, a támogatási és tárhelydíjat is beleértve. A feltételek a [LICENSE](LICENSE) fájlban vannak: MIT licenc a Commons Clause kikötéssel.
 
-> A v1.3-tól CyberShell (korábban CyberHub). Az első indításkor a program szabályosan leállítja a még futó CyberHubot, átveszi az adatmappáját (a claude.ai-belépéssel együtt) és az „Indulás a géppel” beállítását.
-
 *A CyberShell független projekt, amelyet a Cyberpunk 2077 és a Ghost in the Shell ihletett. Nincs kapcsolata a CD PROJEKT RED-del, sem egyik mű jogtulajdonosával.*
