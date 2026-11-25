@@ -77,6 +77,14 @@
         secRecent: '// OSTATNIE', sRecent: 'Ostatnie', recentNone: 'Brak często używanych programów',
         recentHint: 'Często używane programy, jak w wyszukiwarce',
       },
+      de: {
+        secRecent: '// ZULETZT', sRecent: 'Zuletzt', recentNone: 'Noch keine häufig genutzten Programme',
+        recentHint: 'Deine häufig genutzten Programme, wie in der Suche',
+      },
+      es: {
+        secRecent: '// RECIENTES', sRecent: 'Recientes', recentNone: 'Aún no hay programas de uso frecuente',
+        recentHint: 'Tus programas de uso frecuente, como en la búsqueda',
+      },
     },
   });
 })();

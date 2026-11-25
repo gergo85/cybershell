@@ -79,6 +79,14 @@
         secPower: '// ZASILANIE', sPower: 'Zasilanie', pwLock: 'Blokuj', pwOff: 'Wyłącz', pwRestart: 'Restart',
         pwLockT: 'Zablokuj', pwSleepT: 'Uśpij', pwOffT: 'Wyłącz', pwRestartT: 'Uruchom ponownie',
       },
+      de: {
+        secPower: '// ENERGIE', sPower: 'Energie', pwLock: 'Sperren', pwOff: 'Aus', pwRestart: 'Neustart',
+        pwLockT: 'Sperren', pwSleepT: 'Energie sparen', pwOffT: 'Herunterfahren', pwRestartT: 'Neu starten',
+      },
+      es: {
+        secPower: '// ENERGÍA', sPower: 'Energía', pwLock: 'Bloquear', pwOff: 'Apagar', pwRestart: 'Reiniciar',
+        pwLockT: 'Bloquear', pwSleepT: 'Suspender', pwOffT: 'Apagar', pwRestartT: 'Reiniciar',
+      },
     },
   });
 })();

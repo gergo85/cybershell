@@ -42,11 +42,31 @@ When installed as a package, *Start with Windows* uses the package's startup tas
 
 ## Source code layout
 
-- `ui\hub.html`: the interface skeleton; `ui\core.js`: shared helpers; `ui\parts\*.js`: one file per surface (Icons, panel, frames, settings, Start menu, pop-up, preview, break bar); `ui\hub.js`: the loader that picks one by the address. Texts are in `ui\i18n.js`, line icons in `ui\icons.js`.
-- `src\main.rs`: entry point and event loop; `src\web.rs`: serving the interfaces and pop-up windows; `src\lifecycle.rs`: start and shutdown.
-- `ui\ical.js`: the shared iCal parser (used by the calendar and the Events module).
-- `ui\modules\`: the info panel modules, one `.js` and one `.css` file each; how to write a new module: `ui\modules\README.md` (Hungarian).
-- `src\hub.rs` and `src\hub\`: the central state of the program, by topic: layout (`layout`), Icons (`icons`), panel (`panel`), Claude (`claude`), settings (`settings`), preview (`preview`), pop-up (`flyout`), Start menu (`start`), Health (`health`), theme (`theme`), Windows sync and neon border (`sync`).
-- The other modules talk to Windows: bars (`appbar`), windows (`wintrack`), program list (`apps`), Win key (`keyhook`), clipboard (`clipboard`), Spotify (`media`), system (`sys`), hardware components (`hardware`, `wmi`), Bluetooth device batteries (`periph`), start with Windows (`autostart`), configuration (`config`), Claude usage (`usage`), window thumbnails (`peek`), Windows theme, accent color, Windows Terminal and window borders (`winsync`).
+### The program (Rust)
 
-Opened in a browser, `preview.html` shows the whole screen with demo data (through a simple local web server, because browsers do not load the embedded parts from `file://` addresses). The layout can be tried too: `preview.html?icons=top&info=bottom` (position of the Icons and the panel). The Start menu and search can be viewed separately: `ui/hub.html?part=launcher&mode=start` and `ui/hub.html?part=launcher&mode=search&q=fenykep`.
+- `src\main.rs`: entry point and event loop; background threads report to the main thread with `UserEvent` messages. `src\lifecycle.rs`: start and shutdown. `src\web.rs`: serving the interfaces, their addresses and the shared frame of the pop-up windows.
+- `src\hub.rs` and `src\hub\`: the central state of the program (`Hub`). Its fields are grouped into sections by topic, its methods live in one file per topic: layout (`layout`), Icons and launching (`icons`), info panel (`panel`), Recent (`recent`), Claude (`claude`), settings (`settings`), window preview (`preview`), pop-up and calendar (`flyout`), Start menu (`start`), Health and the red warning bars (`health`), desktop menu (`deskmenu`), internet connection (`net`), theme (`theme`), Windows sync and neon border (`sync`).
+- The other modules talk to Windows: bars (`appbar`), windows (`wintrack`), program list (`apps`), Win key (`keyhook`), the desktop menu's mouse hook and reading the Windows desktop menu (`deskmenu`), clipboard (`clipboard`), Spotify (`media`), system (`sys`), system monitor (`monitor`), notification area (`tray`), neon border overlay (`neon`), hardware components (`hardware`, `wmi`), Bluetooth device batteries (`periph`), start with Windows (`autostart`), configuration (`config`), Claude and Codex usage (`usage`, `codex`), window thumbnails (`peek`), Windows theme, accent color, Windows Terminal and window borders (`winsync`).
+- Shared helper modules: reading and writing the registry (`reg`), converting icons to PNG (`bitmap`), COM on background threads (`com`).
+
+New data for the info panel, on the program side: a `send_…` function (or `…_poll` and `on_…` for a background query) in `src\hub\panel.rs`, and a `Feed` field in the panel data section of `Hub`. The `Feed` keeps the last message sent: an unchanged message is not sent again, and the panel gets it back after a reload. Slow queries (registry, files, device manager) belong on a background thread, like those of the Background apps, Codex and Peripherals modules.
+
+### The interface (HTML, JS, CSS)
+
+- `ui\hub.html`: the interface skeleton, listing every script and stylesheet. `ui\core.js`: shared helpers (`window.HUB`). `ui\hub.js`: the loader that builds the interface from the `part` parameter of the address. `ui\parts\*.js`: one file per surface (Icons, panel, frames, settings, Start menu, pop-up, preview, break bar, desktop menu).
+- Texts are in `ui\i18n.js`, line icons in `ui\icons.js`, the shared iCal parser in `ui\ical.js`.
+- `ui\modules\`: the info panel modules, one `.js` and one `.css` file each; how to write a new module: `ui\modules\README.md` (Hungarian).
+
+The larger surfaces follow the same pattern: a frame and the parts registered with it. A part is an object: `html()` returns its markup, `setup(ctx)` wires it up and returns hooks (for example `message(msg)` for messages from the program, `demo()` for the preview). The frame only does the shared work and talks to the parts through their hooks.
+
+| Frame | Registration | Parts |
+|---|---|---|
+| `parts\panel.js` | `HUB.defineModule({…})` | `ui\modules\*.js` |
+| `parts\flyout.js` | `HUB.flyViews.push({…})` | `parts\fly-weather.js`, `fly-calendar.js`, `fly-note.js` |
+| `parts\settings.js` | `HUB.settingsPanes.push({ id, … })` | `parts\settings-programs.js`, `settings-system.js` |
+
+A new part must also be added to `hub.html`, before the script of its frame. The Panels, Appearance and Features tabs of the settings are still in `settings.js`; if one moves to its own file, it should follow the same pattern. A part only touches its own elements; it reaches the elements of the frame (such as the tab rail) through the functions of `ctx`.
+
+### Preview in the browser
+
+Opened in a browser, `preview.html` shows the whole screen with demo data (through a simple local web server, because browsers do not load the embedded parts from `file://` addresses). The layout can be tried too: `preview.html?icons=top&info=bottom` (position of the Icons and the panel). The Start menu and search can be viewed separately: `ui/hub.html?part=launcher&mode=start` and `ui/hub.html?part=launcher&mode=search&q=fenykep`. The same goes for the views of the pop-up (`ui/hub.html?part=fly&view=calendar`, `events`, `note`; the weather by default) and the tabs of the settings (`ui/hub.html?part=settings&tab=programs`, `panels`, `look`, `features`, `system`).

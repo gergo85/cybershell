@@ -81,6 +81,14 @@
         secNet: '// SIEĆ', sNet: 'Sieć', sNetHint: 'Pobieranie, wysyłanie i czas odpowiedzi (ping); cel pingu to network.pingHost w config.json',
         netTip: 'Kliknij, aby otworzyć ustawienia sieci', nmNoReply: 'BRAK', nmPingTo: 'Czas odpowiedzi: {h}', decSep: ',',
       },
+      de: {
+        secNet: '// NETZWERK', sNet: 'Netzwerk', sNetHint: 'Download, Upload und Antwortzeit (Ping); das Ping-Ziel ist network.pingHost in config.json',
+        netTip: 'Klicken für die Netzwerkeinstellungen', nmNoReply: 'KEINE', nmPingTo: 'Antwortzeit: {h}', decSep: ',',
+      },
+      es: {
+        secNet: '// RED', sNet: 'Red', sNetHint: 'Descarga, subida y tiempo de respuesta (ping); el destino del ping es network.pingHost en config.json',
+        netTip: 'Haz clic para la configuración de red', nmNoReply: 'NADA', nmPingTo: 'Tiempo de respuesta: {h}', decSep: ',',
+      },
     },
   });
 })();

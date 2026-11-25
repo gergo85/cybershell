@@ -4,12 +4,11 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM};
 use windows::Win32::Graphics::Dwm::{DWMWA_CLOAKED, DwmGetWindowAttribute};
-use windows::Win32::Graphics::Gdi::{
-    BI_RGB, BITMAP, BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS, DeleteObject, GetDC, GetDIBits, GetObjectW, HGDIOBJ, ReleaseDC,
-};
+use windows::Win32::Graphics::Gdi::{DeleteObject, HGDIOBJ};
 use windows::Win32::Storage::FileSystem::{GetFileVersionInfoSizeW, GetFileVersionInfoW, VerQueryValueW};
 use windows::Win32::System::ProcessStatus::{
     K32EnumProcesses, K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS, PROCESS_MEMORY_COUNTERS_EX2,
@@ -18,18 +17,22 @@ use windows::Win32::System::Threading::{OpenProcess, PROCESS_NAME_WIN32, PROCESS
 use windows::Win32::UI::Input::KeyboardAndMouse::{KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, VK_MENU, keybd_event};
 use windows::Win32::UI::Shell::{SHDefExtractIconW, ShellExecuteW};
 use windows::Win32::UI::WindowsAndMessaging::{
-    DestroyIcon, EnumWindows, GA_ROOTOWNER, GW_OWNER, GWL_EXSTYLE, GWL_STYLE, GetAncestor, GetClassNameW, GetIconInfo, GetWindow,
-    GetWindowLongPtrW, GetWindowTextW, GetWindowThreadProcessId, HICON, HWND_NOTOPMOST, HWND_TOPMOST, ICONINFO, IsIconic, IsWindowVisible,
-    SW_MAXIMIZE, SW_MINIMIZE, SW_RESTORE, SW_SHOWMAXIMIZED, SW_SHOWNORMAL, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SetForegroundWindow,
-    SetWindowPos, ShowWindow, WS_EX_APPWINDOW, WS_EX_TOOLWINDOW, WS_MAXIMIZEBOX,
+    ASFW_ANY, AllowSetForegroundWindow, DestroyIcon, EnumWindows, GA_ROOTOWNER, GW_OWNER, GWL_EXSTYLE, GWL_STYLE, GetAncestor,
+    GetClassNameW, GetIconInfo, GetWindow, GetWindowLongPtrW, GetWindowTextW, GetWindowThreadProcessId, HICON, HWND_NOTOPMOST,
+    HWND_TOPMOST, ICONINFO, IsIconic, IsWindowVisible, SW_MAXIMIZE, SW_MINIMIZE, SW_RESTORE, SW_SHOWMAXIMIZED, SW_SHOWNORMAL,
+    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SetForegroundWindow, SetWindowPos, ShowWindow, WS_EX_APPWINDOW, WS_EX_TOOLWINDOW,
+    WS_MAXIMIZEBOX,
 };
 use windows::core::{BOOL, HSTRING, PCWSTR, PWSTR};
 
+use crate::bitmap;
 use crate::config::AppEntry;
 
 #[derive(Clone, Debug)]
 pub struct WinInfo {
     pub hwnd: HWND,
+    /// A folyamat azonosítója.
+    pub pid: u32,
     /// A program teljes elérési útja (eredeti kis- és nagybetűkkel).
     pub path: String,
     /// Az exe neve kisbetűvel (pl. "chrome.exe").
@@ -156,8 +159,13 @@ fn is_app_window(hwnd: HWND) -> bool {
     !IGNORED_CLASSES.contains(&class.as_str())
 }
 
+/// Az ablakfigyelő: a folyamatok útvonalát megjegyzi, hogy ne kelljen minden lekérdezésnél
+/// újra megnyitni őket.
 #[derive(Default)]
 pub struct Tracker {
+    /// Folyamatazonosító → program útvonala (üres: nem kérdezhető le). Csak a legutóbbi
+    /// felsorolásban ablakkal szereplő folyamatok maradnak benne, így egy kilépett folyamat
+    /// újra kiosztott azonosítójához nem a régi program útvonala tartozik.
     pid_cache: HashMap<u32, String>,
     polls: u32,
 }
@@ -165,6 +173,14 @@ pub struct Tracker {
 impl Tracker {
     /// Az összes látható alkalmazásablak z-sorrendben (legfelső elöl).
     pub fn snapshot(&mut self, own: &[HWND]) -> Vec<WinInfo> {
+        let out = self.collect_windows(own);
+        let live: HashSet<u32> = out.iter().map(|w| w.pid).collect();
+        self.pid_cache.retain(|pid, _| live.contains(pid));
+        out
+    }
+
+    fn collect_windows(&mut self, own: &[HWND]) -> Vec<WinInfo> {
+        // percenként elölről: ami egyszer nem volt lekérdezhető, újra próbálkozunk vele
         self.polls += 1;
         if self.polls.is_multiple_of(120) {
             self.pid_cache.clear();
@@ -198,6 +214,7 @@ impl Tracker {
             let style = unsafe { GetWindowLongPtrW(hwnd, GWL_STYLE) } as u32;
             out.push(WinInfo {
                 hwnd,
+                pid,
                 path,
                 exe,
                 title: title_raw.to_lowercase(),
@@ -283,13 +300,31 @@ fn pcwstr(h: &Option<HSTRING>) -> PCWSTR {
     }
 }
 
+/// Az indított (vagy a már futó, ezért csak előjövő) program előtérbe hozhassa az ablakát. A
+/// Windows ezt csak az előtérben lévő folyamattól örökölt engedéllyel hagyja; enélkül az ablak
+/// a többi mögött nyílik meg, és csak villog a tálcán. Csak addig hat, amíg nincs újabb bevitel.
+fn allow_foreground() {
+    unsafe {
+        let _ = AllowSetForegroundWindow(ASFW_ANY);
+    }
+}
+
 /// Indítás a Windows héjon keresztül (exe, mappa, URI, Store-app egyaránt).
 pub fn shell_open(file: &str, args: &str, cwd: &str, maximized: bool) -> bool {
     let file = HSTRING::from(file);
     let args = opt(args);
     let cwd = opt(cwd);
     let show = if maximized { SW_SHOWMAXIMIZED } else { SW_SHOWNORMAL };
+    allow_foreground();
     let r = unsafe { ShellExecuteW(None, &HSTRING::from("open"), &file, pcwstr(&args), pcwstr(&cwd), show) };
+    r.0 as isize > 32
+}
+
+/// Megnyitás adott művelettel (pl. "runas": futtatás rendszergazdaként).
+pub fn shell_verb(verb: &str, file: &str, args: &str) -> bool {
+    let args = opt(args);
+    allow_foreground();
+    let r = unsafe { ShellExecuteW(None, &HSTRING::from(verb), &HSTRING::from(file), pcwstr(&args), PCWSTR::null(), SW_SHOWNORMAL) };
     r.0 as isize > 32
 }
 
@@ -376,19 +411,27 @@ fn version_strings(path: &str, keys: &[&str]) -> Vec<Option<String>> {
     }
 }
 
-static ICON_CACHE: Mutex<Option<HashMap<String, Option<Vec<u8>>>>> = Mutex::new(None);
+/// Egy kinyert ikon (None: nem sikerült) és a kinyerés ideje.
+type IconEntry = (Option<Vec<u8>>, Instant);
+
+/// A kinyert ikonok, kisbetűs útvonal szerint.
+static ICON_CACHE: Mutex<Option<HashMap<String, IconEntry>>> = Mutex::new(None);
+
+/// Ennyi idő után próbáljuk újra egy ikon kinyerését, ha nem sikerült (pl. épp frissült a program).
+const ICON_RETRY: Duration = Duration::from_secs(60);
 
 /// A program ikonja PNG-ként (48 px), gyorsítótárazva.
 pub fn icon_png(path: &str) -> Option<Vec<u8>> {
     let key = path.to_lowercase();
     if let Ok(g) = ICON_CACHE.lock()
-        && let Some(hit) = g.as_ref().and_then(|m| m.get(&key))
+        && let Some((hit, at)) = g.as_ref().and_then(|m| m.get(&key))
+        && (hit.is_some() || at.elapsed() < ICON_RETRY)
     {
         return hit.clone();
     }
     let png = extract_icon(path);
     if let Ok(mut g) = ICON_CACHE.lock() {
-        g.get_or_insert_with(HashMap::new).insert(key, png.clone());
+        g.get_or_insert_with(HashMap::new).insert(key, (png.clone(), Instant::now()));
     }
     png
 }
@@ -425,58 +468,15 @@ unsafe fn hicon_to_png(icon: HICON) -> Option<Vec<u8>> {
             cleanup();
             return None;
         }
-        let mut bm = BITMAP::default();
-        GetObjectW(HGDIOBJ(color.0), std::mem::size_of::<BITMAP>() as i32, Some(&mut bm as *mut _ as *mut _));
-        let (w, h) = (bm.bmWidth, bm.bmHeight);
+        let (w, h) = bitmap::size(color);
         if w <= 0 || h <= 0 || w > 256 || h > 256 {
             cleanup();
             return None;
         }
-        let mut bi = BITMAPINFO {
-            bmiHeader: BITMAPINFOHEADER {
-                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-                biWidth: w,
-                biHeight: -h,
-                biPlanes: 1,
-                biBitCount: 32,
-                biCompression: BI_RGB.0,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let mut px = vec![0u8; (w * h * 4) as usize];
-        let hdc = GetDC(None);
-        let lines = GetDIBits(hdc, color, 0, h as u32, Some(px.as_mut_ptr() as *mut _), &mut bi, DIB_RGB_COLORS);
-        ReleaseDC(None, hdc);
+        let px = bitmap::pixels(color, w, h);
         cleanup();
-        if lines == 0 {
-            return None;
-        }
-        // BGRA → RGBA; régi ikonoknál nincs alfa, ott teljesen átlátszatlan
-        let has_alpha = px.as_chunks::<4>().0.iter().any(|p| p[3] != 0);
-        for p in px.as_chunks_mut::<4>().0 {
-            p.swap(0, 2);
-            if !has_alpha {
-                p[3] = 255;
-            }
-        }
-        let mut out = Vec::new();
-        {
-            let mut enc = png::Encoder::new(&mut out, w as u32, h as u32);
-            enc.set_color(png::ColorType::Rgba);
-            enc.set_depth(png::BitDepth::Eight);
-            let mut writer = enc.write_header().ok()?;
-            writer.write_image_data(&px).ok()?;
-        }
-        Some(out)
+        bitmap::bgra_to_png(px?, w, h, false)
     }
-}
-
-/// Megnyitás adott művelettel (pl. "runas": futtatás rendszergazdaként).
-pub fn shell_verb(verb: &str, file: &str, args: &str) -> bool {
-    let args = opt(args);
-    let r = unsafe { ShellExecuteW(None, &HSTRING::from(verb), &HSTRING::from(file), pcwstr(&args), PCWSTR::null(), SW_SHOWNORMAL) };
-    r.0 as isize > 32
 }
 
 #[cfg(test)]

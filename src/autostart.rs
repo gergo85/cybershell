@@ -144,7 +144,7 @@ mod task {
     /// nélküli vagy egyszálú, ott a várakozás az aszinkron műveletre elakadhatna.
     pub(super) fn on_mta<T: Send + 'static>(f: impl FnOnce() -> windows::core::Result<T> + Send + 'static) -> Result<T, String> {
         std::thread::spawn(move || {
-            let _com = crate::wmi::ComThread::init();
+            let _com = crate::com::ComThread::init();
             f().map_err(|e| e.message().to_string())
         })
         .join()

@@ -1,0 +1,50 @@
+/* Saját asztali menü: a Windows asztali menüjének parancsai a CyberShell stílusában. Az ablakból csak a menük területe látszik. */
+
+.desk { position: absolute; inset: 0; overflow: hidden; }
+.dm-panel {
+  position: absolute; left: 0; top: 0; display: flex; flex-direction: column; min-width: 236px; max-width: 460px; padding: 5px;
+  background:
+    repeating-linear-gradient(0deg, rgba(255,255,255,.018) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at 0% 0%, color-mix(in srgb, var(--c-main) 8%, transparent), transparent 70%),
+    var(--c-bg);
+  border: 1px solid color-mix(in srgb, var(--c-main) 38%, transparent);
+}
+/* a felugró ablakok jellegzetes sarokjelei (sárga fent, kék lent) */
+.dm-panel::before {
+  content: ""; position: absolute; left: -1px; top: -1px; width: 42px; height: 3px;
+  background: var(--c-main); box-shadow: 0 0 8px var(--c-main-glow);
+}
+.dm-panel::after {
+  content: ""; position: absolute; right: -1px; bottom: -1px; width: 22px; height: 3px;
+  background: var(--c-alt); box-shadow: 0 0 8px var(--c-alt-dim);
+}
+.dm-item {
+  height: 30px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 4px; text-align: left;
+  font-size: 13px; letter-spacing: .03em; color: var(--c-text); font-variation-settings: "wdth" 90, "wght" 500;
+  white-space: nowrap; cursor: default;
+}
+.dm-item.def .dm-label { font-variation-settings: "wdth" 90, "wght" 700; }
+.dm-item.hot, .dm-item.open { background: color-mix(in srgb, var(--c-main) 22%, transparent); }
+.dm-item.off { color: var(--c-text-dim); }
+.dm-item.off.hot { background: color-mix(in srgb, var(--c-text) 8%, transparent); }
+.dm-mark { flex: none; width: 18px; height: 18px; display: grid; place-items: center; color: var(--c-main); }
+.dm-mark svg { width: 15px; height: 15px; }
+.dm-radio { width: 7px; height: 7px; border-radius: 50%; background: var(--c-main); box-shadow: 0 0 6px var(--c-main-glow); }
+.dm-icon { flex: none; width: 16px; height: 16px; display: grid; place-items: center; }
+.dm-icon img { width: 16px; height: 16px; object-fit: contain; }
+.dm-item.off .dm-icon img { opacity: .45; }
+.dm-label { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+/* a gyorsbetűk aláhúzása csak billentyűhasználat után látszik (ahogy a Windowsban) */
+.desk:not(.kbd) .dm-label u { text-decoration: none; }
+.dm-label u { text-decoration-color: color-mix(in srgb, var(--c-main) 70%, transparent); text-underline-offset: 2px; }
+.dm-key { flex: none; padding-left: 18px; font: 400 10.5px/1 var(--f-mono); letter-spacing: .04em; color: var(--c-text-dim); }
+.dm-key:empty { display: none; }
+.dm-arrow { flex: none; width: 14px; height: 14px; display: grid; place-items: center; color: var(--c-main); }
+.dm-arrow svg { width: 13px; height: 13px; }
+.dm-item.off .dm-arrow, .dm-item.off .dm-mark { color: var(--c-text-dim); }
+.dm-sep { flex: none; height: 1px; margin: 4px 6px; background: color-mix(in srgb, var(--c-main) 18%, transparent); }
+
+/* demó (böngészőben): a menü az oldal tetején */
+.desk-demo body { background: color-mix(in srgb, #000 40%, var(--c-bg)); }
+
+html[data-scheme="light"] .dm-item { border-radius: 5px; }

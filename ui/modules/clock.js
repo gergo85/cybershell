@@ -33,6 +33,8 @@
       hu: { secClock: '// IDŐ', sClock: 'Idő' },
       en: { secClock: '// TIME', sClock: 'Time' },
       pl: { secClock: '// CZAS', sClock: 'Czas' },
+      de: { secClock: '// ZEIT', sClock: 'Zeit' },
+      es: { secClock: '// HORA', sClock: 'Hora' },
     },
   });
 })();

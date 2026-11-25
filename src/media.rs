@@ -42,10 +42,6 @@ fn now_ticks() -> i64 {
     unix + 116_444_736_000_000_000
 }
 
-fn now_ms() -> u64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
-}
-
 fn find_spotify(mgr: &Manager) -> Option<Session> {
     let list = mgr.GetSessions().ok()?;
     let n = list.Size().ok()?;
@@ -105,7 +101,7 @@ fn snapshot(s: &Session) -> serde_json::Value {
     json!({
         "type": "media", "running": true, "title": title, "artist": artist, "album": album,
         "playing": playing, "shuffle": shuffle, "canSeek": can_seek && dur > 0.0,
-        "pos": (pos * 10.0).round() / 10.0, "dur": (dur * 10.0).round() / 10.0, "at": now_ms(),
+        "pos": (pos * 10.0).round() / 10.0, "dur": (dur * 10.0).round() / 10.0, "at": crate::unix_ms(),
     })
 }
 
@@ -188,14 +184,14 @@ pub fn spawn(cmds: Receiver<Cmd>, deliver: impl Fn(serde_json::Value) + Send + '
                     let playing = v["playing"].as_bool().unwrap_or(false);
                     let drift = match last_sent {
                         Some((p, at, was_playing)) => {
-                            let expected = if was_playing { p + (now_ms().saturating_sub(at)) as f64 / 1000.0 } else { p };
+                            let expected = if was_playing { p + (crate::unix_ms().saturating_sub(at)) as f64 / 1000.0 } else { p };
                             (expected - pos).abs() > 1.5
                         }
                         None => true,
                     };
                     if key != last_key || drift {
                         last_key = key;
-                        last_sent = Some((pos, now_ms(), playing));
+                        last_sent = Some((pos, crate::unix_ms(), playing));
                         deliver(v);
                     }
                 }

@@ -46,6 +46,8 @@
       hu: { secDate: '// DÁTUM', sDate: 'Dátum', week: '{n}. HÉT', calOpen: 'Naptár' },
       en: { secDate: '// DATE', sDate: 'Date', week: 'WEEK {n}', calOpen: 'Calendar' },
       pl: { secDate: '// DATA', sDate: 'Data', week: 'TYDZ. {n}', calOpen: 'Kalendarz' },
+      de: { secDate: '// DATUM', sDate: 'Datum', week: 'KW {n}', calOpen: 'Kalender' },
+      es: { secDate: '// FECHA', sDate: 'Fecha', week: 'SEMANA {n}', calOpen: 'Calendario' },
     },
   });
 })();

@@ -163,61 +163,61 @@
     };
 
     // ── beállítások és rendszerműveletek (keresésben) ──
-    const L = (hu, en, pl) => ({ en, pl }[lang] || hu);
+    const L = (hu, en, pl, de, es) => ({ en, pl, de, es }[lang] || hu);
     const SETTINGS = [
-      ['display', L('Kijelző', 'Display', 'Ekran'), 'képernyő felbontás monitor fényerő skálázás screen resolution brightness scale'],
-      ['nightlight', L('Éjszakai fény', 'Night light', 'Światło nocne'), 'kék fény blue light'],
-      ['sound', L('Hang', 'Sound', 'Dźwięk'), 'hangszóró mikrofon kimenet bemenet speaker microphone output input audio'],
-      ['apps-volume', L('Hangerőkeverő', 'Volume mixer', 'Mikser głośności'), 'hangerő programonként volume per app'],
-      ['notifications', L('Értesítések', 'Notifications', 'Powiadomienia'), 'ne zavarjanak do not disturb focus'],
-      ['powersleep', L('Energiagazdálkodás', 'Power & sleep', 'Zasilanie i uśpienie'), 'alvás akkumulátor energia sleep battery power'],
-      ['batterysaver', L('Akkumulátor', 'Battery', 'Bateria'), 'energiatakarékos battery saver'],
-      ['storagesense', L('Tárhely', 'Storage', 'Magazyn'), 'lemez hely meghajtó disk space drive'],
-      ['multitasking', L('Többfeladatos működés', 'Multitasking', 'Wielozadaniowość'), 'ablak elrendezés snap windows'],
-      ['clipboard', L('Vágólap', 'Clipboard', 'Schowek'), 'másolás előzmények copy history'],
-      ['about', L('Névjegy (a gép adatai)', 'About (this PC)', 'Informacje (o komputerze)'), 'rendszer gépnév processzor memória system pc name specs'],
-      ['bluetooth', L('Bluetooth és eszközök', 'Bluetooth & devices', 'Bluetooth i urządzenia'), 'eszköz párosítás device pair'],
-      ['printers', L('Nyomtatók és lapolvasók', 'Printers & scanners', 'Drukarki i skanery'), 'nyomtató print scanner'],
-      ['mousetouchpad', L('Egér', 'Mouse', 'Mysz'), 'kurzor görgetés cursor scroll touchpad érintőpad'],
-      ['typing', L('Gépelés', 'Typing', 'Pisanie'), 'billentyűzet keyboard autocorrect'],
-      ['network', L('Hálózat és internet', 'Network & internet', 'Sieć i Internet'), 'net ethernet kapcsolat connection'],
-      ['network-wifi', L('Wi-Fi', 'Wi-Fi', 'Wi-Fi'), 'wifi vezeték nélküli wireless'],
-      ['network-vpn', L('VPN', 'VPN', 'VPN'), 'virtuális magánhálózat'],
-      ['personalization', L('Személyre szabás', 'Personalization', 'Personalizacja'), 'megjelenés appearance'],
-      ['personalization-background', L('Háttér', 'Background', 'Tło'), 'háttérkép wallpaper'],
-      ['colors', L('Színek', 'Colors', 'Kolory'), 'sötét mód világos dark mode light accent'],
-      ['lockscreen', L('Zárolási képernyő', 'Lock screen', 'Ekran blokady'), 'zárolás lock'],
-      ['themes', L('Témák', 'Themes', 'Motywy'), 'téma theme'],
-      ['fonts', L('Betűtípusok', 'Fonts', 'Czcionki'), 'betű font'],
-      ['appsfeatures', L('Telepített alkalmazások', 'Installed apps', 'Zainstalowane aplikacje'), 'program eltávolítás uninstall apps'],
-      ['defaultapps', L('Alapértelmezett alkalmazások', 'Default apps', 'Aplikacje domyślne'), 'társítás fájltípus default association'],
-      ['startupapps', L('Indítási alkalmazások', 'Startup apps', 'Aplikacje autostartu'), 'indítás autostart startup'],
-      ['yourinfo', L('Fiókadatok', 'Your info', 'Twoje informacje'), 'fiók account'],
-      ['signinoptions', L('Bejelentkezési lehetőségek', 'Sign-in options', 'Opcje logowania'), 'jelszó pin hello password'],
-      ['dateandtime', L('Dátum és idő', 'Date & time', 'Data i godzina'), 'óra időzóna clock time zone'],
-      ['regionlanguage', L('Nyelv és régió', 'Language & region', 'Język i region'), 'nyelv billentyűzetkiosztás language region keyboard layout'],
-      ['gaming-gamebar', L('Game Bar', 'Game Bar', 'Game Bar'), 'játék gaming'],
-      ['easeofaccess', L('Akadálymentesség', 'Accessibility', 'Ułatwienia dostępu'), 'nagyító felolvasó magnifier narrator'],
-      ['privacy', L('Adatvédelem és biztonság', 'Privacy & security', 'Prywatność i zabezpieczenia'), 'engedélyek permissions'],
-      ['windowsdefender', L('Windows biztonság', 'Windows Security', 'Zabezpieczenia Windows'), 'vírus védelem tűzfal virus defender firewall'],
-      ['windowsupdate', L('Windows Update', 'Windows Update', 'Windows Update'), 'frissítés update'],
+      ['display', L('Kijelző', 'Display', 'Ekran', 'Bildschirm', 'Pantalla'), 'képernyő felbontás monitor fényerő skálázás screen resolution brightness scale'],
+      ['nightlight', L('Éjszakai fény', 'Night light', 'Światło nocne', 'Nachtmodus', 'Luz nocturna'), 'kék fény blue light'],
+      ['sound', L('Hang', 'Sound', 'Dźwięk', 'Sound', 'Sonido'), 'hangszóró mikrofon kimenet bemenet speaker microphone output input audio'],
+      ['apps-volume', L('Hangerőkeverő', 'Volume mixer', 'Mikser głośności', 'Lautstärkemixer', 'Mezclador de volumen'), 'hangerő programonként volume per app'],
+      ['notifications', L('Értesítések', 'Notifications', 'Powiadomienia', 'Benachrichtigungen', 'Notificaciones'), 'ne zavarjanak do not disturb focus'],
+      ['powersleep', L('Energiagazdálkodás', 'Power & sleep', 'Zasilanie i uśpienie', 'Energie und Standby', 'Energía y suspensión'), 'alvás akkumulátor energia sleep battery power'],
+      ['batterysaver', L('Akkumulátor', 'Battery', 'Bateria', 'Akku', 'Batería'), 'energiatakarékos battery saver'],
+      ['storagesense', L('Tárhely', 'Storage', 'Magazyn', 'Speicher', 'Almacenamiento'), 'lemez hely meghajtó disk space drive'],
+      ['multitasking', L('Többfeladatos működés', 'Multitasking', 'Wielozadaniowość', 'Multitasking', 'Multitarea'), 'ablak elrendezés snap windows'],
+      ['clipboard', L('Vágólap', 'Clipboard', 'Schowek', 'Zwischenablage', 'Portapapeles'), 'másolás előzmények copy history'],
+      ['about', L('Névjegy (a gép adatai)', 'About (this PC)', 'Informacje (o komputerze)', 'Info (dieser PC)', 'Información (este equipo)'), 'rendszer gépnév processzor memória system pc name specs'],
+      ['bluetooth', L('Bluetooth és eszközök', 'Bluetooth & devices', 'Bluetooth i urządzenia', 'Bluetooth und Geräte', 'Bluetooth y dispositivos'), 'eszköz párosítás device pair'],
+      ['printers', L('Nyomtatók és lapolvasók', 'Printers & scanners', 'Drukarki i skanery', 'Drucker und Scanner', 'Impresoras y escáneres'), 'nyomtató print scanner'],
+      ['mousetouchpad', L('Egér', 'Mouse', 'Mysz', 'Maus', 'Mouse'), 'kurzor görgetés cursor scroll touchpad érintőpad'],
+      ['typing', L('Gépelés', 'Typing', 'Pisanie', 'Eingabe', 'Escritura'), 'billentyűzet keyboard autocorrect'],
+      ['network', L('Hálózat és internet', 'Network & internet', 'Sieć i Internet', 'Netzwerk und Internet', 'Red e Internet'), 'net ethernet kapcsolat connection'],
+      ['network-wifi', L('Wi-Fi', 'Wi-Fi', 'Wi-Fi', 'WLAN', 'Wi-Fi'), 'wifi vezeték nélküli wireless'],
+      ['network-vpn', L('VPN', 'VPN', 'VPN', 'VPN', 'VPN'), 'virtuális magánhálózat'],
+      ['personalization', L('Személyre szabás', 'Personalization', 'Personalizacja', 'Personalisierung', 'Personalización'), 'megjelenés appearance'],
+      ['personalization-background', L('Háttér', 'Background', 'Tło', 'Hintergrund', 'Fondo'), 'háttérkép wallpaper'],
+      ['colors', L('Színek', 'Colors', 'Kolory', 'Farben', 'Colores'), 'sötét mód világos dark mode light accent'],
+      ['lockscreen', L('Zárolási képernyő', 'Lock screen', 'Ekran blokady', 'Sperrbildschirm', 'Pantalla de bloqueo'), 'zárolás lock'],
+      ['themes', L('Témák', 'Themes', 'Motywy', 'Designs', 'Temas'), 'téma theme'],
+      ['fonts', L('Betűtípusok', 'Fonts', 'Czcionki', 'Schriftarten', 'Fuentes'), 'betű font'],
+      ['appsfeatures', L('Telepített alkalmazások', 'Installed apps', 'Zainstalowane aplikacje', 'Installierte Apps', 'Aplicaciones instaladas'), 'program eltávolítás uninstall apps'],
+      ['defaultapps', L('Alapértelmezett alkalmazások', 'Default apps', 'Aplikacje domyślne', 'Standard-Apps', 'Aplicaciones predeterminadas'), 'társítás fájltípus default association'],
+      ['startupapps', L('Indítási alkalmazások', 'Startup apps', 'Aplikacje autostartu', 'Autostart-Apps', 'Aplicaciones de arranque'), 'indítás autostart startup'],
+      ['yourinfo', L('Fiókadatok', 'Your info', 'Twoje informacje', 'Deine Infos', 'Tu información'), 'fiók account'],
+      ['signinoptions', L('Bejelentkezési lehetőségek', 'Sign-in options', 'Opcje logowania', 'Anmeldeoptionen', 'Opciones de inicio de sesión'), 'jelszó pin hello password'],
+      ['dateandtime', L('Dátum és idő', 'Date & time', 'Data i godzina', 'Datum und Uhrzeit', 'Fecha y hora'), 'óra időzóna clock time zone'],
+      ['regionlanguage', L('Nyelv és régió', 'Language & region', 'Język i region', 'Sprache und Region', 'Idioma y región'), 'nyelv billentyűzetkiosztás language region keyboard layout'],
+      ['gaming-gamebar', L('Game Bar', 'Game Bar', 'Game Bar', 'Game Bar', 'Game Bar'), 'játék gaming'],
+      ['easeofaccess', L('Akadálymentesség', 'Accessibility', 'Ułatwienia dostępu', 'Barrierefreiheit', 'Accesibilidad'), 'nagyító felolvasó magnifier narrator'],
+      ['privacy', L('Adatvédelem és biztonság', 'Privacy & security', 'Prywatność i zabezpieczenia', 'Datenschutz und Sicherheit', 'Privacidad y seguridad'), 'engedélyek permissions'],
+      ['windowsdefender', L('Windows biztonság', 'Windows Security', 'Zabezpieczenia Windows', 'Windows-Sicherheit', 'Seguridad de Windows'), 'vírus védelem tűzfal virus defender firewall'],
+      ['windowsupdate', L('Windows Update', 'Windows Update', 'Windows Update', 'Windows Update', 'Windows Update'), 'frissítés update'],
     ].map(([uri, name, kw]) => ({ kind: 'setting', key: `set:${uri}`, uri: `ms-settings:${uri}`, name, kw, icon: 'settings', sub: T('lxSettingSub') }));
     const TOOLS = [
-      ['control', L('Vezérlőpult', 'Control Panel', 'Panel sterowania'), 'control panel'],
-      ['devmgmt.msc', L('Eszközkezelő', 'Device Manager', 'Menedżer urządzeń'), 'illesztőprogram driver hardver'],
-      ['diskmgmt.msc', L('Lemezkezelés', 'Disk Management', 'Zarządzanie dyskami'), 'partíció partition meghajtó'],
-      ['services.msc', L('Szolgáltatások', 'Services', 'Usługi'), 'service'],
-      ['regedit', L('Beállításszerkesztő', 'Registry Editor', 'Edytor rejestru'), 'registry rendszerleíró'],
-      ['msinfo32', L('Rendszerinformáció', 'System Information', 'Informacje o systemie'), 'msinfo hardver'],
-      ['eventvwr.msc', L('Eseménynapló', 'Event Viewer', 'Podgląd zdarzeń'), 'napló log hiba error'],
+      ['control', L('Vezérlőpult', 'Control Panel', 'Panel sterowania', 'Systemsteuerung', 'Panel de control'), 'control panel'],
+      ['devmgmt.msc', L('Eszközkezelő', 'Device Manager', 'Menedżer urządzeń', 'Geräte-Manager', 'Administrador de dispositivos'), 'illesztőprogram driver hardver'],
+      ['diskmgmt.msc', L('Lemezkezelés', 'Disk Management', 'Zarządzanie dyskami', 'Datenträgerverwaltung', 'Administración de discos'), 'partíció partition meghajtó'],
+      ['services.msc', L('Szolgáltatások', 'Services', 'Usługi', 'Dienste', 'Servicios'), 'service'],
+      ['regedit', L('Beállításszerkesztő', 'Registry Editor', 'Edytor rejestru', 'Registrierungs-Editor', 'Editor del Registro'), 'registry rendszerleíró'],
+      ['msinfo32', L('Rendszerinformáció', 'System Information', 'Informacje o systemie', 'Systeminformationen', 'Información del sistema'), 'msinfo hardver'],
+      ['eventvwr.msc', L('Eseménynapló', 'Event Viewer', 'Podgląd zdarzeń', 'Ereignisanzeige', 'Visor de eventos'), 'napló log hiba error'],
     ].map(([cmd, name, kw]) => ({ kind: 'tool', key: `tool:${cmd}`, cmd, name, kw: `${kw} ${cmd}`, icon: 'terminal', sub: T('lxToolSub', { c: cmd }) }));
     const SYSTEM = [
-      ['lock', L('Zárolás', 'Lock', 'Zablokuj'), 'lezár kijelentkezés lock', 'lock'],
-      ['sleep', L('Alvó állapot', 'Sleep', 'Uśpij'), 'alvás felfüggesztés sleep suspend', 'moon'],
-      ['restart', L('Újraindítás', 'Restart', 'Uruchom ponownie'), 'újraindít reboot restart', 'reload'],
-      ['shutdown', L('Leállítás', 'Shut down', 'Wyłącz'), 'kikapcsol leáll shutdown power off', 'power'],
-      ['settings', L('CyberShell beállítások', 'CyberShell settings', 'Ustawienia CyberShell'), 'cybershell menü beállítás settings', 'settings'],
-      ['recycle', L('Lomtár', 'Recycle Bin', 'Kosz'), 'kuka törölt trash recycle', 'trash'],
+      ['lock', L('Zárolás', 'Lock', 'Zablokuj', 'Sperren', 'Bloquear'), 'lezár kijelentkezés lock', 'lock'],
+      ['sleep', L('Alvó állapot', 'Sleep', 'Uśpij', 'Energie sparen', 'Suspender'), 'alvás felfüggesztés sleep suspend', 'moon'],
+      ['restart', L('Újraindítás', 'Restart', 'Uruchom ponownie', 'Neu starten', 'Reiniciar'), 'újraindít reboot restart', 'reload'],
+      ['shutdown', L('Leállítás', 'Shut down', 'Wyłącz', 'Herunterfahren', 'Apagar'), 'kikapcsol leáll shutdown power off', 'power'],
+      ['settings', L('CyberShell beállítások', 'CyberShell settings', 'Ustawienia CyberShell', 'CyberShell-Einstellungen', 'Ajustes de CyberShell'), 'cybershell menü beállítás settings', 'settings'],
+      ['recycle', L('Lomtár', 'Recycle Bin', 'Kosz', 'Papierkorb', 'Papelera de reciclaje'), 'kuka törölt trash recycle', 'trash'],
     ].map(([act, name, kw, icon]) => ({ kind: 'system', key: `sys:${act}`, act, name, kw, icon, sub: T('lxSystemSub') }));
 
     // ── számológép: + − × ÷ ^ % zárójelek, sqrt, pi (eval nélkül) ──
@@ -462,11 +462,11 @@
     });
 
     const FOOT_PLACES = [
-      ['shell:Personal', 'doc', L('Dokumentumok', 'Documents', 'Dokumenty')],
-      ['shell:Downloads', 'download', L('Letöltések', 'Downloads', 'Pobrane')],
-      ['shell:My Pictures', 'photo', L('Képek', 'Pictures', 'Obrazy')],
-      ['shell:MyComputerFolder', 'pc', L('Ez a gép', 'This PC', 'Ten komputer')],
-      ['ms-settings:', 'settings', L('Windows beállítások', 'Windows Settings', 'Ustawienia systemu Windows')],
+      ['shell:Personal', 'doc', L('Dokumentumok', 'Documents', 'Dokumenty', 'Dokumente', 'Documentos')],
+      ['shell:Downloads', 'download', L('Letöltések', 'Downloads', 'Pobrane', 'Downloads', 'Descargas')],
+      ['shell:My Pictures', 'photo', L('Képek', 'Pictures', 'Obrazy', 'Bilder', 'Imágenes')],
+      ['shell:MyComputerFolder', 'pc', L('Ez a gép', 'This PC', 'Ten komputer', 'Dieser PC', 'Este equipo')],
+      ['ms-settings:', 'settings', L('Windows beállítások', 'Windows Settings', 'Ustawienia systemu Windows', 'Windows-Einstellungen', 'Configuración de Windows')],
     ];
     $('lxPlaces').innerHTML = `<button class="lx-fbtn" data-clipview title="${T('lxClipBtn')}">${svg('clipboard')}</button>` +
       FOOT_PLACES.map(([t, icon, name]) => `<button class="lx-fbtn" data-open="${t}" title="${name}">${svg(icon)}</button>`).join('');
@@ -479,8 +479,8 @@
       if (w > 200) home.style.setProperty('--all-w', `${w}px`);
     };
     window.addEventListener('resize', alignAllApps);
-    const POWER = [['signout', 'logout', T('lxSignOut')], ['lock', 'lock', L('Zárolás', 'Lock', 'Zablokuj')], ['sleep', 'moon', T('pwSleep')],
-      ['restart', 'reload', L('Újraindítás', 'Restart', 'Uruchom ponownie')], ['shutdown', 'power', L('Leállítás', 'Shut down', 'Wyłącz')]];
+    const POWER = [['signout', 'logout', T('lxSignOut')], ['lock', 'lock', L('Zárolás', 'Lock', 'Zablokuj', 'Sperren', 'Bloquear')], ['sleep', 'moon', T('pwSleep')],
+      ['restart', 'reload', L('Újraindítás', 'Restart', 'Uruchom ponownie', 'Neu starten', 'Reiniciar')], ['shutdown', 'power', L('Leállítás', 'Shut down', 'Wyłącz', 'Herunterfahren', 'Apagar')]];
     $('lxPower').innerHTML = POWER.map(([act, icon, name]) => `<button class="lx-fbtn pw-${act}" data-power="${act}" title="${name}">${svg(icon)}</button>`).join('');
     $('lxKeys').innerHTML = `<span><kbd>ENTER</kbd>${T('lxKeyOpen')}</span>` +
       `<span><kbd>CTRL+SHIFT+ENTER</kbd>${T('lxKeyAdmin')}</span><span><kbd>CTRL+ENTER</kbd>${T('lxKeyFolder')}</span><span><kbd>&gt;</kbd>${T('lxKeyCmd')}</span><span><kbd>V:</kbd>${T('lxKeyClip')}</span>`;

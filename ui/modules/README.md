@@ -17,8 +17,10 @@ láthatóság, helykihasználás, másodpercenkénti óraütés, üzenetek szét
    bekapcsolható, rendezhető, és a config.json `sections` részébe is bekerül.
 5. Ha a modulnak a programtól kell adat (pl. rendszerinformáció) vagy a programnak kell valamit
    tennie (pl. megnyitni egy Windows-beállítást): **`src/hub/panel.rs`**, `on_panel_ipc` (a
-   felület üzenetei) és egy `send_…` függvény, amit a `Hub::tick` hív (az adat a panelnek).
-   Folyamatos méréshez (mint a Terhelés és a Hálózat) a `src/monitor.rs` háttérszála a minta: csak
+   felület üzenetei) és egy `send_…` függvény, amit a `Hub::tick` hív (az adat a panelnek). A
+   legutóbb küldött üzenetet egy `Feed` mező tartja a `Hub`-ban (lásd ott a panel-adatok
+   szakaszát): változatlan adatot nem küldünk újra, a panel újratöltésekor pedig ezt kapja vissza.
+   Lassú lekérdezés háttérszálon fusson, mint a `send_tray` vagy a `codex_send`. Folyamatos méréshez (mint a Terhelés és a Hálózat) a `src/monitor.rs` háttérszála a minta: csak
    akkor mér, ha a modul látszik, és az eredményt üzenetként küldi a panelnek.
 
 A beállítások felülete a modulok listáját, nevét, súgóját, kompakt nézetét és gombsorrendjét

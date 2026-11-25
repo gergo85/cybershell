@@ -1,12 +1,15 @@
+//! A beállítások (config.json): a szerkezetük és alapértékeik, a betöltés utáni rendbetétel
+//! (érvényes tartományok, nyelv, panelhelyek, séma), valamint a betöltés és a mentés.
+
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Config {
-    /// A felület nyelve: "hu", "en", "pl" vagy "auto" (alapérték: a Windows nyelve szerint –
-    /// magyar Windowson magyar, lengyelen lengyel, minden másnál angol). A beállításokban
-    /// választott nyelv felülírja.
+    /// A felület nyelve: "hu", "en", "pl", "de", "es" vagy "auto" (alapérték: a Windows nyelve
+    /// szerint – magyar Windowson magyar, lengyelen lengyel, németen német, spanyolon spanyol,
+    /// minden másnál angol). A beállításokban választott nyelv felülírja.
     pub language: String,
     /// Igaz, ha a fájlban "auto" áll: ilyenkor a `language` a Windows nyelvéből számolt érték,
     /// mentéskor viszont "auto" kerül vissza a fájlba.
@@ -74,6 +77,12 @@ pub struct Config {
     /// Neonkeret más programok ablakain (Windows 11): "off", "active" (csak az aktív ablak
     /// kerete kapja a téma fő színét) vagy "all" (a többi ablaké halványabban).
     pub neon_border: String,
+    /// Az asztal üres területére tett jobb kattintás a CyberShell asztali menüjét nyitja meg
+    /// (ugyanazokkal a parancsokkal), különben a Windows sajátját.
+    pub desktop_menu: bool,
+    /// Az asztali ikonokra (fájlokra, mappákra) tett jobb kattintás is a CyberShell menüjét nyitja
+    /// meg, a Windowséval azonos parancsokkal.
+    pub desktop_icon_menu: bool,
     /// A Windows és a Windows Terminal igazodása a CyberShell témájához.
     pub windows_sync: WindowsSync,
     /// A beállításokban választott háttérkép teljes útvonala. Ha a fájlban átírod,
@@ -486,10 +495,6 @@ pub struct AppEntry {
     /// Az ikon finom színe (pl. "#ff7139"), ami a programra utal.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub color: String,
-    /// Régi (v1.3-ig) beállítás: "right" esetén az információs panelen jelent meg. Mostantól
-    /// minden program az Ikonok között van; betöltéskor elfogadjuk, a fájlba már nem kerül vissza.
-    #[serde(skip_serializing)]
-    pub place: String,
     /// A géppel együtt induljon-e (a CyberShell indítja el bejelentkezéskor).
     #[serde(skip_serializing_if = "is_false")]
     pub autostart: bool,
@@ -532,6 +537,8 @@ impl Default for Config {
             health: Health::default(),
             start_menu: StartMenu::default(),
             neon_border: "off".into(),
+            desktop_menu: true,
+            desktop_icon_menu: true,
             windows_sync: WindowsSync::default(),
             wallpaper: String::new(),
             apps: Vec::new(),
@@ -626,7 +633,6 @@ pub fn load(path: &Path) -> Result<Config, String> {
     Ok(cfg)
 }
 
-/// A frame és a sávok vastagságának megengedett tartománya (logikai pixel).
 /// A sávok és a keretek megengedett vastagsága (logikai pixel): az ikonsáv, a panelsáv,
 /// a fenti és lenti, illetve az oldalsó keret.
 pub const ICONS_RANGE: (u32, u32) = (64, 96);
@@ -737,24 +743,17 @@ impl Config {
 
     /// A felületek háttérszíne (a WebView a betöltés előtt is ezt mutatja).
     pub fn bg_rgba(&self) -> (u8, u8, u8, u8) {
-        let hex = self.active_theme().bg.trim_start_matches('#');
-        let c = |i: usize| hex.get(i..i + 2).and_then(|h| u8::from_str_radix(h, 16).ok());
-        match (c(0), c(2), c(4)) {
-            (Some(r), Some(g), Some(b)) if hex.len() >= 6 => (r, g, b, 255),
-            _ => {
-                if self.scheme == "light" {
-                    (227, 233, 236, 255)
-                } else {
-                    (6, 7, 11, 255)
-                }
-            }
+        match crate::winsync::parse_hex(&self.active_theme().bg) {
+            Some((r, g, b)) => (r, g, b, 255),
+            None if self.scheme == "light" => (227, 233, 236, 255),
+            None => (6, 7, 11, 255),
         }
     }
 
     /// Az "auto" (vagy ismeretlen) nyelv feloldása a Windows felületének nyelvére.
     pub fn resolve_language(&mut self) {
         match self.language.as_str() {
-            "hu" | "en" | "pl" => self.language_auto = false,
+            "hu" | "en" | "pl" | "de" | "es" => self.language_auto = false,
             _ => {
                 self.language_auto = true;
                 self.language = crate::sys::system_language().to_string();

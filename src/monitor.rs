@@ -77,10 +77,7 @@ struct Load {
 impl Load {
     fn sample(&mut self) -> Value {
         let now = crate::sys::cpu_times();
-        let cpu = match (self.cpu_prev, now) {
-            (Some((pi, pt)), Some((ni, nt))) if nt > pt => Some((1.0 - ni.saturating_sub(pi) as f64 / (nt - pt) as f64) * 100.0),
-            _ => None,
-        };
+        let cpu = crate::sys::cpu_percent(self.cpu_prev, now);
         self.cpu_prev = now;
         let (used, total) = crate::sys::memory().unwrap_or((0, 0));
         if self.gpu.is_none() && !self.gpu_failed {
@@ -188,14 +185,15 @@ struct Net {
 impl Net {
     fn sample(&mut self, host: &str) -> Value {
         let now = Instant::now();
-        let (down, up) = match (self.prev, octets()) {
+        let cur = octets();
+        let (down, up) = match (self.prev, cur) {
             (Some((t, pi, po)), Some((ni, no))) => {
                 let secs = now.duration_since(t).as_secs_f64().max(0.1);
                 (Some(ni.saturating_sub(pi) as f64 / secs), Some(no.saturating_sub(po) as f64 / secs))
             }
             _ => (None, None),
         };
-        self.prev = octets().map(|(i, o)| (now, i, o));
+        self.prev = cur.map(|(i, o)| (now, i, o));
         if self.last_ping.is_none_or(|t| now.duration_since(t) >= PING_EVERY) {
             self.last_ping = Some(now);
             self.ping = ping(host);

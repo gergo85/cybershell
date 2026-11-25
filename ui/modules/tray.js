@@ -85,6 +85,16 @@
         trayMore: 'Więcej', trayLess: 'Zwiń',
         trayHint: 'Programy działające w tle, jak ikony obok zegara na pasku zadań Windows',
       },
+      de: {
+        secTray: '// SYSTRAY', sTray: 'Hintergrund-Apps', trayNone: 'Keine Hintergrund-Apps',
+        trayMore: 'Mehr', trayLess: 'Schließen',
+        trayHint: 'Programme, die im Hintergrund laufen, wie die Symbole neben der Uhr in der Windows-Taskleiste',
+      },
+      es: {
+        secTray: '// BANDEJA', sTray: 'Apps en segundo plano', trayNone: 'No hay apps en segundo plano',
+        trayMore: 'Más', trayLess: 'Cerrar',
+        trayHint: 'Programas que se ejecutan en segundo plano, como los iconos junto al reloj en la barra de tareas de Windows',
+      },
     },
   });
 })();

@@ -150,7 +150,7 @@
       peekSent = false;
       if (el) launch(el, e.shiftKey);
     });
-    // jobb gomb: kis menü a program ablakához (Teljes képernyőre, Ablak bezárása), ha
+    // jobb gomb: kis menü a program ablakához (Teljes képernyőre, Új ablak nyitása, Ablak bezárása), ha
     // pontosan egy ablaka van nyitva
     appsEl.addEventListener('contextmenu', (e) => {
       const el = e.target.closest('.app');

@@ -28,7 +28,7 @@ Press `Ctrl+Alt+R` after saving.
 
 | Field | Meaning |
 |---|---|
-| `language` | Interface language: `"auto"` (the default: Hungarian on Hungarian Windows, Polish on Polish Windows, English everywhere else), `"en"`, `"hu"` or `"pl"`. The language chosen in the settings overrides the automatic one. The texts are in `ui\i18n.js`; new languages can be added. |
+| `language` | Interface language: `"auto"` (the default: Hungarian, Polish, German or Spanish on a Windows in that language, English everywhere else), `"en"`, `"hu"`, `"pl"`, `"de"` or `"es"`. The language chosen in the settings overrides the automatic one. The texts are in `ui\i18n.js`; new languages can be added. |
 | `startWithWindows` | Whether CyberShell starts at sign-in. The file is authoritative: on start the Windows setting is adjusted to it. |
 | `iconsEdge`, `infoEdge` | Position of the Icons and the info panel: `"left"`, `"right"`, `"top"` or `"bottom"` (Icons on the `left` by default). `infoEdge` also accepts `"auto"` (the default): at the `bottom` on laptops (battery-powered computers), where the side would be too short, and on the `right` on desktops. They cannot be the same. The old `swapSides: true` setting is converted to `right`/`left` automatically. |
 | `iconLabels` | With `false` the Icons bar shows no program names (`true` by default). |
@@ -57,6 +57,8 @@ Press `Ctrl+Alt+R` after saving.
 | `health.enabled`, `health.minutes` | Turns the Health break reminder on or off, and its length in minutes (5–480, 90 by default). |
 | `wallpaper` | Full path of the wallpaper last chosen in the settings. If you change it in the file, CyberShell sets it as the Windows wallpaper on reload. |
 | `neonBorder` | Neon border: `"off"` (default), `"active"` (a frame glowing in the theme’s main color around the foreground program) or `"all"` (the other windows’ borders take the theme color too, dimmer; Windows 11). |
+| `desktopMenu` | `true` (the default): right-clicking an empty spot on the desktop opens the CyberShell desktop menu, with the same commands as the Windows one. With `false` the Windows menu opens. |
+| `desktopIconMenu` | `true` (the default): right-clicking desktop icons opens the CyberShell menu, with the same commands as the Windows one. With `false` the Windows menu opens. |
 | `windowsSync.darkMode` | When `true`, the Windows dark/light mode (apps and system) switches together with the CyberShell theme. |
 | `windowsSync.accent` | When `true`, the Windows accent color becomes the theme’s main color. |
 | `windowsSync.terminal` | When `true`, Windows Terminal gets a `CyberShell Dark` and a `CyberShell Light` color scheme, and the default profile switches between them with the theme. |

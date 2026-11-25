@@ -58,6 +58,8 @@
       hu: { secCodex: '// CODEX', sCodex: 'Codex', limitHours: '{h} ÓRÁS', codexNone: 'Nincs Codex-adat. A Codex első használata után jelenik meg.' },
       en: { secCodex: '// CODEX', sCodex: 'Codex', limitHours: '{h}-HOUR', codexNone: 'No Codex data yet. It appears after you first use Codex.' },
       pl: { secCodex: '// CODEX', sCodex: 'Codex', limitHours: '{h} GODZ.', codexNone: 'Brak danych Codex. Pojawią się po pierwszym użyciu Codex.' },
+      de: { secCodex: '// CODEX', sCodex: 'Codex', limitHours: '{h} STUNDEN', codexNone: 'Noch keine Codex-Daten. Sie erscheinen, nachdem du Codex zum ersten Mal benutzt hast.' },
+      es: { secCodex: '// CODEX', sCodex: 'Codex', limitHours: '{h} HORAS', codexNone: 'Aún no hay datos de Codex. Aparecen después de usar Codex por primera vez.' },
     },
   });
 })();

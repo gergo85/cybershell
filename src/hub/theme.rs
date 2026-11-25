@@ -32,6 +32,7 @@ impl Hub {
         views.extend(self.launcher.as_ref().map(|w| &w.webview));
         views.extend(self.health.as_ref().map(|w| &w.webview));
         views.extend(self.net.as_ref().map(|w| &w.webview));
+        views.extend(self.desk.as_ref().map(|w| &w.webview));
         for v in views {
             let _ = v.set_background_color(bg);
             push(v, &payload);

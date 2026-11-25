@@ -53,6 +53,14 @@
         secPeriph: '// URZĄDZENIA', sPeriph: 'Urządzenia',
         sPeriphHint: 'Poziom baterii urządzeń Bluetooth (mysz, klawiatura, słuchawki). Widoczne tylko wtedy, gdy podłączone jest urządzenie podające poziom baterii.',
       },
+      de: {
+        secPeriph: '// GERÄTE', sPeriph: 'Peripherie',
+        sPeriphHint: 'Der Akkustand von Bluetooth-Geräten (Maus, Tastatur, Headset). Erscheint nur, wenn ein Gerät verbunden ist, das seinen Akkustand meldet.',
+      },
+      es: {
+        secPeriph: '// BLUETOOTH', sPeriph: 'Periféricos',
+        sPeriphHint: 'El nivel de batería de los dispositivos Bluetooth (ratón, teclado, auriculares). Solo aparece si hay conectado un dispositivo que informa de su batería.',
+      },
     },
   });
 })();

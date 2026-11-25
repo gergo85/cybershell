@@ -13,8 +13,8 @@ use crate::send;
 use crate::state_path;
 use crate::subclass_proc;
 use crate::web::hwnd_of;
-use crate::web::serve;
 use crate::web::tool_window_style;
+use crate::web::ui_webview;
 use serde_json::json;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -29,7 +29,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, SetWindowPos, ShowWindow, SystemParametersInfoW,
 };
 use wry::http::Request;
-use wry::{WebContext, WebView, WebViewBuilder, WebViewBuilderExtWindows};
+use wry::{WebContext, WebView};
 
 /// A sávok sorrendje: a két teljes magasságú oldalpanel, aztán a felső és alsó keret.
 pub(crate) const EDGES: [Edge; 4] = [Edge::Left, Edge::Right, Edge::Top, Edge::Bottom];
@@ -162,8 +162,10 @@ pub(crate) struct Bar {
     pub(crate) mon: usize,
     /// A képernyő DPI-szorzója (CSS-pixel → fizikai pixel).
     pub(crate) scale: f64,
-    /// A betöltött felület: "left" (ikonsáv), "right" (információs panel), "top", "bottom".
+    /// A betöltött felület: "left" (ikonsáv), "right" (információs panel) vagy "strip" (vékony keret).
     pub(crate) part: &'static str,
+    /// Az ablak, amiben a felület fut: csak életben tartjuk (eldobásakor bezárulna).
+    #[expect(dead_code, reason = "csak az ablak élettartama miatt tároljuk")]
     pub(crate) window: Window,
     pub(crate) webview: WebView,
     pub(crate) hwnd: HWND,
@@ -206,8 +208,6 @@ pub(crate) fn make_bar(
 
     let part = part_for(edge, cfg);
     let url = bar_url(part, edge, cfg);
-    let bg = cfg.bg_rgba();
-    let dir = ui_dir.to_path_buf();
     let page_edge = edge.name();
     let this_edge = edge;
     // Fájlhúzás: az ikonsávon az ikonokhoz kötjük, a többi sávon csak elnyeljük,
@@ -230,18 +230,12 @@ pub(crate) fn make_bar(
         }
         true
     };
-    let webview = WebViewBuilder::new_with_web_context(web_context)
-        .with_custom_protocol("cybershell".into(), move |_id, req| serve(&dir, &req))
+    let webview = ui_webview(web_context, ui_dir, cfg, url)
         .with_on_page_load_handler(move |ev, url| {
             if matches!(ev, wry::PageLoadEvent::Finished) {
                 log(format!("oldal betöltve ({page_edge}): {url}"));
             }
         })
-        .with_url(url)
-        .with_background_color(bg)
-        .with_devtools(cfg!(debug_assertions))
-        .with_default_context_menus(false)
-        .with_browser_accelerator_keys(false)
         .with_ipc_handler(move |req: Request<String>| send(UserEvent::Ipc(idx, req.body().clone())))
         .with_drag_drop_handler(drag_handler)
         .build(&window)

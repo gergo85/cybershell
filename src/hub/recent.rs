@@ -8,8 +8,8 @@ use std::path::PathBuf;
 
 use serde_json::json;
 
-use crate::hub::Hub;
-use crate::web::percent_encode;
+use crate::hub::{Hub, window_ids};
+use crate::web::app_icon_url;
 use crate::wintrack::WinInfo;
 use crate::{log, wintrack};
 
@@ -64,13 +64,13 @@ impl Hub {
             .recent_apps
             .iter()
             .filter_map(|id| self.start_apps.iter().find(|a| &a.id == id))
-            .map(|a| json!({ "key": a.id, "name": a.name, "icon": format!("/__appicon/{}", percent_encode(&a.id)) }))
+            .map(|a| json!({ "key": a.id, "name": a.name, "icon": app_icon_url(&a.id) }))
             .collect();
         let payload = json!({ "type": "recent", "apps": items });
         let s = payload.to_string();
         if force || s != self.last_recent {
             self.last_recent = s;
-            self.eval(self.info_edge(), &payload);
+            self.eval_info(&payload);
         }
     }
 
@@ -92,12 +92,12 @@ impl Hub {
                 return;
             }
         }
-        let known: Vec<isize> = wins.iter().map(|w| w.hwnd.0 as isize).collect();
+        let known = window_ids(&wins);
         if wintrack::shell_open(&format!("shell:AppsFolder\\{}", app.id), "", "", false) {
-            self.settings_dismiss_for(None, &known);
+            self.settings_dismiss_on_launch(known);
         } else {
             log(format!("gyakran használt program nem indult: {}", app.name));
-            let t = self.tr("Nem indítható", "Cannot start", "Nie można uruchomić");
+            let t = self.tr("Nem indítható", "Cannot start", "Nie można uruchomić", "Start nicht möglich", "No se puede iniciar");
             self.toast(&format!("{t}: {}", app.name));
         }
     }

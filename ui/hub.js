@@ -2,7 +2,7 @@
 // program üzeneteit (window.hub.receive).
 (() => {
   const { part, lang, post, demo, setTheme, setGeometry, setAlert, parts: p } = window.HUB;
-  const parts = { left: p.left, right: p.right, settings: p.settings, peek: p.peek, fly: p.fly, weather: p.fly, launcher: p.launcher, health: p.health, strip: p.strip, top: p.strip, bottom: p.strip };
+  const parts = { left: p.left, right: p.right, settings: p.settings, peek: p.peek, fly: p.fly, launcher: p.launcher, health: p.health, desk: p.desk, strip: p.strip };
   const handler = (parts[part] || p.strip)();
 
   window.hub = {

@@ -37,29 +37,40 @@ pub(crate) fn ui_params(cfg: &Config) -> String {
     s
 }
 
+/// Egy felugró ablak felületének címe: a `part` (és ami utána jön) a hub.js-nek szól, mögötte
+/// a nyelv, a séma és a többi kezdeti beállítás.
+fn popup_url(part: &str, cfg: &Config) -> String {
+    format!("cybershell://localhost/hub.html?part={part}&lang={}&scheme={}{}", cfg.language, cfg.scheme, ui_params(cfg))
+}
+
 pub(crate) fn settings_url(cfg: &Config) -> String {
-    format!("cybershell://localhost/hub.html?part=settings&lang={}&scheme={}{}", cfg.language, cfg.scheme, ui_params(cfg))
+    popup_url("settings", cfg)
 }
 
 pub(crate) fn peek_url(cfg: &Config) -> String {
-    format!("cybershell://localhost/hub.html?part=peek&lang={}&scheme={}{}", cfg.language, cfg.scheme, ui_params(cfg))
+    popup_url("peek", cfg)
 }
 
 pub(crate) fn fly_url(cfg: &Config) -> String {
-    format!("cybershell://localhost/hub.html?part=fly&lang={}&scheme={}{}", cfg.language, cfg.scheme, ui_params(cfg))
+    popup_url("fly", cfg)
 }
 
 pub(crate) fn health_url(cfg: &Config) -> String {
-    format!("cybershell://localhost/hub.html?part=health&lang={}&scheme={}{}", cfg.language, cfg.scheme, ui_params(cfg))
+    popup_url("health", cfg)
 }
 
 /// A „Megszakadt a kapcsolat” sáv (a szünet-sáv felülete, más tartalommal).
 pub(crate) fn net_url(cfg: &Config) -> String {
-    format!("cybershell://localhost/hub.html?part=health&kind=net&lang={}&scheme={}{}", cfg.language, cfg.scheme, ui_params(cfg))
+    popup_url("health&kind=net", cfg)
 }
 
 pub(crate) fn launcher_url(cfg: &Config) -> String {
-    format!("cybershell://localhost/hub.html?part=launcher&lang={}&scheme={}{}", cfg.language, cfg.scheme, ui_params(cfg))
+    popup_url("launcher", cfg)
+}
+
+/// A saját asztali menü.
+pub(crate) fn desk_url(cfg: &Config) -> String {
+    popup_url("desk", cfg)
 }
 
 /// Egy már futó felület újratöltéséhez: a wry csak az első betöltésnél (`with_url`) írja át
@@ -103,69 +114,57 @@ pub(crate) fn percent_decode(s: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
+/// Egy program saját (az exe-jéből kinyert) ikonjának címe a felületnek (lásd `serve`).
+pub(crate) fn exe_icon_url(path: &str) -> String {
+    format!("/__icon/{}", percent_encode(&path.replace('\\', "/")))
+}
+
+/// A Start menü egy programjának ikoncíme, a programazonosító szerint.
+pub(crate) fn app_icon_url(id: &str) -> String {
+    format!("/__appicon/{}", percent_encode(id))
+}
+
+/// Egy tetszőleges helyen lévő kép (saját ikon, háttérkép) címe a felületnek.
+pub(crate) fn file_url(path: &str) -> String {
+    format!("/__file/{}", percent_encode(&path.replace('\\', "/")))
+}
+
 /// A felület fájljait a cybershell:// protokollon szolgáljuk ki (a file:// címekről
 /// érkező üzeneteket a wry nem tudja feldolgozni). A /__file/ előtag alatt
 /// tetszőleges helyről tölthető be ikonkép.
 pub(crate) fn serve(ui_dir: &Path, req: &Request<Vec<u8>>) -> Response<Cow<'static, [u8]>> {
     let path = percent_decode(req.uri().path());
+    let png = |data: Option<Vec<u8>>| data.map(|d| ("image/png", d));
     // /__appicon/<azonosító>: a Start menü egy programjának ikonja
     if let Some(id) = path.strip_prefix("/__appicon/") {
-        return match apps::icon_png(id) {
-            Some(png) => Response::builder()
-                .header(CONTENT_TYPE, "image/png")
-                .header("Cache-Control", "max-age=86400")
-                .body(Cow::Owned(png))
-                .unwrap_or_else(|_| not_found()),
-            None => not_found(),
-        };
+        return image_response(png(apps::icon_png(id)), "max-age=86400");
     }
     // /__userpic: a Windows-fiók profilképe (a Start menü aljára)
     if path == "/__userpic" {
-        let pic = apps::user_picture().and_then(|p| std::fs::read(&p).ok().map(|d| (p, d)));
-        return match pic {
-            Some((p, data)) => {
-                let png = p.extension().is_some_and(|e| e.eq_ignore_ascii_case("png"));
-                Response::builder()
-                    .header(CONTENT_TYPE, if png { "image/png" } else { "image/jpeg" })
-                    .header("Cache-Control", "no-cache")
-                    .body(Cow::Owned(data))
-                    .unwrap_or_else(|_| not_found())
-            }
-            None => not_found(),
-        };
+        let pic = apps::user_picture().and_then(|p| {
+            let data = std::fs::read(&p).ok()?;
+            let is_png = p.extension().is_some_and(|e| e.eq_ignore_ascii_case("png"));
+            Some((if is_png { "image/png" } else { "image/jpeg" }, data))
+        });
+        return image_response(pic, "no-cache");
     }
     // /__tray/<azonosító>: egy háttérprogram ikonjának képe az értesítési területről
     if let Some(id) = path.strip_prefix("/__tray/") {
-        return match tray::icon_png(id) {
-            Some(png) => Response::builder()
-                .header(CONTENT_TYPE, "image/png")
-                .header("Cache-Control", "max-age=86400")
-                .body(Cow::Owned(png))
-                .unwrap_or_else(|_| not_found()),
-            None => not_found(),
-        };
+        return image_response(png(tray::icon_png(id)), "max-age=86400");
+    }
+    // /__deskicon/<menü>/<sorszám>: az asztali menü egy elemének ikonja (a menü sorszáma csak a
+    // gyorsítótár ellen van a címben)
+    if let Some(rest) = path.strip_prefix("/__deskicon/") {
+        let n = rest.rsplit('/').next().and_then(|n| n.parse::<usize>().ok());
+        return image_response(png(n.and_then(crate::deskmenu::icon)), "no-store");
     }
     // /__art/<sorszám>: a Spotifyban szóló szám albumborítója
     if path.starts_with("/__art/") {
-        return match media::art() {
-            Some((mime, data)) => Response::builder()
-                .header(CONTENT_TYPE, mime)
-                .header("Cache-Control", "max-age=86400")
-                .body(Cow::Owned(data))
-                .unwrap_or_else(|_| not_found()),
-            None => not_found(),
-        };
+        return image_response(media::art(), "max-age=86400");
     }
     // /__icon/<exe útvonala>: a program saját ikonja PNG-ként
     if let Some(exe) = path.strip_prefix("/__icon/") {
-        return match wintrack::icon_png(exe) {
-            Some(png) => Response::builder()
-                .header(CONTENT_TYPE, "image/png")
-                .header("Cache-Control", "max-age=3600")
-                .body(Cow::Owned(png))
-                .unwrap_or_else(|_| not_found()),
-            None => not_found(),
-        };
+        return image_response(png(wintrack::icon_png(exe)), "max-age=3600");
     }
     let mut embedded_rel: Option<String> = None;
     let file = if let Some(abs) = path.strip_prefix("/__file/") {
@@ -211,6 +210,19 @@ pub(crate) fn serve(ui_dir: &Path, req: &Request<Vec<u8>>) -> Response<Cow<'stat
     Response::builder().header(CONTENT_TYPE, mime).header("Cache-Control", "no-store").body(data).unwrap_or_else(|_| not_found())
 }
 
+/// Menet közben előállított kép (típus és tartalom) válaszként, a megadott gyorsítótárazással;
+/// ha nincs ilyen kép, 404.
+fn image_response(image: Option<(impl AsRef<str>, Vec<u8>)>, cache: &str) -> Response<Cow<'static, [u8]>> {
+    match image {
+        Some((mime, data)) => Response::builder()
+            .header(CONTENT_TYPE, mime.as_ref())
+            .header("Cache-Control", cache)
+            .body(Cow::Owned(data))
+            .unwrap_or_else(|_| not_found()),
+        None => not_found(),
+    }
+}
+
 pub(crate) fn not_found() -> Response<Cow<'static, [u8]>> {
     Response::builder().status(404).body(Cow::Borrowed(&b"not found"[..])).unwrap()
 }
@@ -231,6 +243,47 @@ pub(crate) fn tool_window_style(hwnd: HWND) {
     }
 }
 
+/// Az ablak alsó két sarkának levágása (`cut` képpontos ferde éllel), ahogy a felület
+/// `clip-path`-ja rajzolja: így a levágott sarokban az alatta lévő látszik, nem az ablak
+/// háttérszíne (a piros figyelmeztető sávoknál).
+pub(crate) fn cut_bottom_corners(hwnd: HWND, w: i32, h: i32, cut: i32) {
+    use windows::Win32::Foundation::POINT;
+    use windows::Win32::Graphics::Gdi::{CreatePolygonRgn, SetWindowRgn, WINDING};
+    let c = cut.clamp(0, h.min(w / 2));
+    let pts = [
+        POINT { x: 0, y: 0 },
+        POINT { x: w, y: 0 },
+        POINT { x: w, y: h - c },
+        POINT { x: w - c, y: h },
+        POINT { x: c, y: h },
+        POINT { x: 0, y: h - c },
+    ];
+    unsafe {
+        let rgn = CreatePolygonRgn(&pts, WINDING);
+        // a régiót ettől kezdve a rendszer kezeli (nem kell felszabadítani)
+        if !rgn.is_invalid() {
+            let _ = SetWindowRgn(hwnd, Some(rgn), true);
+        }
+    }
+}
+
+/// A saját felületek (sávok, felugró ablakok) közös WebView-beállításai: a cybershell://
+/// protokoll, a kezdőcím és a téma háttérszíne, böngészős helyi menü és gyorsbillentyűk nélkül
+/// (a fejlesztői eszközök csak a fejlesztői buildben érhetők el).
+pub(crate) fn ui_webview<'a>(web_context: &'a mut WebContext, ui_dir: &Path, cfg: &Config, url: String) -> WebViewBuilder<'a> {
+    let dir = ui_dir.to_path_buf();
+    WebViewBuilder::new_with_web_context(web_context)
+        .with_custom_protocol("cybershell".into(), move |_id, req| serve(&dir, &req))
+        .with_url(url)
+        .with_background_color(cfg.bg_rgba())
+        .with_devtools(cfg!(debug_assertions))
+        .with_default_context_menus(false)
+        .with_browser_accelerator_keys(false)
+}
+
+/// Egy felugró ablak részei: az ablak, a benne futó felület és az ablak azonosítója.
+pub(crate) type PopupParts = (Window, WebView, HWND);
+
 /// Rejtett felugró ablak a saját felülettel. `focusable`: kaphat-e billentyűzetet
 /// (az ablakelőnézet és a szünet-sáv nem veszi el a fókuszt). Az `ipc` a felület üzeneteit
 /// alakítja eseménnyé.
@@ -245,7 +298,7 @@ pub(crate) fn make_popup(
     size: (u32, u32),
     focusable: bool,
     ipc: fn(String) -> UserEvent,
-) -> Option<(Window, WebView, HWND)> {
+) -> Option<PopupParts> {
     let window = WindowBuilder::new()
         .with_title(format!("{APP_NAME} – {what}"))
         .with_decorations(false)
@@ -261,14 +314,7 @@ pub(crate) fn make_popup(
         .ok()?;
     let hwnd = hwnd_of(&window);
     tool_window_style(hwnd);
-    let dir = ui_dir.to_path_buf();
-    let webview = WebViewBuilder::new_with_web_context(web_context)
-        .with_custom_protocol("cybershell".into(), move |_id, req| serve(&dir, &req))
-        .with_url(url)
-        .with_background_color(cfg.bg_rgba())
-        .with_devtools(cfg!(debug_assertions))
-        .with_default_context_menus(false)
-        .with_browser_accelerator_keys(false)
+    let webview = ui_webview(web_context, ui_dir, cfg, url)
         .with_ipc_handler(move |req: Request<String>| send(ipc(req.body().clone())))
         .with_drag_drop_handler(|_| true)
         .build(&window)

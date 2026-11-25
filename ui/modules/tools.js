@@ -48,6 +48,8 @@
       hu: { secTools: '// ESZKÖZTÁR', sTools: 'Eszköztár', toolCalc: 'Számológép', toolNotepad: 'Jegyzettömb', toolSnip: 'Képmetsző' },
       en: { secTools: '// TOOLBAR', sTools: 'Toolbar', toolCalc: 'Calculator', toolNotepad: 'Notepad', toolSnip: 'Snipping Tool' },
       pl: { secTools: '// NARZĘDZIA', sTools: 'Narzędzia', toolCalc: 'Kalkulator', toolNotepad: 'Notatnik', toolSnip: 'Wycinanie' },
+      de: { secTools: '// WERKZEUGE', sTools: 'Werkzeuge', toolCalc: 'Rechner', toolNotepad: 'Editor', toolSnip: 'Snipping Tool' },
+      es: { secTools: '// ÚTILES', sTools: 'Útiles', toolCalc: 'Calculadora', toolNotepad: 'Bloc de notas', toolSnip: 'Recortes' },
     },
   });
 })();

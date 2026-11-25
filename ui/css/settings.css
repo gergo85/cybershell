@@ -101,7 +101,8 @@
 .rail-tab.on .rt-text b { color: var(--c-main); text-shadow: 0 0 10px var(--c-main-glow); }
 .rail-tab.on > svg { color: var(--c-main); filter: drop-shadow(0 0 4px var(--c-main-glow)); }
 .rail-tab.on > svg { animation: glitch .3s steps(2) 1; }
-.rail-keys { padding-left: 2px; font: 400 10px/1 var(--f-mono); letter-spacing: .12em; color: color-mix(in srgb, var(--c-text) 35%, transparent); }
+/* a fülek szövegével egy vonalban (a fül belső margója + ikon + hézag) */
+.rail-keys { padding-left: calc(14px + 22px + 12px); font: 400 10px/1 var(--f-mono); letter-spacing: .12em; color: color-mix(in srgb, var(--c-text) 35%, transparent); }
 
 /* díszítés: halványan futó programkód a fülek és a terhelésjelző között (a szabad hely egy része) */
 .rail-code {

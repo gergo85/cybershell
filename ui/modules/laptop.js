@@ -74,6 +74,14 @@
         secLaptop: '// LAPTOP', sLaptop: 'Laptop', batteryT: 'Bateria', batCharging: 'ładowanie',
         networkHint: 'Sieć i internet (ustawienia Windows)', bluetoothHint: 'Bluetooth i urządzenia (ustawienia Windows)',
       },
+      de: {
+        secLaptop: '// LAPTOP', sLaptop: 'Laptop', batteryT: 'Akku', batCharging: 'lädt',
+        networkHint: 'Netzwerk und Internet (Windows-Einstellungen)', bluetoothHint: 'Bluetooth und Geräte (Windows-Einstellungen)',
+      },
+      es: {
+        secLaptop: '// PORTÁTIL', sLaptop: 'Portátil', batteryT: 'Batería', batCharging: 'cargando',
+        networkHint: 'Red e Internet (Configuración de Windows)', bluetoothHint: 'Bluetooth y dispositivos (Configuración de Windows)',
+      },
     },
   });
 })();

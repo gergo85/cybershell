@@ -3,9 +3,12 @@
 mod appbar;
 mod apps;
 mod autostart;
+mod bitmap;
 mod clipboard;
 mod codex;
+mod com;
 mod config;
+mod deskmenu;
 /// A beágyazott felület és gyári háttérképek (a build.rs készíti).
 mod embedded {
     include!(concat!(env!("OUT_DIR"), "/embedded.rs"));
@@ -20,6 +23,7 @@ mod neon;
 mod notes;
 mod peek;
 mod periph;
+mod reg;
 mod sys;
 mod tray;
 mod usage;
@@ -29,10 +33,10 @@ mod wintrack;
 mod wmi;
 
 use crate::appbar::Edge;
-use crate::hub::Hub;
 use crate::hub::claude::make_claude_window;
+use crate::hub::deskmenu::DeskWin;
 use crate::hub::flyout::FlyWin;
-use crate::hub::health::HealthWin;
+use crate::hub::health::{BANNER_H, BANNER_W, BannerWin};
 use crate::hub::layout::Bar;
 use crate::hub::layout::EDGES;
 use crate::hub::layout::ICONS_EDGE;
@@ -42,10 +46,12 @@ use crate::hub::layout::make_bar;
 use crate::hub::preview::PeekWin;
 use crate::hub::settings::SettingsWin;
 use crate::hub::start::LaunchWin;
+use crate::hub::{Hub, Popups, Startup};
 use crate::lifecycle::emergency_cleanup;
 use crate::lifecycle::guard;
 use crate::lifecycle::recover_stale;
 use crate::lifecycle::statusline;
+use crate::web::desk_url;
 use crate::web::fly_url;
 use crate::web::health_url;
 use crate::web::launcher_url;
@@ -53,10 +59,7 @@ use crate::web::make_popup;
 use crate::web::net_url;
 use crate::web::peek_url;
 use crate::web::settings_url;
-use crate::wintrack::Matcher;
-use crate::wintrack::Tracker;
 use serde_json::json;
-use std::collections::{HashMap, HashSet};
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -64,7 +67,7 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use tao::event::{Event, WindowEvent};
 use tao::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy};
-use windows::Win32::Foundation::{ERROR_ALREADY_EXISTS, GetLastError, HWND, LPARAM, LRESULT, RECT, WPARAM};
+use windows::Win32::Foundation::{ERROR_ALREADY_EXISTS, GetLastError, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::Ole::OleInitialize;
 use windows::Win32::System::Threading::CreateMutexW;
 use windows::Win32::UI::Input::KeyboardAndMouse::{MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, RegisterHotKey};
@@ -84,8 +87,8 @@ const HOTKEY_RELOAD: i32 = 2;
 
 const APP_NAME: &str = "CyberShell";
 
-/// A készítő programjai a Microsoft Store-ban (a beállítások bal alsó sarkában lévő gomb).
-const STORE_URL: &str = "https://apps.microsoft.com/search/publisher?name=Gerg%C5%91+Szab%C3%B3";
+/// A CyberShell oldala a Microsoft Store-ban (a beállítások bal alsó sarkában lévő gomb).
+const STORE_URL: &str = "https://apps.microsoft.com/detail/9nw7gcgdgr71";
 
 const GITHUB_URL: &str = "https://github.com/gergo85/cybershell";
 
@@ -108,7 +111,7 @@ enum UserEvent {
     SettingsIpc(String),
     /// Az ablakelőnézet üzenete.
     PeekIpc(String),
-    /// A részletes időjárás oldalpaneljének üzenete.
+    /// Az oldalpanel (időjárás, naptár, Események, Notesz) üzenete.
     FlyIpc(String),
     /// A naptárak letöltésének eredménye (háttérszálról).
     CalendarData(String),
@@ -124,6 +127,10 @@ enum UserEvent {
     Monitor(String),
     /// A Bluetooth-eszközök töltöttsége (Perifériák modul, háttérszálról).
     Periph(String),
+    /// A háttérprogramok felsorolása elkészült (háttérszálról).
+    Tray(Vec<tray::TrayApp>),
+    /// A Codex-használat kiolvasva (háttérszálról): a panel üzenete, és hogy akkor is el kell-e küldeni, ha nem változott.
+    Codex(String, bool),
     /// A szünetre figyelmeztető sáv üzenete.
     HealthIpc(String),
     /// A Windows színbeállításai (sötét/világos mód, kiemelőszín) megváltoztak.
@@ -134,6 +141,14 @@ enum UserEvent {
     Hardware(Option<serde_json::Value>),
     /// Új elem a vágólap-előzményekben (a figyelő szálról).
     Clipboard,
+    /// Jobb kattintás az asztalon (a figyelő szálról): hely, a Shift állapota és az ikon
+    /// sorszáma az ikonlistában (-1: üres terület).
+    DeskClick(i32, i32, bool, i32),
+    /// Az asztali menü elemei elkészültek (a menüszálról): a kérés sorszáma, az újraolvasott
+    /// almenü sorszáma (`None`: az egész menü) és az elemek.
+    DeskItems(u64, Option<usize>, serde_json::Value),
+    /// Az asztali menü üzenete.
+    DeskIpc(String),
 }
 
 static PROXY: OnceLock<Mutex<EventLoopProxy<UserEvent>>> = OnceLock::new();
@@ -153,6 +168,16 @@ fn log(msg: impl AsRef<str>) {
     }
     #[cfg(debug_assertions)]
     eprintln!("{}", msg.as_ref());
+}
+
+/// A mostani idő Unix-időben, ezredmásodpercben (a felületnek és a mentett adatoknak).
+fn unix_ms() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
+}
+
+/// A mostani idő Unix-időben, másodpercben.
+fn unix_secs() -> u64 {
+    unix_ms() / 1000
 }
 
 fn send(ev: UserEvent) {
@@ -290,7 +315,7 @@ fn main() {
             break;
         }
         if attempt == 9 {
-            let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+            let ts = crate::unix_secs();
             if let Ok(f) = std::fs::File::create(data_dir().join(format!("cybershell-{ts}.log"))) {
                 *LOG.lock().unwrap() = Some(f);
             }
@@ -298,7 +323,7 @@ fn main() {
             std::thread::sleep(Duration::from_millis(300));
         }
     }
-    let started_at = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    let started_at = crate::unix_secs();
     log(format!("indulás (unix idő: {started_at}), paraméterek: {:?}, verzió: {}", &args[1..], version_label()));
 
     // Bejelentkezéskori indulás (a Run kulcs a --autostart kapcsolóval indít, csomagolva az
@@ -374,64 +399,20 @@ fn main() {
     let mut popup = |what: &str, url: String, size: (u32, u32), focusable: bool, ipc: fn(String) -> UserEvent| {
         make_popup(&event_loop, &mut web_context, &ui_dir, &cfg, what, url, size, focusable, ipc)
     };
-    let settings = popup("beállítások", settings_url(&cfg), (800, 600), true, UserEvent::SettingsIpc)
-        .map(|(window, webview, hwnd)| SettingsWin { window, webview, hwnd, visible: false });
-    let peek_win = popup("ablakelőnézet", peek_url(&cfg), (480, 240), false, UserEvent::PeekIpc).map(|(window, webview, hwnd)| PeekWin {
-        window,
-        webview,
-        hwnd,
-        visible: false,
-        thumbs: Vec::new(),
-        pending: Vec::new(),
-        hwnds: Vec::new(),
-        seq: 0,
-        target: serde_json::Value::Null,
-        hovered: false,
-        hide_at: None,
-        refresh_at: None,
-        asked_at: None,
-        shown: None,
-    });
-    let fly_win = popup("oldalpanel", fly_url(&cfg), (380, 560), true, UserEvent::FlyIpc).map(|(window, webview, hwnd)| FlyWin {
-        window,
-        webview,
-        hwnd,
-        visible: false,
-        shown_at: Instant::now(),
-        focused: false,
-        hidden_at: None,
-        kind: "weather",
-        bar: 0,
-        along: 0,
-    });
-    let launch_win =
-        popup("Start menü", launcher_url(&cfg), (700, 780), true, UserEvent::LauncherIpc).map(|(window, webview, hwnd)| LaunchWin {
-            window,
-            webview,
-            hwnd,
-            visible: false,
-            shown_at: Instant::now(),
-            focused: false,
-            hidden_at: None,
-            mode: "start",
-            prev: None,
-        });
-    let health_win = popup("szünet", health_url(&cfg), (660, 66), false, UserEvent::HealthIpc).map(|(window, webview, hwnd)| HealthWin {
-        window,
-        webview,
-        hwnd,
-        visible: false,
-    });
-    let net_win = popup("kapcsolat", net_url(&cfg), (660, 66), false, UserEvent::NetIpc).map(|(window, webview, hwnd)| HealthWin {
-        window,
-        webview,
-        hwnd,
-        visible: false,
-    });
+    let banner = (BANNER_W as u32, BANNER_H as u32);
+    let popups = Popups {
+        settings: popup("beállítások", settings_url(&cfg), (800, 600), true, UserEvent::SettingsIpc).map(SettingsWin::new),
+        peek: popup("ablakelőnézet", peek_url(&cfg), (480, 240), false, UserEvent::PeekIpc).map(PeekWin::new),
+        fly: popup("oldalpanel", fly_url(&cfg), (380, 560), true, UserEvent::FlyIpc).map(FlyWin::new),
+        launcher: popup("Start menü", launcher_url(&cfg), (700, 780), true, UserEvent::LauncherIpc).map(LaunchWin::new),
+        health: popup("szünet", health_url(&cfg), banner, false, UserEvent::HealthIpc).map(BannerWin::new),
+        net: popup("kapcsolat", net_url(&cfg), banner, false, UserEvent::NetIpc).map(BannerWin::new),
+        // az asztali menü: a kattintás képernyőjére igazodik (lásd hub/deskmenu.rs)
+        desk: popup("asztali menü", desk_url(&cfg), (320, 400), true, UserEvent::DeskIpc).map(DeskWin::new),
+        // claude.ai ablak: rejtve indul, csak belépéskor jelenik meg
+        claude: if cfg.claude_usage { make_claude_window(&event_loop, &mut web_context, &cfg) } else { None },
+    };
     ICONS_EDGE.store(edge_index(icons_edge_of(&cfg)), Ordering::Relaxed);
-
-    // claude.ai ablak: rejtve indul, csak belépéskor jelenik meg
-    let claude = if cfg.claude_usage { make_claude_window(&event_loop, &mut web_context, &cfg) } else { None };
 
     let orig_taskbar = if hide_taskbar {
         let s = appbar::taskbar_state();
@@ -450,88 +431,8 @@ fn main() {
         None
     };
 
-    let matchers = cfg.apps.iter().map(Matcher::new).collect();
-    let mut hub = Hub {
-        cfg,
-        cfg_path,
-        matchers,
-        bars,
-        tracker: Tracker::default(),
-        last_fg: initial_fg,
-        fg_by_mon: HashMap::new(),
-        refocus: None,
-        last_state: String::new(),
-        pending: None,
-        settings_watch: None,
-        orig_taskbar,
-        want_hidden_taskbar: hide_taskbar,
-        fullscreen: HashSet::new(),
-        want_groups: 0,
-        scale: 1.0,
-        work: RECT::default(),
-        suppress_until: Instant::now(),
-        relayout_pending: false,
-        exit_requested: false,
-        shut_down: false,
-        last_usage: None,
-        usage_wake,
-        drag_paths: Vec::new(),
-        extra_order: Vec::new(),
-        extra_names: HashMap::new(),
-        claude,
-        thread_usage: None,
-        settings,
-        available: Vec::new(),
-        session: started_at,
-        cpu_prev: None,
-        next_sys: Instant::now(),
-        launch_queue: std::collections::VecDeque::new(),
-        next_launch: Instant::now(),
-        peek: peek_win,
-        seen: HashMap::new(),
-        seen_seq: 0,
-        fly: fly_win,
-        last_power: String::new(),
-        next_power: Instant::now(),
-        volume: None,
-        last_volume: String::new(),
-        next_volume: Instant::now(),
-        last_tray: String::new(),
-        next_tray: Instant::now(),
-        recent_apps: hub::recent::load(),
-        last_recent: String::new(),
-        cal_cache: None,
-        cal_busy: false,
-        launcher: launch_win,
-        quick_along: HashMap::new(),
-        settings_bar: None,
-        launcher_bar: None,
-        health: health_win,
-        health_due: None,
-        next_idle_check: Instant::now(),
-        next_scheme_check: Instant::now(),
-        start_apps: Vec::new(),
-        apps_at: None,
-        apps_busy: false,
-        media_tx: None,
-        last_media: None,
-        borders: HashMap::new(),
-        neon_target: None,
-        hardware: None,
-        hardware_busy: false,
-        net: net_win,
-        net_misses: 0,
-        net_offline: false,
-        net_oks: 0,
-        net_dismissed: false,
-        next_net_check: Instant::now() + Duration::from_secs(5),
-        last_codex: None,
-        next_codex: Instant::now(),
-        last_periph: String::new(),
-        next_periph: Instant::now() + Duration::from_secs(3),
-        periph_busy: false,
-        next_cal: Instant::now() + Duration::from_secs(5),
-    };
+    let startup = Startup { foreground: initial_fg, orig_taskbar, hide_taskbar, usage_wake, session: started_at };
+    let mut hub = Hub::new(cfg, cfg_path, bars, popups, startup);
     // A telepített programok listája (a Start menünek) háttérben készül el.
     hub.apps_refresh(true);
     hub.health_restart();
@@ -542,6 +443,12 @@ fn main() {
     clipboard::set_enabled(hub.cfg.start_menu.clipboard);
     clipboard::start(|| send(UserEvent::Clipboard));
     keyhook::start(|what| send(UserEvent::WinKey(what)));
+    // saját asztali menü: jobb kattintás az asztal üres területén
+    deskmenu::set_enabled(hub.cfg.desktop_menu, hub.cfg.desktop_icon_menu);
+    deskmenu::start(
+        |x, y, shift, item| send(UserEvent::DeskClick(x, y, shift, item)),
+        |seq, sub, items| send(UserEvent::DeskItems(seq, sub, items)),
+    );
     // Terhelés és Hálózat: a rendszerfigyelő háttérszál (csak a látható moduloknak mér)
     monitor::spawn(|v| send(UserEvent::Monitor(v.to_string())));
     hub.configure_monitor();
@@ -554,7 +461,7 @@ fn main() {
     hub.check_available();
     // Bejelentkezéskori indulásnál a „géppel induló” programokat is elindítjuk.
     if at_logon {
-        hub.launch_queue = hub
+        hub.logon_launch.queue = hub
             .cfg
             .apps
             .iter()
@@ -562,9 +469,9 @@ fn main() {
             .filter(|(i, a)| a.autostart && hub.available.get(*i).copied().unwrap_or(true))
             .map(|(i, _)| i)
             .collect();
-        hub.next_launch = Instant::now() + Duration::from_secs(5);
-        if !hub.launch_queue.is_empty() {
-            log(format!("bejelentkezéskor indítandó programok: {}", hub.launch_queue.len()));
+        hub.logon_launch.next = Instant::now() + Duration::from_secs(5);
+        if !hub.logon_launch.queue.is_empty() {
+            log(format!("bejelentkezéskor indítandó programok: {}", hub.logon_launch.queue.len()));
         }
     }
     hub.save_state();
@@ -575,7 +482,6 @@ fn main() {
                 let _ = ShowWindow(b.hwnd, SW_SHOWNOACTIVATE);
             }
         }
-        let _ = &b.window;
     }
     if let Some(left) = hub.bar(Edge::Left) {
         unsafe {
@@ -615,8 +521,13 @@ fn main() {
                 UserEvent::Media(payload) => hub.on_media(payload),
                 UserEvent::Monitor(payload) => hub.on_monitor(&payload),
                 UserEvent::Periph(payload) => hub.on_periph(payload),
+                UserEvent::Tray(list) => hub.on_tray(list),
+                UserEvent::Codex(payload, force) => hub.on_codex(payload, force),
                 UserEvent::HealthIpc(raw) => hub.on_health_ipc(&raw),
                 UserEvent::Clipboard => hub.send_clips(),
+                UserEvent::DeskClick(x, y, shift, item) => hub.on_desk_click(x, y, shift, item),
+                UserEvent::DeskItems(seq, sub, items) => hub.on_desk_items(seq, sub, items),
+                UserEvent::DeskIpc(raw) => hub.on_desk_ipc(&raw),
                 UserEvent::SystemTheme => hub.on_system_theme(),
                 UserEvent::Hardware(v) => hub.on_hardware(v),
                 UserEvent::NetIpc(raw) => hub.on_net_ipc(&raw),
@@ -636,12 +547,8 @@ fn main() {
             }
             _ => {}
         }
-        let _keep_settings = hub.settings.as_ref().map(|s| &s.window);
-        let _keep_peek = hub.peek.as_ref().map(|p| &p.window);
-        let _keep_fly = hub.fly.as_ref().map(|f| &f.window);
-        let _keep_launcher = hub.launcher.as_ref().map(|l| &l.window);
-        let _keep_health = hub.health.as_ref().map(|h| &h.window);
-        let _keep_net = hub.net.as_ref().map(|h| &h.window);
+        // életjel az asztali menü figyelőjének (ha a fő szál elakad, nem nyel el kattintást)
+        deskmenu::alive();
         hub.tick();
         // képernyő került be vagy ki: a sávcsoportokat itt (ablak létrehozására alkalmas helyen) igazítjuk
         if hub.needs_rebuild() {

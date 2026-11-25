@@ -6,22 +6,20 @@
 //! A registry írása és a Windows értesítése háttérszálon fut (a körüzenet lassú lehet).
 
 use crate::config::{Theme, WindowsSync};
-use crate::log;
+use crate::{log, reg};
 use serde_json::{Value, json};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
 use windows::Win32::Graphics::Dwm::{DWMWA_BORDER_COLOR, DwmSetWindowAttribute};
-use windows::Win32::System::Registry::{
-    HKEY_CURRENT_USER, REG_BINARY, REG_DWORD, RRF_RT_REG_BINARY, RRF_RT_REG_DWORD, RegGetValueW, RegSetKeyValueW,
-};
+use windows::Win32::System::Registry::HKEY_CURRENT_USER;
 use windows::Win32::UI::WindowsAndMessaging::{HWND_BROADCAST, SMTO_ABORTIFHUNG, SendMessageTimeoutW, WM_SETTINGCHANGE};
-use windows::core::{HSTRING, PCWSTR, w};
+use windows::core::HSTRING;
 
-const PERSONALIZE: PCWSTR = w!(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
-const ACCENT: PCWSTR = w!(r"Software\Microsoft\Windows\CurrentVersion\Explorer\Accent");
-const DWM: PCWSTR = w!(r"Software\Microsoft\Windows\DWM");
-const DESKTOP: PCWSTR = w!(r"Control Panel\Desktop");
+const PERSONALIZE: &str = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
+const ACCENT: &str = r"Software\Microsoft\Windows\CurrentVersion\Explorer\Accent";
+const DWM: &str = r"Software\Microsoft\Windows\DWM";
+const DESKTOP: &str = r"Control Panel\Desktop";
 
 /// A Windows Terminalban létrehozott színsémák neve.
 pub const TERM_DARK: &str = "CyberShell Dark";
@@ -32,54 +30,20 @@ static LOCK: Mutex<()> = Mutex::new(());
 
 // ───────────── registry ─────────────
 
-fn get_dword(key: PCWSTR, name: &str) -> Option<u32> {
-    let mut v = 0u32;
-    let mut len = 4u32;
-    let r = unsafe {
-        RegGetValueW(
-            HKEY_CURRENT_USER,
-            key,
-            &HSTRING::from(name),
-            RRF_RT_REG_DWORD,
-            None,
-            Some(&mut v as *mut u32 as *mut _),
-            Some(&mut len),
-        )
-    };
-    r.is_ok().then_some(v)
+fn get_dword(key: &str, name: &str) -> Option<u32> {
+    reg::get_dword(HKEY_CURRENT_USER, key, name)
 }
 
-fn set_dword(key: PCWSTR, name: &str, v: u32) -> bool {
-    let r = unsafe { RegSetKeyValueW(HKEY_CURRENT_USER, key, &HSTRING::from(name), REG_DWORD.0, Some(&v as *const u32 as *const _), 4) };
-    r.is_ok()
+fn set_dword(key: &str, name: &str, v: u32) -> bool {
+    reg::set_dword(HKEY_CURRENT_USER, key, name, v)
 }
 
-fn get_binary(key: PCWSTR, name: &str) -> Option<Vec<u8>> {
-    let mut buf = vec![0u8; 64];
-    let mut len = buf.len() as u32;
-    let r = unsafe {
-        RegGetValueW(
-            HKEY_CURRENT_USER,
-            key,
-            &HSTRING::from(name),
-            RRF_RT_REG_BINARY,
-            None,
-            Some(buf.as_mut_ptr() as *mut _),
-            Some(&mut len),
-        )
-    };
-    if r.is_err() {
-        return None;
-    }
-    buf.truncate(len as usize);
-    Some(buf)
+fn get_binary(key: &str, name: &str) -> Option<Vec<u8>> {
+    reg::get_binary(HKEY_CURRENT_USER, key, name)
 }
 
-fn set_binary(key: PCWSTR, name: &str, data: &[u8]) -> bool {
-    let r = unsafe {
-        RegSetKeyValueW(HKEY_CURRENT_USER, key, &HSTRING::from(name), REG_BINARY.0, Some(data.as_ptr() as *const _), data.len() as u32)
-    };
-    r.is_ok()
+fn set_binary(key: &str, name: &str, data: &[u8]) -> bool {
+    reg::set_binary(HKEY_CURRENT_USER, key, name, data)
 }
 
 /// Szól a futó programoknak (Intéző, Beállítások, Terminal…), hogy a színek megváltoztak.

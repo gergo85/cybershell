@@ -3,8 +3,7 @@
 //! (wmi.rs), a videomemória a registryből; a WMI-ben nem szereplő adatokat (memóriatípus,
 //! buszszélesség, órajel) egy táblázat adja az ismert videókártyákhoz.
 
-use windows::Win32::System::Registry::RegGetValueW;
-use windows::core::{HSTRING, w};
+use crate::reg;
 
 /// A gép alkatrészei: alaplap (BIOS, foglalatok), processzor, memóriamodulok, videókártya,
 /// Windows-változat. Közvetlenül a Windows WMI-adatbázisából, de így is lassú (fél–egy mp):
@@ -15,7 +14,8 @@ pub fn query() -> Option<serde_json::Value> {
 
 /// A nyers adatok, a `summary` bemenete: osztályonként a WMI-tulajdonságok nevével.
 fn raw() -> Option<serde_json::Value> {
-    use crate::wmi::{ComThread, Wmi};
+    use crate::com::ComThread;
+    use crate::wmi::Wmi;
     use serde_json::{Value, json};
     // a COM elsőként indul és utolsóként zárul, a WMI-kapcsolatok előtte szűnnek meg
     let _com = ComThread::init();
@@ -107,61 +107,24 @@ fn disk_bus(n: u64) -> &'static str {
 /// A videókártyák pontos memóriamérete a meghajtójuk beállításaiból (a WMI 4 GB-nál levág):
 /// a kijelzőosztály kulcsai alatt (0000, 0001…) a `HardwareInformation.qwMemorySize` érték.
 fn gpu_memory() -> Vec<serde_json::Value> {
-    use windows::Win32::Foundation::ERROR_SUCCESS;
-    use windows::Win32::System::Registry::{
-        HKEY, HKEY_LOCAL_MACHINE, KEY_READ, RRF_RT_ANY, RRF_RT_REG_SZ, RegCloseKey, RegEnumKeyExW, RegOpenKeyExW,
-    };
+    use windows::Win32::System::Registry::HKEY_LOCAL_MACHINE;
     const CLASS: &str = r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}";
     let mut out = Vec::new();
-    let mut key = HKEY::default();
-    if unsafe { RegOpenKeyExW(HKEY_LOCAL_MACHINE, &HSTRING::from(CLASS), None, KEY_READ, &mut key) } != ERROR_SUCCESS {
-        return out;
-    }
-    for i in 0.. {
-        let mut name = [0u16; 256];
-        let mut len = name.len() as u32;
-        if unsafe { RegEnumKeyExW(key, i, Some(windows::core::PWSTR(name.as_mut_ptr())), &mut len, None, None, None, None) }
-            != ERROR_SUCCESS
-        {
-            break;
-        }
-        let sub = String::from_utf16_lossy(&name[..len as usize]);
-        // a „Properties” és a „Configuration” nem eszköz
-        if !sub.starts_with('0') {
-            continue;
-        }
-        let sub = HSTRING::from(sub);
+    // a „Properties” és a „Configuration” nem eszköz
+    for sub in reg::subkeys(HKEY_LOCAL_MACHINE, CLASS).into_iter().filter(|s| s.starts_with('0')) {
+        let key = format!(r"{CLASS}\{sub}");
         // a méret REG_QWORD, egyes meghajtóknál 8 (régebben 4) bájtos REG_BINARY
-        let mut buf = [0u8; 8];
-        let mut size = buf.len() as u32;
-        let r = unsafe {
-            RegGetValueW(
-                key,
-                &sub,
-                w!("HardwareInformation.qwMemorySize"),
-                RRF_RT_ANY,
-                None,
-                Some(buf.as_mut_ptr() as *mut _),
-                Some(&mut size),
-            )
-        };
-        let mem = match size {
-            8 => u64::from_le_bytes(buf),
-            4 => u32::from_le_bytes([buf[0], buf[1], buf[2], buf[3]]) as u64,
+        let mem = match reg::get_raw(HKEY_LOCAL_MACHINE, &key, "HardwareInformation.qwMemorySize").as_deref() {
+            Some(&[a, b, c, d, e, f, g, h]) => u64::from_le_bytes([a, b, c, d, e, f, g, h]),
+            Some(&[a, b, c, d]) => u32::from_le_bytes([a, b, c, d]) as u64,
             _ => 0,
         };
-        if r.is_err() || mem == 0 {
+        if mem == 0 {
             continue;
         }
-        let mut desc = [0u16; 512];
-        let mut size = (desc.len() * 2) as u32;
-        let r =
-            unsafe { RegGetValueW(key, &sub, w!("DriverDesc"), RRF_RT_REG_SZ, None, Some(desc.as_mut_ptr() as *mut _), Some(&mut size)) };
-        let n = desc.iter().position(|&c| c == 0).unwrap_or(desc.len());
-        let desc = if r.is_ok() { String::from_utf16_lossy(&desc[..n]) } else { String::new() };
+        let desc = reg::get_string(HKEY_LOCAL_MACHINE, &key, "DriverDesc").unwrap_or_default();
         out.push(serde_json::json!({ "DriverDesc": desc, "mem": mem }));
     }
-    let _ = unsafe { RegCloseKey(key) };
     out
 }
 

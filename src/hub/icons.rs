@@ -1,14 +1,26 @@
 //! Az Ikonok viselkedése: indítás, váltás egy program ablakai között, a nem kitűzött futó
 //! programok és a fájlhúzás.
 
-use crate::hub::Hub;
-use crate::hub::Pending;
-use crate::hub::extra_key;
+use crate::hub::{Hub, PendingMaximize, WindowWatch, extra_key, window_ids};
 use crate::log;
 use crate::wintrack::WinInfo;
 use crate::{config, wintrack};
 use serde_json::json;
+use std::collections::VecDeque;
 use std::time::{Duration, Instant};
+
+/// Bejelentkezéskor a „géppel induló” programok egyenkénti, kis szünetekkel történő indítása:
+/// a még indítandó programok (a config sorszáma) és a következő indítás ideje.
+pub(crate) struct LogonLaunch {
+    pub(crate) queue: VecDeque<usize>,
+    pub(crate) next: Instant,
+}
+
+impl LogonLaunch {
+    pub(crate) fn new(first: Instant) -> Self {
+        LogonLaunch { queue: VecDeque::new(), next: first }
+    }
+}
 
 impl Hub {
     /// Egy program ablakai közti váltás, ahogy a tálca is csinálja: ha nem aktív,
@@ -39,7 +51,7 @@ impl Hub {
             }
         };
         if let Some(h) = shown {
-            self.settings_dismiss_for(Some(h), &[]);
+            self.settings_dismiss_for(h);
         }
         self.last_state.clear();
         self.poll();
@@ -69,10 +81,9 @@ impl Hub {
         let (mine, exe) = self.target_windows(msg);
         if new_instance {
             if let Some(exe) = exe {
-                let own = self.own_hwnds();
-                let known: Vec<isize> = self.tracker.snapshot(&own).iter().map(|w| w.hwnd.0 as isize).collect();
+                let known = self.known_windows();
                 if wintrack::shell_open(&exe, "", "", false) {
-                    self.settings_dismiss_for(None, &known);
+                    self.settings_dismiss_on_launch(known);
                 }
             }
             return;
@@ -82,13 +93,13 @@ impl Hub {
 
     /// Fájlhúzás a bal sáv fölött: továbbítjuk a felületnek, az dönti el, melyik ikon fölött van.
     pub(crate) fn on_drag(&mut self, idx: usize, phase: &str, x: i32, y: i32, paths: Vec<String>) {
-        if self.peek.as_ref().is_some_and(|p| p.visible) {
+        if self.peek_visible() {
             self.peek_hide();
         }
         if !paths.is_empty() {
             self.drag_paths = paths;
         }
-        self.eval_bar(idx, &json!({ "type": "drag", "phase": phase, "x": x, "y": y }).to_string());
+        self.eval_bar(idx, &json!({ "type": "drag", "phase": phase, "x": x, "y": y }));
     }
 
     /// Húzás közben egy ikon fölött időzött a kurzor: az ablakát a többi fölé hozzuk.
@@ -110,8 +121,13 @@ impl Hub {
                 log(format!("ejtés: {} fájl megnyitása – {exe} -> {}", paths.len(), if ok { "ok" } else { "HIBA" }));
             }
             _ => {
-                let t =
-                    self.tr("Ezzel a programmal nem nyitható meg.", "This program can't open it.", "Ten program nie może tego otworzyć.");
+                let t = self.tr(
+                    "Ezzel a programmal nem nyitható meg.",
+                    "This program can't open it.",
+                    "Ten program nie może tego otworzyć.",
+                    "Dieses Programm kann das nicht öffnen.",
+                    "Este programa no puede abrirlo.",
+                );
                 self.toast(&t);
             }
         }
@@ -136,17 +152,13 @@ impl Hub {
         let ok = wintrack::shell_open(&path, &config::expand_env(&app.args), &config::expand_env(&app.cwd), app.maximize());
         log(format!("indítás: {} ({path}) -> {}", app.name, if ok { "ok" } else { "HIBA" }));
         if ok {
-            let known: Vec<isize> = wins.iter().map(|w| w.hwnd.0 as isize).collect();
-            self.settings_dismiss_for(None, &known);
+            let known = window_ids(&wins);
             if app.maximize() {
-                self.pending = Some(Pending {
-                    app: id,
-                    known: wins.iter().map(|w| w.hwnd.0 as isize).collect(),
-                    deadline: Instant::now() + Duration::from_secs(20),
-                });
+                self.pending_maximize = Some(PendingMaximize { app: id, watch: WindowWatch::new(known.clone(), Duration::from_secs(20)) });
             }
+            self.settings_dismiss_on_launch(known);
         } else {
-            let t = self.tr("Nem indítható", "Cannot start", "Nie można uruchomić");
+            let t = self.tr("Nem indítható", "Cannot start", "Nie można uruchomić", "Start nicht möglich", "No se puede iniciar");
             self.toast(&format!("{t}: {}", app.name));
         }
     }

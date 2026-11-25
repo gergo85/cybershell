@@ -79,6 +79,8 @@
       hu: { sWeather: 'Időjárás', sWeatherHint: 'Az időjárás lekérését a config.json weather.enabled értéke kapcsolja ki.', wDetails: 'Részletek' },
       en: { sWeather: 'Weather', sWeatherHint: 'Fetching the weather is turned off by weather.enabled in config.json.', wDetails: 'Details' },
       pl: { sWeather: 'Pogoda', sWeatherHint: 'Pobieranie pogody wyłącza wartość weather.enabled w config.json.', wDetails: 'Szczegóły' },
+      de: { sWeather: 'Wetter', sWeatherHint: 'Der Wetterabruf ist mit weather.enabled in config.json ausgeschaltet.', wDetails: 'Details' },
+      es: { sWeather: 'Tiempo', sWeatherHint: 'La descarga del tiempo está desactivada con weather.enabled en config.json.', wDetails: 'Detalles' },
     },
   });
 })();

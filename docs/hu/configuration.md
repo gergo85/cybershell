@@ -28,7 +28,7 @@ Mentés után nyomd meg a `Ctrl+Alt+R`-t.
 
 | Mező | Jelentés |
 |---|---|
-| `language` | A felület nyelve: `"auto"` (alapérték: magyar Windowson magyar, lengyelen lengyel, minden másnál angol), `"en"`, `"hu"` vagy `"pl"`. A beállításokban választott nyelv felülírja az automatikusat. A szövegek az `ui\i18n.js` fájlban vannak, új nyelv is felvehető. |
+| `language` | A felület nyelve: `"auto"` (alapérték: magyar, lengyel, német vagy spanyol nyelvű Windowson az adott nyelv, minden másnál angol), `"en"`, `"hu"`, `"pl"`, `"de"` vagy `"es"`. A beállításokban választott nyelv felülírja az automatikusat. A szövegek az `ui\i18n.js` fájlban vannak, új nyelv is felvehető. |
 | `startWithWindows` | Induljon-e a CyberShell bejelentkezéskor. A fájl az irányadó: indításkor ehhez igazítja a Windows beállítását. |
 | `iconsEdge`, `infoEdge` | Az Ikonok és az információs panel helye: `"left"`, `"right"`, `"top"` vagy `"bottom"` (az Ikonok alapból `left`). Az `infoEdge` lehet `"auto"` is (ez az alapérték): laptopon (akkumulátoros gépen) `bottom`, mert oldalt a kisebb képernyőn nem fér ki minden, asztali gépen `right`. Nem lehetnek ugyanott. A régi `swapSides: true` beállítást a program magától `right`/`left`-re váltja. |
 | `iconLabels` | `false` esetén az Ikonok sávján nem látszik a programok neve (alapból `true`). |
@@ -57,6 +57,8 @@ Mentés után nyomd meg a `Ctrl+Alt+R`-t.
 | `health.enabled`, `health.minutes` | Az Egészség szünet-emlékeztető be- és kikapcsolása, illetve hossza percben (5–480, alapból 90). |
 | `wallpaper` | A beállításokban legutóbb választott háttérkép teljes útvonala. Ha a fájlban átírod, újratöltéskor a CyberShell beállítja a Windows háttérképének. |
 | `neonBorder` | Neonkeret: `"off"` (alapból), `"active"` (az előtérben lévő program körül a téma fő színével fénylő keret) vagy `"all"` (emellett a többi ablak kerete is a téma színét kapja, halványabban; Windows 11). |
+| `desktopMenu` | `true` (alapból): az asztal üres területére tett jobb kattintás a CyberShell asztali menüjét nyitja meg, a Windowséval azonos parancsokkal. `false` esetén a Windows menüjét. |
+| `desktopIconMenu` | `true` (alapból): az asztali ikonokra tett jobb kattintás a CyberShell menüjét nyitja meg, a Windowséval azonos parancsokkal. `false` esetén a Windows menüjét. |
 | `windowsSync.darkMode` | `true` esetén a Windows sötét/világos módja (alkalmazások és rendszer) a CyberShell témájával együtt vált. |
 | `windowsSync.accent` | `true` esetén a Windows kiemelőszíne a téma fő színe lesz. |
 | `windowsSync.terminal` | `true` esetén a Windows Terminal kap egy `CyberShell Dark` és `CyberShell Light` színsémát, és az alapprofil a témával együtt vált köztük. |

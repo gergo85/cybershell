@@ -223,6 +223,16 @@
         curSwap: 'Zamień', curDate: 'Kurs EBC, {d}', curTrend: 'Ostatnie 30 dni: {p}',
         curCard: '// WALUTY', curAdd: 'Dodaj', curRemove: 'Usuń',
       },
+      de: {
+        secCur: '// WÄHRUNG', sCur: 'Währung', sCurHint: 'Umrechner mit den Tageskursen der EZB; die Währungen wählst du auf dem Tab Funktionen',
+        curSwap: 'Tauschen', curDate: 'EZB-Kurs, {d}', curTrend: 'Letzte 30 Tage: {p}',
+        curCard: '// WÄHRUNG', curAdd: 'Hinzufügen', curRemove: 'Entfernen',
+      },
+      es: {
+        secCur: '// DIVISAS', sCur: 'Divisas', sCurHint: 'Conversor con los tipos diarios del BCE; las divisas se eligen en la pestaña Funciones',
+        curSwap: 'Invertir', curDate: 'Tipo del BCE, {d}', curTrend: 'Últimos 30 días: {p}',
+        curCard: '// DIVISAS', curAdd: 'Añadir', curRemove: 'Quitar',
+      },
     },
   });
 })();

@@ -102,6 +102,14 @@
         secVolume: '// GŁOŚNOŚĆ', sVolume: 'Głośność', volMuteT: 'Wycisz', volUnmute: 'Wyłącz wyciszenie',
         volHint: 'Przewiń, aby zmienić głośność; suwak można przeciągać. Kliknięcie procentów otwiera mikser głośności Windows.',
       },
+      de: {
+        secVolume: '// LAUTSTÄRKE', sVolume: 'Lautstärke', volMuteT: 'Stumm', volUnmute: 'Ton an',
+        volHint: 'Mit dem Mausrad die Lautstärke ändern; der Regler lässt sich ziehen. Ein Klick auf die Prozentzahl öffnet den Lautstärkemixer von Windows.',
+      },
+      es: {
+        secVolume: '// VOLUMEN', sVolume: 'Volumen', volMuteT: 'Silenciar', volUnmute: 'Activar sonido',
+        volHint: 'Gira la rueda del ratón para cambiar el volumen; el control se puede arrastrar. Haz clic en el porcentaje para abrir el mezclador de volumen de Windows.',
+      },
     },
   });
 })();

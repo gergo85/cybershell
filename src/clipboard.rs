@@ -8,7 +8,7 @@
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use windows::Win32::Foundation::{HANDLE, HGLOBAL, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::DataExchange::{
@@ -147,10 +147,6 @@ fn read_global<T>(format: u32, f: impl FnOnce(*const u8, usize) -> T) -> Option<
     }
 }
 
-fn now_ms() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
-}
-
 /// Az aktuális vágólap-tartalom felvétele az előzmények elejére. Igaz, ha változott a lista.
 fn capture() -> bool {
     if !has_format(CF_UNICODETEXT) {
@@ -194,7 +190,7 @@ fn capture() -> bool {
             source = old.source;
         }
     }
-    h.insert(0, Clip { id: NEXT_ID.fetch_add(1, Ordering::Relaxed), text, at: now_ms(), source });
+    h.insert(0, Clip { id: NEXT_ID.fetch_add(1, Ordering::Relaxed), text, at: crate::unix_ms(), source });
     h.truncate(MAX_ITEMS);
     true
 }

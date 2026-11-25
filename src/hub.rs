@@ -3,6 +3,7 @@
 //! a sávok indulása, időzítés, a sávok parancsai, a futó programok figyelése és az újratöltés.
 
 pub(crate) mod claude;
+pub(crate) mod deskmenu;
 pub(crate) mod flyout;
 pub(crate) mod health;
 pub(crate) mod icons;
@@ -22,34 +23,41 @@ use crate::HOTKEY_RELOAD;
 use crate::appbar::Edge;
 use crate::config::Config;
 use crate::hub::claude::ClaudeWeb;
+use crate::hub::deskmenu::DeskWin;
+use crate::hub::flyout::CalendarCache;
 use crate::hub::flyout::FlyWin;
 use crate::hub::health::HEALTH_IDLE;
-use crate::hub::health::HealthWin;
+use crate::hub::health::{BannerWin, HealthTimer};
+use crate::hub::icons::LogonLaunch;
 use crate::hub::layout::Bar;
 use crate::hub::layout::ICONS_EDGE;
 use crate::hub::layout::bar_url;
 use crate::hub::layout::edge_index;
 use crate::hub::layout::insets_of;
 use crate::hub::layout::part_for;
+use crate::hub::net::NetWatch;
+use crate::hub::panel::Feed;
 use crate::hub::preview::PeekWin;
 use crate::hub::settings::SettingsWin;
 use crate::hub::start::LaunchWin;
 use crate::log;
 use crate::state_path;
+use crate::web::desk_url;
 use crate::web::fly_url;
 use crate::web::health_url;
 use crate::web::launcher_url;
 use crate::web::nav_url;
 use crate::web::net_url;
 use crate::web::peek_url;
-use crate::web::percent_encode;
 use crate::web::push;
+use crate::web::{app_icon_url, exe_icon_url, file_url, percent_encode};
 use crate::wintrack::Matcher;
 use crate::wintrack::Tracker;
 use crate::wintrack::WinInfo;
 use crate::{appbar, apps, autostart, clipboard, config, keyhook, media, sys, wintrack};
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
+use std::fmt::Display;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc::Sender;
@@ -58,18 +66,82 @@ use windows::Win32::Foundation::{HWND, RECT};
 use windows::Win32::UI::Input::KeyboardAndMouse::UnregisterHotKey;
 use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
 
-pub(crate) struct Pending {
-    pub(crate) app: usize,
-    pub(crate) known: HashSet<isize>,
-    pub(crate) deadline: Instant,
+/// Egy indítás utáni figyelés: az indításkor már meglévő ablakok azonosítói, és meddig várunk
+/// a program első új ablakára.
+pub(crate) struct WindowWatch {
+    known: HashSet<isize>,
+    deadline: Instant,
 }
 
+impl WindowWatch {
+    pub(crate) fn new(known: HashSet<isize>, wait: Duration) -> Self {
+        WindowWatch { known, deadline: Instant::now() + wait }
+    }
+
+    pub(crate) fn expired(&self) -> bool {
+        Instant::now() > self.deadline
+    }
+
+    /// Az első új (az indításkor még nem létező), nem kis méretre tett ablak.
+    pub(crate) fn first_new<'a>(&self, wins: &'a [WinInfo]) -> Option<&'a WinInfo> {
+        self.first_new_where(wins, |_| true)
+    }
+
+    /// Mint a `first_new`, de csak az `ok` feltételnek megfelelő ablakok közül.
+    pub(crate) fn first_new_where<'a>(&self, wins: &'a [WinInfo], ok: impl Fn(&WinInfo) -> bool) -> Option<&'a WinInfo> {
+        wins.iter().find(|w| !self.known.contains(&(w.hwnd.0 as isize)) && !w.iconic && ok(w))
+    }
+}
+
+/// Az ablakok azonosítói (az indítás előtt meglévők a `WindowWatch`-nak).
+pub(crate) fn window_ids(wins: &[WinInfo]) -> HashSet<isize> {
+    wins.iter().map(|w| w.hwnd.0 as isize).collect()
+}
+
+/// Teljes méretre nyitandó, most indított program (a config sorszáma) és az első új ablakának figyelése.
+pub(crate) struct PendingMaximize {
+    pub(crate) app: usize,
+    pub(crate) watch: WindowWatch,
+}
+
+/// A program teljes állapota. Csak a fő szálon él (a háttérszálak `UserEvent`-tel jelentkeznek).
+/// A mezők témák szerint szakaszokba rendezve; a hozzájuk tartozó metódusok a `hub/` almoduljaiban.
 pub(crate) struct Hub {
+    // ── beállítás ──
     pub(crate) cfg: Config,
     pub(crate) cfg_path: PathBuf,
+    /// Az Ikonok programjainak ablakpárosítása (a config sorrendjében).
     pub(crate) matchers: Vec<Matcher>,
+    /// Az appok telepítettsége (a config sorrendjében), indításkor és újratöltéskor ellenőrizve.
+    pub(crate) available: Vec<bool>,
+    /// A program indulásának ideje: a felület ebből tudja, hogy új munkamenet kezdődött-e.
+    pub(crate) session: u64,
+
+    // ── életciklus ──
+    pub(crate) exit_requested: bool,
+    pub(crate) shut_down: bool,
+
+    // ── sávok és képernyők (hub/layout.rs) ──
     pub(crate) bars: Vec<Bar>,
+    /// Hány képernyőn kellene sávcsoport (ha eltér a meglévőtől, a fő ciklus újraépíti).
+    pub(crate) want_groups: usize,
+    /// Az elsődleges képernyő DPI-szorzója.
+    pub(crate) scale: f64,
+    /// Az elsődleges képernyő munkaterülete a sávok nélkül (a legutóbbi elrendezés szerint).
+    pub(crate) work: RECT,
+    /// Azok a képernyők, ahol épp teljes képernyős program fut.
+    pub(crate) fullscreen: HashSet<usize>,
+    /// Egy elrendezés után ennyi ideig nem rendezünk újra (a saját változásunk visszhangja ellen),
+    /// közben csak megjegyezzük, hogy kell.
+    pub(crate) suppress_until: Instant,
+    pub(crate) relayout_pending: bool,
+    /// Ha mi rejtettük el a tálcát: az eredeti állapota.
+    pub(crate) orig_taskbar: Option<u32>,
+    pub(crate) want_hidden_taskbar: bool,
+
+    // ── futó programok és ablakok (hub/icons.rs, `poll`) ──
     pub(crate) tracker: Tracker,
+    /// A legutóbb előtérben lévő programablak.
     pub(crate) last_fg: Option<HWND>,
     /// Képernyőnként (a sávcsoport sorszáma szerint) az ott legutóbb előtérbe került ablak: az
     /// Ikonok ezt jelölik aktívnak az adott képernyőn.
@@ -77,116 +149,101 @@ pub(crate) struct Hub {
     /// Bezárt felugró ablak: utána a képernyője legfelső programja kapja vissza a fókuszt
     /// (`refocus_later`), legkorábban a megadott időpontban.
     pub(crate) refocus: Option<(HWND, Instant)>,
+    /// Az Ikonoknak legutóbb küldött állapot (képernyőnként egy-egy JSON, sorban).
     pub(crate) last_state: String,
-    pub(crate) pending: Option<Pending>,
-    /// Nyitott beállítások mellett indított program: az első új ablakáig figyeljük, és csak
-    /// akkor zárjuk be a beállításokat, ha az ablak ugyanazon a képernyőn jelenik meg.
-    /// (A már ismert ablakok azonosítói és a figyelés határideje.)
-    pub(crate) settings_watch: Option<(HashSet<isize>, Instant)>,
-    /// Hány képernyőn kellene sávcsoport (ha eltér a meglévőtől, a fő ciklus újraépíti).
-    pub(crate) want_groups: usize,
-    /// Ha mi rejtettük el a tálcát: az eredeti állapota.
-    pub(crate) orig_taskbar: Option<u32>,
-    pub(crate) want_hidden_taskbar: bool,
-    /// Azok a képernyők, ahol épp teljes képernyős program fut.
-    pub(crate) fullscreen: HashSet<usize>,
-    pub(crate) scale: f64,
-    /// Az elsődleges képernyő munkaterülete a sávok nélkül (a legutóbbi elrendezés szerint).
-    pub(crate) work: RECT,
-    pub(crate) suppress_until: Instant,
-    pub(crate) relayout_pending: bool,
-    pub(crate) exit_requested: bool,
-    pub(crate) shut_down: bool,
-    /// A legutóbbi Claude-használati adat (újratöltéskor azonnal visszaküldjük).
-    pub(crate) last_usage: Option<String>,
-    pub(crate) usage_wake: Option<Sender<()>>,
-    /// Az éppen húzott fájlok (ha egy ikonra ejtik őket, azzal a programmal nyitjuk meg).
-    pub(crate) drag_paths: Vec<String>,
     /// Nem kitűzött, de futó programok: megjelenítési sorrend és nevek.
     pub(crate) extra_order: Vec<String>,
     pub(crate) extra_names: HashMap<String, String>,
-    pub(crate) claude: Option<ClaudeWeb>,
-    /// A háttérszál (állapotsor, közvetlen lekérés) legutóbbi eredménye.
-    pub(crate) thread_usage: Option<serde_json::Value>,
-    pub(crate) settings: Option<SettingsWin>,
-    /// Az appok telepítettsége (a config sorrendjében), indításkor és újratöltéskor ellenőrizve.
-    pub(crate) available: Vec<bool>,
-    /// A program indulásának ideje: a felület ebből tudja, hogy új munkamenet kezdődött-e.
-    pub(crate) session: u64,
-    /// Az előző processzoridő-mérés és a következő terhelésküldés ideje (a beállításokhoz).
-    pub(crate) cpu_prev: Option<(u64, u64)>,
-    pub(crate) next_sys: Instant,
-    /// Bejelentkezéskor indítandó programok (sorszám) és a következő indítás ideje.
-    pub(crate) launch_queue: std::collections::VecDeque<usize>,
-    pub(crate) next_launch: Instant,
-    pub(crate) peek: Option<PeekWin>,
     /// Az ablakok első észlelésének sorrendje (az előnézet ebben a sorrendben mutatja őket).
     pub(crate) seen: HashMap<isize, u64>,
     pub(crate) seen_seq: u64,
+    /// Az éppen húzott fájlok (ha egy ikonra ejtik őket, azzal a programmal nyitjuk meg).
+    pub(crate) drag_paths: Vec<String>,
+
+    // ── indítások figyelése ──
+    /// Teljes méretre nyitandó, most indított program.
+    pub(crate) pending_maximize: Option<PendingMaximize>,
+    /// Nyitott beállítások mellett indított program: az első új ablakáig figyeljük, és csak
+    /// akkor zárjuk be a beállításokat, ha az ablak ugyanazon a képernyőn jelenik meg.
+    pub(crate) settings_watch: Option<WindowWatch>,
+    /// A Start menüből vagy a keresőből indított program: az első új ablakát előre hozzuk, ha
+    /// a Windows a többi mögött nyitotta meg.
+    pub(crate) launch_watch: Option<WindowWatch>,
+    /// Bejelentkezéskor a „géppel induló” programok egyenkénti indítása.
+    pub(crate) logon_launch: LogonLaunch,
+
+    // ── felugró ablakok (mind rejtve indul; amelyik nem jött létre, az `None`) ──
+    pub(crate) settings: Option<SettingsWin>,
+    pub(crate) peek: Option<PeekWin>,
     pub(crate) fly: Option<FlyWin>,
-    /// Az akkumulátor legutóbb elküldött állapota és a következő ellenőrzés ideje.
-    pub(crate) last_power: String,
-    pub(crate) next_power: Instant,
-    /// A hangerő-vezérlő (percenként újranyitjuk, ha közben másik eszköz lett az alapértelmezett),
-    /// és a felületnek legutóbb küldött állapot.
-    pub(crate) volume: Option<(Instant, sys::Volume)>,
-    pub(crate) last_volume: String,
-    pub(crate) next_volume: Instant,
-    /// A háttérprogramok (értesítési terület) legutóbb elküldött listája és a következő ellenőrzés.
-    pub(crate) last_tray: String,
-    pub(crate) next_tray: Instant,
-    /// Mostanában: a kereső „Gyakran használt” programjai (Start menü-azonosítók) és a
-    /// panelnek küldött utolsó lista.
-    pub(crate) recent_apps: Vec<String>,
-    pub(crate) last_recent: String,
-    /// A naptárak legutóbbi letöltése (ideje és tartalma), illetve folyamatban van-e.
-    pub(crate) cal_cache: Option<(Instant, String)>,
-    pub(crate) cal_busy: bool,
     pub(crate) launcher: Option<LaunchWin>,
-    /// Sávonként az Indítás és a Keresés gomb közepe a sáv mentén (CSS-pixel).
-    pub(crate) quick_along: HashMap<(usize, &'static str), f64>,
+    pub(crate) health: Option<BannerWin>,
+    /// A „Megszakadt a kapcsolat” sáv.
+    pub(crate) net: Option<BannerWin>,
+    /// A saját asztali menü.
+    pub(crate) desk: Option<DeskWin>,
+    pub(crate) claude: Option<ClaudeWeb>,
     /// Melyik képernyő információs paneljén nyitották meg a beállításokat, illetve a Start
     /// menüt / keresőt: a gomb csak ott világít.
     pub(crate) settings_bar: Option<usize>,
     pub(crate) launcher_bar: Option<usize>,
-    /// A telepített programok (a Start menünek), a felsorolás ideje, és hogy folyamatban van-e.
+    /// Sávonként az Indítás és a Keresés gomb közepe a sáv mentén (CSS-pixel).
+    pub(crate) quick_along: HashMap<(usize, &'static str), f64>,
+
+    // ── Start menü (hub/start.rs) ──
+    /// A telepített programok, a felsorolás ideje, és hogy folyamatban van-e.
     pub(crate) start_apps: Vec<apps::StartApp>,
     pub(crate) apps_at: Option<Instant>,
     pub(crate) apps_busy: bool,
-    pub(crate) health: Option<HealthWin>,
-    /// Mikor jár le az Egészség visszaszámlálója (kikapcsolva: nincs), és mikor néztük a tétlenséget.
-    pub(crate) health_due: Option<Instant>,
-    pub(crate) next_idle_check: Instant,
-    /// A megjelenés („auto”) következő ellenőrzése.
-    pub(crate) next_scheme_check: Instant,
-    /// Parancsok a Spotify-szálnak, és a legutóbbi állapot (újratöltéskor azonnal visszaküldjük).
+    /// A kereső „Gyakran használt” programjai (Start menü-azonosítók): a Mostanában modul is ezt mutatja.
+    pub(crate) recent_apps: Vec<String>,
+
+    // ── az információs panel moduljainak adatai (hub/panel.rs) ──
+    // A felületnek legutóbb küldött üzenetet mindegyiknél megtartjuk: változatlan üzenetet nem
+    // küldünk újra, a panel újratöltésekor (`send_init`) pedig ezt kapja vissza. Az időzítve
+    // frissülő adatoknál ez egy `Feed` (benne a következő frissítés ideje is); az eseményre
+    // érkezőknél (Claude, Spotify, Mostanában) egy `last_*` mező.
+    pub(crate) power_feed: Feed,
+    /// A hangerő-vezérlő (percenként újranyitjuk, ha közben másik eszköz lett az alapértelmezett).
+    pub(crate) volume: Option<(Instant, sys::Volume)>,
+    pub(crate) volume_feed: Feed,
+    pub(crate) tray_feed: Feed,
+    pub(crate) codex_feed: Feed,
+    pub(crate) periph_feed: Feed,
+    pub(crate) last_recent: String,
+    /// Parancsok a Spotify-szálnak.
     pub(crate) media_tx: Option<Sender<media::Cmd>>,
     pub(crate) last_media: Option<String>,
-    /// Neonkeret: az ablakok, amelyek keretét átszíneztük (és a beállított szín).
+    /// A Claude-használat: a háttérszál ébresztője és legutóbbi eredménye, és a panelnek küldött üzenet.
+    pub(crate) usage_wake: Option<Sender<()>>,
+    pub(crate) thread_usage: Option<serde_json::Value>,
+    pub(crate) last_usage: Option<String>,
+    /// A csatolt naptárak letöltése (az oldalpanelnek és az Események modulnak).
+    pub(crate) calendar: CalendarCache,
+
+    // ── időzített figyelések (`tick`) ──
+    /// Az Egészség visszaszámlálása.
+    pub(crate) health_timer: HealthTimer,
+    /// Az internetkapcsolat figyelése.
+    pub(crate) net_watch: NetWatch,
+    /// A megjelenés („auto”) következő ellenőrzése.
+    pub(crate) next_scheme_check: Instant,
+
+    // ── a beállítások ablak adatai (hub/settings.rs) ──
+    /// Az előző processzoridő-mérés és a következő terhelésküldés ideje.
+    pub(crate) cpu_prev: Option<(u64, u64)>,
+    pub(crate) next_sys: Instant,
+    /// A gép alkatrészei (az első megnyitáskor kérdezzük le), és hogy folyamatban van-e.
+    pub(crate) hardware: Option<serde_json::Value>,
+    pub(crate) hardware_busy: bool,
+    /// Sikertelen lekérdezés után legkorábban ekkor próbáljuk újra (ne minden beállításváltáskor).
+    pub(crate) hardware_retry: Instant,
+
+    // ── neonkeret (hub/sync.rs) ──
+    /// Az ablakok, amelyek keretét átszíneztük (és a beállított szín).
     pub(crate) borders: HashMap<isize, u32>,
     /// A neonkeret-réteg által követett ablak (az utolsó előtérbe került programablak).
     pub(crate) neon_target: Option<isize>,
-    /// A gép alkatrészei (a beállítások első megnyitásakor kérdezzük le), és hogy folyamatban van-e.
-    pub(crate) hardware: Option<serde_json::Value>,
-    pub(crate) hardware_busy: bool,
-    /// Internetkapcsolat: a piros sáv ablaka, az egymást követő sikertelen mérések, épp
-    /// nincs-e kapcsolat, elrejtették-e a sávot, és a következő mérés ideje.
-    pub(crate) net: Option<HealthWin>,
-    pub(crate) net_misses: u8,
-    pub(crate) net_offline: bool,
-    /// Az egymást követő sikeres mérések (a sáv csak a második után tűnik el).
-    pub(crate) net_oks: u8,
-    pub(crate) net_dismissed: bool,
-    pub(crate) next_net_check: Instant,
-    /// A Codex-használat legutóbb elküldött állapota és a következő olvasás ideje.
-    pub(crate) last_codex: Option<String>,
-    pub(crate) next_codex: Instant,
-    /// A Perifériák modul legutóbb elküldött listája, a következő lekérdezés ideje, és hogy fut-e.
-    pub(crate) last_periph: String,
-    pub(crate) next_periph: Instant,
-    pub(crate) periph_busy: bool,
-    /// Az Események modulnak a naptárak következő frissítése.
-    pub(crate) next_cal: Instant,
 }
 
 /// Ezek a rendszerfolyamatok ablakai ne jelenjenek meg a futó programok között.
@@ -205,7 +262,122 @@ pub(crate) fn extra_key(w: &WinInfo) -> Option<String> {
     Some(w.path.to_lowercase())
 }
 
+/// A felugró ablakok (mind rejtve indul; amelyik nem jött létre, az `None`).
+pub(crate) struct Popups {
+    pub(crate) settings: Option<SettingsWin>,
+    pub(crate) peek: Option<PeekWin>,
+    pub(crate) fly: Option<FlyWin>,
+    pub(crate) launcher: Option<LaunchWin>,
+    pub(crate) health: Option<BannerWin>,
+    pub(crate) net: Option<BannerWin>,
+    pub(crate) desk: Option<DeskWin>,
+    pub(crate) claude: Option<ClaudeWeb>,
+}
+
+/// Az indulás körülményei (a main.rs állítja össze, a `Hub::new` kapja meg).
+pub(crate) struct Startup {
+    /// Az indításkor előtérben lévő ablak: ez lesz az első „aktív” program.
+    pub(crate) foreground: Option<HWND>,
+    /// Ha induláskor mi rejtettük el a tálcát: az eredeti állapota.
+    pub(crate) orig_taskbar: Option<u32>,
+    /// Rejtve kell-e tartani a tálcát (a beállítás szerint, ha a --keep-taskbar nem tiltja).
+    pub(crate) hide_taskbar: bool,
+    /// A Claude-használatot lekérdező háttérszál ébresztője (ha a funkció be van kapcsolva).
+    pub(crate) usage_wake: Option<Sender<()>>,
+    /// Az indulás Unix-ideje (másodperc).
+    pub(crate) session: u64,
+}
+
 impl Hub {
+    /// Az induló állapot: a beállítás, a sávok, a felugró ablakok és az indulás körülményei;
+    /// minden más alapállapotban (üres gyorsítótárak, azonnal esedékes időzítők).
+    pub(crate) fn new(cfg: Config, cfg_path: PathBuf, bars: Vec<Bar>, popups: Popups, start: Startup) -> Hub {
+        let now = Instant::now();
+        let Popups { settings, peek, fly, launcher, health, net, desk, claude } = popups;
+        Hub {
+            // beállítás
+            matchers: cfg.apps.iter().map(Matcher::new).collect(),
+            cfg,
+            cfg_path,
+            available: Vec::new(),
+            session: start.session,
+            // életciklus
+            exit_requested: false,
+            shut_down: false,
+            // sávok és képernyők
+            bars,
+            want_groups: 0,
+            scale: 1.0,
+            work: RECT::default(),
+            fullscreen: HashSet::new(),
+            suppress_until: now,
+            relayout_pending: false,
+            orig_taskbar: start.orig_taskbar,
+            want_hidden_taskbar: start.hide_taskbar,
+            // futó programok és ablakok
+            tracker: Tracker::default(),
+            last_fg: start.foreground,
+            fg_by_mon: HashMap::new(),
+            refocus: None,
+            last_state: String::new(),
+            extra_order: Vec::new(),
+            extra_names: HashMap::new(),
+            seen: HashMap::new(),
+            seen_seq: 0,
+            drag_paths: Vec::new(),
+            // indítások figyelése
+            pending_maximize: None,
+            settings_watch: None,
+            launch_watch: None,
+            logon_launch: LogonLaunch::new(now),
+            // felugró ablakok
+            settings,
+            peek,
+            fly,
+            launcher,
+            health,
+            net,
+            desk,
+            claude,
+            settings_bar: None,
+            launcher_bar: None,
+            quick_along: HashMap::new(),
+            // Start menü
+            start_apps: Vec::new(),
+            apps_at: None,
+            apps_busy: false,
+            recent_apps: recent::load(),
+            // az információs panel moduljainak adatai (néhány kicsit később indul, hogy az
+            // indulást ne lassítsa)
+            power_feed: Feed::new(now),
+            volume: None,
+            volume_feed: Feed::new(now),
+            tray_feed: Feed::new(now),
+            codex_feed: Feed::new(now),
+            periph_feed: Feed::new(now + Duration::from_secs(3)),
+            last_recent: String::new(),
+            media_tx: None,
+            last_media: None,
+            usage_wake: start.usage_wake,
+            thread_usage: None,
+            last_usage: None,
+            calendar: CalendarCache::new(now + Duration::from_secs(5)),
+            // időzített figyelések
+            health_timer: HealthTimer::new(now),
+            net_watch: NetWatch::new(now + Duration::from_secs(5)),
+            next_scheme_check: now,
+            // a beállítások ablak adatai
+            cpu_prev: None,
+            next_sys: now,
+            hardware: None,
+            hardware_busy: false,
+            hardware_retry: now,
+            // neonkeret
+            borders: HashMap::new(),
+            neon_target: None,
+        }
+    }
+
     /// Egy nem kitűzött program megjelenítendő neve: a Start menü (honosított) neve, ha ott
     /// megtalálható, különben a fájl leírása. Csak a programlista betöltése után tároljuk el,
     /// hogy az induláskor kapott angol leírás ne ragadjon meg.
@@ -221,18 +393,23 @@ impl Hub {
         name
     }
 
-    /// Üzenet egyetlen sáv felületének.
-    pub(crate) fn eval_bar(&self, idx: usize, payload: &str) {
+    /// Üzenet egyetlen sáv felületének (JSON-érték vagy már kész JSON-szöveg).
+    pub(crate) fn eval_bar(&self, idx: usize, payload: &(impl Display + ?Sized)) {
         if let Some(b) = self.bars.get(idx) {
             push(&b.webview, payload);
         }
     }
 
     /// Üzenet minden képernyő adott szélű sávjának.
-    pub(crate) fn eval(&self, edge: Edge, payload: &serde_json::Value) {
+    pub(crate) fn eval(&self, edge: Edge, payload: &(impl Display + ?Sized)) {
         for b in self.bars.iter().filter(|b| b.edge == edge) {
             push(&b.webview, payload);
         }
+    }
+
+    /// Üzenet minden képernyő információs paneljének.
+    pub(crate) fn eval_info(&self, payload: &(impl Display + ?Sized)) {
+        self.eval(self.info_edge(), payload);
     }
 
     /// Nyitott állapot (MENÜ, Start, Időjárás, Dátum) csak annak a képernyőnek az információs
@@ -247,12 +424,13 @@ impl Hub {
         }
     }
 
-    /// A felület nyelvének megfelelő szöveg.
-    /// A program saját szövege a felület nyelvén (magyar, angol vagy lengyel).
-    pub(crate) fn tr(&self, hu: &str, en: &str, pl: &str) -> String {
+    /// A program saját szövege a felület nyelvén (magyar, angol, lengyel, német vagy spanyol).
+    pub(crate) fn tr(&self, hu: &str, en: &str, pl: &str, de: &str, es: &str) -> String {
         match self.cfg.language.as_str() {
             "en" => en,
             "pl" => pl,
+            "de" => de,
+            "es" => es,
             _ => hu,
         }
         .to_string()
@@ -264,14 +442,22 @@ impl Hub {
         // megpróbáljuk megtalálni: más mappa, más verzió, Store-app helyett asztali vagy fordítva.
         // A megtalált útvonal bekerül a config.json-ba.
         if self.available.iter().any(|ok| !ok) {
-            let start = crate::apps::enumerate();
+            // A Start menü programjai: a háttérben már felsorolt lista, ha van. Csak induláskor
+            // (amikor még nincs kész) soroljuk fel itt, mert ez a fő szálon lassú lehet.
+            let enumerated;
+            let start: &[apps::StartApp] = if self.start_apps.is_empty() {
+                enumerated = apps::enumerate();
+                &enumerated
+            } else {
+                &self.start_apps
+            };
             let mut fixed = 0;
             for i in 0..self.cfg.apps.len() {
                 if self.available[i] {
                     continue;
                 }
                 let app = self.cfg.apps[i].clone();
-                if let Some(path) = sys::locate_app(&app, &start) {
+                if let Some(path) = sys::locate_app(&app, start) {
                     let mut moved = app.clone();
                     moved.path = path.clone();
                     if sys::app_available(&moved) {
@@ -296,7 +482,7 @@ impl Hub {
             && let Some(i) =
                 (0..self.cfg.apps.len()).find(|&i| !self.available[i] && self.cfg.apps[i].path.eq_ignore_ascii_case(TC_DEFAULT))
         {
-            let name = self.tr("Fájlkezelő", "File Explorer", "Eksplorator plików");
+            let name = self.tr("Fájlkezelő", "File Explorer", "Eksplorator plików", "Explorer", "Explorador de archivos");
             log(format!("a Total Commander nincs telepítve: helyette {name}"));
             self.cfg.apps[i] = config::AppEntry {
                 name,
@@ -323,15 +509,15 @@ impl Hub {
     /// Minden más programnál az exe saját ikonja.
     pub(crate) fn program_icon(&self, path: &str) -> String {
         match apps::app_for_path(&self.start_apps, path).filter(|a| a.target.is_empty()) {
-            Some(a) => format!("/__appicon/{}", percent_encode(&a.id)),
-            None => format!("/__icon/{}", percent_encode(&path.replace('\\', "/"))),
+            Some(a) => app_icon_url(&a.id),
+            None => exe_icon_url(path),
         }
     }
 
     /// Beépített ikon neve, vagy képfájl esetén a betöltési címe. Az "exe" a program saját ikonja.
     pub(crate) fn icon_for(&self, icon: &str, app_path: &str) -> (String, String) {
         if icon == "exe" {
-            return (String::new(), format!("/__icon/{}", percent_encode(&app_path.replace('\\', "/"))));
+            return (String::new(), exe_icon_url(app_path));
         }
         let looks_like_file = icon.contains('.') || icon.contains('/') || icon.contains('\\');
         if !looks_like_file {
@@ -339,8 +525,7 @@ impl Hub {
         }
         let p = PathBuf::from(config::expand_env(icon));
         if p.is_absolute() {
-            let s = p.to_string_lossy().replace('\\', "/");
-            (String::new(), format!("/__file/{}", percent_encode(&s)))
+            (String::new(), file_url(&p.to_string_lossy()))
         } else {
             (String::new(), percent_encode(&icon.replace('\\', "/")))
         }
@@ -405,8 +590,7 @@ impl Hub {
             "iconLabels": c.icon_labels,
             "language": c.language,
         });
-        let _ = edge;
-        self.eval_bar(idx, &payload.to_string());
+        self.eval_bar(idx, &payload);
         if part == "left" {
             self.last_state.clear();
             self.poll();
@@ -422,30 +606,30 @@ impl Hub {
             if let Some(u) = &self.last_usage {
                 self.eval_bar(idx, u);
             }
-            if let Some(c) = &self.last_codex {
-                self.eval_bar(idx, c);
+            if !self.codex_feed.sent.is_empty() {
+                self.eval_bar(idx, &self.codex_feed.sent);
             }
-            if !self.last_periph.is_empty() {
-                self.eval_bar(idx, &self.last_periph);
+            if !self.periph_feed.sent.is_empty() {
+                self.eval_bar(idx, &self.periph_feed.sent);
             }
             // az Események modulnak a legutóbb letöltött naptárak (vagy hogy nincs csatolt naptár)
-            if let Some((_, data)) = &self.cal_cache {
+            if let Some((_, data)) = &self.calendar.cache {
                 let feeds = serde_json::from_str::<serde_json::Value>(data).unwrap_or_default();
-                self.eval_bar(idx, &json!({ "type": "cal-data", "feeds": feeds }).to_string());
+                self.eval_bar(idx, &json!({ "type": "cal-data", "feeds": feeds }));
             } else if self.cfg.calendar.feeds.is_empty() {
-                self.eval_bar(idx, &json!({ "type": "cal-data", "feeds": [] }).to_string());
+                self.eval_bar(idx, &json!({ "type": "cal-data", "feeds": [] }));
             }
             // újratöltés (pl. panelcsere) után is látszódjon, hogy a beállítások nyitva vannak
-            if self.settings.as_ref().is_some_and(|s| s.visible) && self.settings_bar.is_none_or(|b| b == idx) {
-                self.eval_bar(idx, &json!({ "type": "settings-open", "on": true }).to_string());
+            if self.settings_visible() && self.settings_bar.is_none_or(|b| b == idx) {
+                self.eval_bar(idx, &json!({ "type": "settings-open", "on": true }));
             }
         }
     }
 
     /// Rövid értesítés a jobb panel alján (a menü fölött).
     pub(crate) fn toast(&self, text: &str) {
-        self.eval(self.info_edge(), &json!({ "type": "toast", "text": text }));
-        self.settings_eval(&json!({ "type": "toast", "text": text }));
+        self.eval_info(&json!({ "type": "toast", "text": text }));
+        self.settings_toast(text);
     }
 
     pub(crate) fn set_autostart(&mut self, on: bool) {
@@ -461,7 +645,7 @@ impl Hub {
                 self.toast(&e);
             }
         }
-        self.eval(self.info_edge(), &json!({ "type": "autostart", "on": autostart::is_enabled() }));
+        self.eval_info(&json!({ "type": "autostart", "on": autostart::is_enabled() }));
         self.send_settings();
     }
 
@@ -508,14 +692,16 @@ impl Hub {
                 self.launcher_hide(true);
             }
         }
+        // a saját asztali menü
+        self.desk_watch_focus(fg, now);
         // Egészség: lejárt a visszaszámlálás, vagy hosszabb szünet volt (akkor elölről indul)
-        if self.health_due.is_some_and(|d| now >= d) && !self.health.as_ref().is_some_and(|h| h.visible) {
+        if self.health_timer.due.is_some_and(|d| now >= d) && !self.health_visible() {
             self.health_show();
         }
-        if now >= self.next_idle_check {
-            self.next_idle_check = now + Duration::from_secs(5);
-            if self.health_due.is_some() && !self.health.as_ref().is_some_and(|h| h.visible) && sys::idle_time() >= HEALTH_IDLE {
-                let left = self.health_due.map(|d| d.saturating_duration_since(now)).unwrap_or_default();
+        if now >= self.health_timer.next_idle_check {
+            self.health_timer.next_idle_check = now + Duration::from_secs(5);
+            if self.health_timer.due.is_some() && !self.health_visible() && sys::idle_time() >= HEALTH_IDLE {
+                let left = self.health_timer.due.map(|d| d.saturating_duration_since(now)).unwrap_or_default();
                 let full = Duration::from_secs(self.cfg.health.minutes as u64 * 60);
                 // csak ha már ment belőle valamennyi (különben minden 5 másodpercben újraindulna)
                 if full.saturating_sub(left) > Duration::from_secs(30) {
@@ -532,40 +718,50 @@ impl Hub {
                 self.push_theme();
             }
         }
-        if now >= self.next_net_check {
-            self.next_net_check = now + Duration::from_secs(3);
+        if now >= self.net_watch.next_check {
+            self.net_watch.next_check = now + Duration::from_secs(3);
             self.net_check();
         }
-        if self.cfg.sections.shows("codex") && now >= self.next_codex {
+        if self.cfg.sections.shows("codex") && now >= self.codex_feed.next {
             self.codex_send(false);
         }
         // Perifériák: a Bluetooth-eszközök töltöttsége félpercenként (asztali gépen és laptopon is;
         // a modul csak akkor látszik, ha van csatlakoztatott, töltöttséget jelző eszköz)
-        if self.cfg.sections.shows("peripherals") && now >= self.next_periph {
-            self.next_periph = now + Duration::from_secs(30);
+        if self.cfg.sections.shows("peripherals") && now >= self.periph_feed.next {
+            self.periph_feed.next = now + Duration::from_secs(30);
             self.periph_poll();
         }
         // Események: a naptárak tízpercenként (a letöltés a gyorsítótárat is figyeli)
-        if self.cfg.sections.shows("events") && now >= self.next_cal {
-            self.next_cal = now + Duration::from_secs(10 * 60);
+        if self.cfg.sections.shows("events") && now >= self.calendar.next {
+            self.calendar.next = now + Duration::from_secs(10 * 60);
             self.calendar_fetch(false);
         }
-        if now >= self.next_power {
-            self.next_power = now + Duration::from_secs(20);
+        if now >= self.power_feed.next {
+            self.power_feed.next = now + Duration::from_secs(20);
             self.send_power(false);
         }
-        if now >= self.next_tray {
-            self.next_tray = now + Duration::from_secs(3);
+        if now >= self.tray_feed.next {
+            self.tray_feed.next = now + Duration::from_secs(3);
             self.send_tray(false);
         }
         // a hangerőt a billentyűzet vagy más program is állíthatja: gyakran ránézünk
-        if now >= self.next_volume {
-            self.next_volume = now + Duration::from_millis(600);
+        if now >= self.volume_feed.next {
+            self.volume_feed.next = now + Duration::from_millis(600);
             self.send_volume(false);
         }
+        self.peek_fx_tick(now);
         let Some(pk) = self.peek.as_ref() else { return };
         if pk.hide_at.is_some_and(|t| now >= t) {
-            self.peek_hide();
+            // Ha az egér valójában még az előnézet fölött van, nem zárjuk be: a kártya fölötti
+            // időzéskor előtérbe hozott ablak egy pillanatra a felugró ablak fölé kerül, amit a
+            // WebView elhagyásnak vesz, és álló egérnél nem jön újabb belépés. Kicsit később újra nézzük.
+            if self.peek_under_cursor() {
+                if let Some(pk) = self.peek.as_mut() {
+                    pk.hide_at = Some(now + Duration::from_millis(200));
+                }
+            } else {
+                self.peek_hide();
+            }
         } else if pk.refresh_at.is_some_and(|t| now >= t) {
             let target = pk.target.clone();
             if let Some(pk) = self.peek.as_mut() {
@@ -581,8 +777,9 @@ impl Hub {
         let fly = self.fly.as_ref().filter(|f| f.visible).map(|_| Instant::now() + Duration::from_millis(150));
         let launcher = self.launcher.as_ref().filter(|l| l.visible).map(|_| Instant::now() + Duration::from_millis(150));
         let pk = self.peek.as_ref();
-        let health = self.health_due.filter(|_| !self.health.as_ref().is_some_and(|h| h.visible));
-        [fly, launcher, health, pk.and_then(|p| p.hide_at), pk.and_then(|p| p.refresh_at)].into_iter().flatten().min()
+        let health = self.health_timer.due.filter(|_| !self.health_visible());
+        let fx = pk.and_then(|p| p.fx_restore.iter().map(|(_, at)| *at).min());
+        [fly, launcher, health, pk.and_then(|p| p.hide_at), pk.and_then(|p| p.refresh_at), fx].into_iter().flatten().min()
     }
 
     /// Főkapcsoló: zárolás, alvás, leállítás, újraindítás.
@@ -660,7 +857,7 @@ impl Hub {
                 "claude-login" => self.claude_show(),
                 // a MENÜ gomb nyitja és zárja a beállításokat (záráskor a felület animál)
                 "settings" => {
-                    if self.settings.as_ref().is_some_and(|s| s.visible) {
+                    if self.settings_visible() {
                         self.settings_eval(&json!({ "type": "hide" }));
                     } else {
                         self.settings_bar = Some(idx);
@@ -691,7 +888,7 @@ impl Hub {
             "quick-pos" => {
                 for mode in ["start", "search"] {
                     if let Some(a) = msg[mode].as_f64() {
-                        self.quick_along.insert((idx, if mode == "start" { "start" } else { "search" }), a);
+                        self.quick_along.insert((idx, mode), a);
                     }
                 }
             }
@@ -732,14 +929,14 @@ impl Hub {
             }
         }
         if self.seen.len() > 400 {
-            let live: HashSet<isize> = wins.iter().map(|w| w.hwnd.0 as isize).collect();
+            let live = window_ids(&wins);
             self.seen.retain(|k, _| live.contains(k));
         }
 
-        if let Some((known, deadline)) = &self.settings_watch {
-            if Instant::now() > *deadline || !self.settings_visible() {
+        if let Some(watch) = &self.settings_watch {
+            if watch.expired() || !self.settings_visible() {
                 self.settings_watch = None;
-            } else if let Some(w) = wins.iter().find(|w| !known.contains(&(w.hwnd.0 as isize)) && !w.iconic) {
+            } else if let Some(w) = watch.first_new(&wins) {
                 let h = w.hwnd;
                 self.settings_watch = None;
                 if self.on_settings_monitor(h) {
@@ -748,44 +945,67 @@ impl Hub {
             }
         }
 
-        if let Some(p) = &self.pending {
-            if Instant::now() > p.deadline {
-                self.pending = None;
-            } else if let Some(w) = wins
-                .iter()
-                .find(|w| !p.known.contains(&(w.hwnd.0 as isize)) && w.maximizable && !w.iconic && self.matchers[p.app].matches(w))
-            {
-                wintrack::maximize(w.hwnd);
-                self.pending = None;
+        if let Some(watch) = &self.launch_watch {
+            if watch.expired() || self.launcher_visible() {
+                self.launch_watch = None;
+            } else if let Some(w) = watch.first_new(&wins) {
+                let h = w.hwnd;
+                self.launch_watch = None;
+                if wintrack::root_owner(fg) != h {
+                    log(format!("indított program előtérbe: {}", w.exe));
+                    wintrack::activate(h);
+                }
             }
         }
 
-        let running: Vec<usize> =
-            self.matchers.iter().enumerate().filter(|(_, m)| wins.iter().any(|w| m.matches(w))).map(|(i, _)| i).collect();
-        // több ablakos programok: ezek fölött az ikon előnézetet mutat
-        let multi: Vec<usize> =
-            self.matchers.iter().enumerate().filter(|(_, m)| wins.iter().filter(|w| m.matches(w)).count() >= 2).map(|(i, _)| i).collect();
-
-        // Nem kitűzött, de futó programok, a megjelenésük sorrendjében.
-        let mut present: Vec<(String, &WinInfo)> = Vec::new();
-        for w in &wins {
-            if self.matchers.iter().any(|m| m.matches(w)) {
-                continue;
+        if let Some(p) = &self.pending_maximize {
+            if p.watch.expired() {
+                self.pending_maximize = None;
+            } else if let Some(w) = p.watch.first_new_where(&wins, |w| w.maximizable && self.matchers[p.app].matches(w)) {
+                wintrack::maximize(w.hwnd);
+                self.pending_maximize = None;
             }
-            if let Some(k) = extra_key(w)
-                && !present.iter().any(|(pk, _)| *pk == k)
+        }
+
+        // Egy menetben: kitűzött appokként hány ablak tartozik hozzájuk (egy ablak több apphoz is
+        // tartozhat), és a nem kitűzött, de futó programok a megjelenésük sorrendjében. A nem
+        // kitűzött programok ablakszámába (`n`) minden azonos kulcsú ablak beleszámít.
+        let keys: Vec<Option<String>> = wins.iter().map(extra_key).collect();
+        let mut key_counts: HashMap<&str, usize> = HashMap::new();
+        for k in keys.iter().flatten() {
+            *key_counts.entry(k.as_str()).or_default() += 1;
+        }
+        let mut counts = vec![0usize; self.matchers.len()];
+        let mut present: Vec<(&str, &WinInfo)> = Vec::new();
+        for (w, key) in wins.iter().zip(&keys) {
+            let mut pinned = false;
+            for (c, m) in counts.iter_mut().zip(&self.matchers) {
+                if m.matches(w) {
+                    *c += 1;
+                    pinned = true;
+                }
+            }
+            if !pinned
+                && let Some(k) = key
+                && !present.iter().any(|(pk, _)| pk == k)
             {
                 present.push((k, w));
             }
         }
+        let running: Vec<usize> = (0..counts.len()).filter(|&i| counts[i] > 0).collect();
+        // több ablakos programok: ezek fölött az ikon előnézetet mutat
+        let multi: Vec<usize> = (0..counts.len()).filter(|&i| counts[i] >= 2).collect();
+
         self.extra_order.retain(|k| present.iter().any(|(pk, _)| pk == k));
         for (k, _) in &present {
-            if !self.extra_order.contains(k) {
-                self.extra_order.push(k.clone());
+            if !self.extra_order.iter().any(|o| o == k) {
+                self.extra_order.push(k.to_string());
             }
         }
+        // (a sorrendet a ciklus idejére kivesszük: a programnév lekérése módosítja a Hub-ot)
+        let order = std::mem::take(&mut self.extra_order);
         let mut extras = Vec::new();
-        for k in &self.extra_order.clone() {
+        for k in &order {
             let Some((_, w)) = present.iter().find(|(pk, _)| pk == k) else { continue };
             let (name, icon) = if k.starts_with("hwnd:") {
                 (w.title_raw.clone(), String::new())
@@ -793,9 +1013,10 @@ impl Hub {
                 let name = self.program_name(&w.path);
                 (name, self.program_icon(&w.path))
             };
-            let n = wins.iter().filter(|x| extra_key(x).as_deref() == Some(k.as_str())).count();
+            let n = key_counts.get(k.as_str()).copied().unwrap_or(0);
             extras.push(json!({ "key": k, "name": name, "icon": icon, "n": n }));
         }
+        self.extra_order = order;
 
         // A tálca időnként visszajön (pl. Start menü után) – ilyenkor újra elrejtjük,
         // de nem, amíg a Start menü vagy a keresés van előtérben.
@@ -807,19 +1028,19 @@ impl Hub {
         }
 
         // bejelentkezéskor a „géppel induló” programok egyenként, kis szünetekkel indulnak
-        if !self.launch_queue.is_empty() && Instant::now() >= self.next_launch {
-            if let Some(id) = self.launch_queue.pop_front() {
-                let running = self.matchers.get(id).is_some_and(|m| wins.iter().any(|w| m.matches(w)));
+        if !self.logon_launch.queue.is_empty() && Instant::now() >= self.logon_launch.next {
+            if let Some(id) = self.logon_launch.queue.pop_front() {
+                let running = counts.get(id).is_some_and(|&c| c > 0);
                 if !running {
                     log(format!("automatikus programindítás: {}", self.cfg.apps.get(id).map(|a| a.name.as_str()).unwrap_or("?")));
                     self.launch(id, false);
                 }
             }
-            self.next_launch = Instant::now() + Duration::from_millis(1500);
+            self.logon_launch.next = Instant::now() + Duration::from_millis(1500);
         }
 
         // nyitott beállításoknál másodpercenként processzor- és memóriaterhelés
-        if self.settings.as_ref().is_some_and(|s| s.visible) && Instant::now() >= self.next_sys {
+        if self.settings_visible() && Instant::now() >= self.next_sys {
             self.next_sys = Instant::now() + Duration::from_secs(1);
             self.send_sys();
         }
@@ -889,9 +1110,7 @@ impl Hub {
             return;
         }
         self.refocus = None;
-        let popup_open = self.settings.as_ref().is_some_and(|s| s.visible)
-            || self.launcher.as_ref().is_some_and(|l| l.visible)
-            || self.fly.as_ref().is_some_and(|f| f.visible);
+        let popup_open = self.settings_visible() || self.launcher_visible() || self.fly_visible();
         if popup_open {
             return;
         }
@@ -905,6 +1124,12 @@ impl Hub {
         if let Some(w) = wins.iter().find(|w| !w.iconic && appbar::monitor_rect_of_window(w.hwnd) == Some(screen)) {
             wintrack::activate(w.hwnd);
         }
+    }
+
+    /// Az indítás előtt már meglévő ablakok (ezek közül nem az új program ablaka).
+    pub(crate) fn known_windows(&mut self) -> HashSet<isize> {
+        let own = self.own_hwnds();
+        window_ids(&self.tracker.snapshot(&own))
     }
 
     /// Melyik sávcsoport képernyőjén van az ablak (a sávok helye szerint).
@@ -966,14 +1191,19 @@ impl Hub {
         }
         keyhook::set_enabled(self.cfg.start_menu.win_key);
         clipboard::set_enabled(self.cfg.start_menu.clipboard);
+        self.desk_hide(false);
+        crate::deskmenu::set_enabled(self.cfg.desktop_menu, self.cfg.desktop_icon_menu);
+        if let Some(d) = &self.desk {
+            let _ = d.webview.load_url(&nav_url(&desk_url(&self.cfg)));
+        }
         if let Some(h) = &self.health {
             let _ = h.webview.load_url(&nav_url(&health_url(&self.cfg)));
         }
         if let Some(n) = &self.net {
             let _ = n.webview.load_url(&nav_url(&net_url(&self.cfg)));
         }
-        self.last_codex = None;
-        if self.cfg.health.enabled != self.health_due.is_some() {
+        self.codex_feed.sent.clear();
+        if self.cfg.health.enabled != self.health_timer.due.is_some() {
             self.health_restart();
         }
         // ha a háttérképet a fájlban írták át, beállítjuk
@@ -987,7 +1217,7 @@ impl Hub {
         self.last_usage = None;
         self.last_state.clear();
         // nyitott beállításoknál (pl. panelcsere után) a munkaterület változhatott
-        if self.settings.as_ref().is_some_and(|s| s.visible) {
+        if self.settings_visible() {
             self.settings_show(false);
         }
     }

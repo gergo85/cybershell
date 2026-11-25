@@ -3,8 +3,7 @@
 
 use serde_json::{Map, Value};
 use windows::Win32::System::Com::{
-    CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx, CoSetProxyBlanket, CoUninitialize, EOAC_NONE,
-    RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE,
+    CLSCTX_INPROC_SERVER, CoCreateInstance, CoSetProxyBlanket, EOAC_NONE, RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE,
 };
 use windows::Win32::System::Variant::{VARIANT, VT_BOOL, VT_BSTR, VT_I2, VT_I4, VT_I8, VT_R4, VT_R8, VT_UI1, VariantClear};
 use windows::Win32::System::Wmi::{
@@ -18,32 +17,6 @@ const AUTHN_WINNT: u32 = 10;
 const AUTHZ_NONE: u32 = 0;
 /// Egy sorra legfeljebb ennyit várunk (ms), hogy egy beragadt szolgáltató ne akassza meg a szálat.
 const ROW_TIMEOUT_MS: i32 = 10_000;
-
-/// COM a hívó szálon (többszálú módban); megszűnésekor lezárja, ha ő indította el.
-/// Előbb ezt hozd létre, és csak utána a COM-objektumokat, hogy azok előbb szűnjenek meg.
-pub struct ComThread(bool);
-
-impl ComThread {
-    pub fn init() -> ComThread {
-        // A többszálú COM-tér (MTA) a program végéig éljen, akkor is, ha épp egy szál sincs
-        // benne. Különben az utolsó ilyen szál lezárásakor megszűnne, és vele a windows crate
-        // által eltárolt WinRT-gyárak (pl. StartupTask) is: a következő hívás összeomlana.
-        static KEEP_MTA: std::sync::Once = std::sync::Once::new();
-        KEEP_MTA.call_once(|| {
-            let _ = unsafe { windows::Win32::System::Com::CoIncrementMTAUsage() };
-        });
-        // S_FALSE: már el volt indítva (azt is le kell zárni); RPC_E_CHANGED_MODE: más módban fut, maradhat
-        ComThread(unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }.is_ok())
-    }
-}
-
-impl Drop for ComThread {
-    fn drop(&mut self) {
-        if self.0 {
-            unsafe { CoUninitialize() };
-        }
-    }
-}
 
 /// Kapcsolat egy WMI-névtérhez (pl. `root\cimv2`).
 pub struct Wmi(IWbemServices);
@@ -194,7 +167,7 @@ mod tests {
     /// Élő lekérdezés ezen a gépen: a processzornak mindig van neve.
     #[test]
     fn live_query() {
-        let _com = ComThread::init();
+        let _com = crate::com::ComThread::init();
         let wmi = Wmi::connect(r"root\cimv2").expect("WMI-kapcsolat");
         let rows = wmi.query("Win32_Processor", &["Name", "NumberOfCores"], "");
         assert!(!rows.is_empty());

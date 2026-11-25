@@ -100,12 +100,26 @@ pub struct Shown {
     pub hwnd: isize,
     /// Az ablak fölötti első (nem mindig legfelül lévő, látható) ablak; 0, ha ő volt legfelül.
     pub above: isize,
-    /// Kis méretre volt téve: elengedéskor visszakerül a tálcára.
+    /// Kis méretre volt téve: elengedéskor visszakerül a tálcára. Ilyenkor a visszaállítás és
+    /// a kicsinyítés idejére az ablak animációit kikapcsoljuk (lásd [`set_transitions`]).
     pub iconic: bool,
 }
 
+/// Az ablak saját DWM-animációinak (visszaállítás, kis méretre tétel) ki- vagy visszakapcsolása.
+/// Csak az adott ablakra hat, a Windows animációs beállítását nem érinti.
+pub fn set_transitions(h: HWND, on: bool) {
+    use windows::Win32::Graphics::Dwm::{DWMWA_TRANSITIONS_FORCEDISABLED, DwmSetWindowAttribute};
+    use windows::core::BOOL;
+    let off = BOOL::from(!on);
+    unsafe {
+        let _ =
+            DwmSetWindowAttribute(h, DWMWA_TRANSITIONS_FORCEDISABLED, &off as *const BOOL as *const _, std::mem::size_of::<BOOL>() as u32);
+    }
+}
+
 /// Az ablakot (aktiválás nélkül) a többi fölé hozza, mint a Windows tálcáján a kiskép
-/// fölötti időzés; a kis méretre tett ablakot ehhez visszaállítja.
+/// fölötti időzés; a kis méretre tett ablakot ehhez animáció nélkül visszaállítja
+/// (az animációt az elengedése után a hívó kapcsolja vissza).
 pub fn raise(h: HWND) -> Shown {
     use windows::Win32::UI::WindowsAndMessaging::{
         GW_HWNDPREV, GWL_EXSTYLE, GetWindow, GetWindowLongPtrW, HWND_NOTOPMOST, HWND_TOPMOST, IsIconic, IsWindowVisible, SW_SHOWNOACTIVATE,
@@ -129,6 +143,7 @@ pub fn raise(h: HWND) -> Shown {
             }
         }
         if iconic {
+            set_transitions(h, false);
             let _ = ShowWindow(h, SW_SHOWNOACTIVATE);
         }
         let flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE;
@@ -138,7 +153,8 @@ pub fn raise(h: HWND) -> Shown {
     }
 }
 
-/// Az előtérbe hozott ablakot visszateszi a helyére (vagy újra kis méretre).
+/// Az előtérbe hozott ablakot visszateszi a helyére (vagy újra kis méretre; az animációi
+/// ekkor még ki vannak kapcsolva).
 pub fn unraise(s: Shown) {
     use windows::Win32::UI::WindowsAndMessaging::{
         IsWindow, SW_SHOWMINNOACTIVE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SetWindowPos, ShowWindow,

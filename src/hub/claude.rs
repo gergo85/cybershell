@@ -3,7 +3,6 @@
 use crate::UserEvent;
 use crate::config::Config;
 use crate::hub::Hub;
-use crate::web::push;
 use crate::{appbar, log, send};
 use serde_json::json;
 use std::time::{Duration, Instant};
@@ -79,6 +78,8 @@ pub(crate) fn make_claude_window(
         .with_title(match cfg.language.as_str() {
             "en" => "CyberShell – sign in to claude.ai",
             "pl" => "CyberShell – logowanie do claude.ai",
+            "de" => "CyberShell – bei claude.ai anmelden",
+            "es" => "CyberShell – iniciar sesión en claude.ai",
             _ => "CyberShell – belépés a claude.ai-ra",
         })
         // a tálcán az exe saját ikonja látszódjon (assets/cybershell.rc, 1-es azonosító)
@@ -156,14 +157,8 @@ pub(crate) fn claude_web_payload(v: &serde_json::Value) -> serde_json::Value {
     } else {
         ""
     };
-    let keys = [
-        ("five_hour", "5 órás", true),
-        ("seven_day", "Heti", true),
-        ("seven_day_opus", "Heti · Opus", false),
-        ("seven_day_sonnet", "Heti · Sonnet", false),
-    ];
     let mut limits = Vec::new();
-    for (key, label, always) in keys {
+    for (key, label, always) in crate::usage::LIMITS {
         let l = &u[key];
         let pct = l["utilization"].as_f64().or_else(|| l["used_percentage"].as_f64());
         if let Some(pct) = pct
@@ -175,7 +170,7 @@ pub(crate) fn claude_web_payload(v: &serde_json::Value) -> serde_json::Value {
     if limits.is_empty() {
         return json!({ "type": "usage", "status": "error", "plan": plan, "message": "Ismeretlen válasz a claude.ai-tól." });
     }
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
+    let now = crate::unix_ms();
     json!({ "type": "usage", "status": "ok", "plan": plan, "limits": limits, "fetchedAt": now, "source": "web" })
 }
 
@@ -213,10 +208,7 @@ impl Hub {
             json!({ "type": "usage", "status": "login", "plan": "" }).to_string()
         };
         if self.last_usage.as_deref() != Some(payload.as_str()) {
-            let info = self.info_edge();
-            for b in self.bars.iter().filter(|b| b.edge == info) {
-                push(&b.webview, &payload);
-            }
+            self.eval_info(&payload);
             self.last_usage = Some(payload);
         }
     }
@@ -314,7 +306,6 @@ impl Hub {
                 } else if let Some(c) = self.claude.as_mut()
                     && c.revived
                 {
-                    c.revived = false;
                     log("claude.ai: a munkamenet megújult");
                     let _ = c.webview.load_url(CLAUDE_IDLE_URL);
                 }

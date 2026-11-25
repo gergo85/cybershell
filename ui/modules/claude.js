@@ -124,6 +124,18 @@
         usageError: 'Niedostępne.', usageWait: 'Łączenie z claude.ai…', usageOffline: 'claude.ai jest teraz niedostępne, wkrótce spróbuję ponownie.',
         usageLogin: 'Zaloguj się do claude.ai w CyberShell.', login: 'Zaloguj',
       },
+      de: {
+        secClaude: '// CLAUDE', sClaude: 'Claude', refresh: 'AKTUALISIEREN', limit5h: '5 STUNDEN', limitWeek: 'WOCHE',
+        soon: 'gleich', relDH: '{d} T. {h} Std.', relHM: '{h} Std. {m} Min.', relM: '{m} Min.',
+        usageError: 'Nicht verfügbar.', usageWait: 'Verbindung mit claude.ai…', usageOffline: 'claude.ai ist gerade nicht erreichbar, neuer Versuch in Kürze.',
+        usageLogin: 'Melde dich in CyberShell bei claude.ai an.', login: 'Anmelden',
+      },
+      es: {
+        secClaude: '// CLAUDE', sClaude: 'Claude', refresh: 'ACTUALIZAR', limit5h: '5 HORAS', limitWeek: 'SEMANAL',
+        soon: 'pronto', relDH: '{d} d {h} h', relHM: '{h} h {m} min', relM: '{m} min',
+        usageError: 'No disponible.', usageWait: 'Conectando con claude.ai…', usageOffline: 'claude.ai no está disponible ahora; se reintentará pronto.',
+        usageLogin: 'Inicia sesión en claude.ai dentro de CyberShell.', login: 'Iniciar sesión',
+      },
     },
   });
 })();

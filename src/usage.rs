@@ -7,7 +7,7 @@
 
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use serde_json::{Value, json};
 
@@ -21,10 +21,6 @@ fn credentials_path() -> PathBuf {
     }
     let home = std::env::var("USERPROFILE").unwrap_or_default();
     PathBuf::from(home).join(".claude").join(".credentials.json")
-}
-
-fn now_ms() -> i64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
 }
 
 fn status(status: &str, plan: &str, message: &str) -> Value {
@@ -58,11 +54,17 @@ fn find_oauth(v: &Value, depth: u32) -> Option<&Value> {
 
 /// Ide menti a Claude Code állapotsor-parancsa (CyberShell.exe --statusline) a korlátokat.
 pub fn limits_file() -> PathBuf {
-    let base = std::env::var("LOCALAPPDATA").map(PathBuf::from).unwrap_or_else(|_| std::env::temp_dir());
-    let d = base.join("CyberShell");
-    let _ = std::fs::create_dir_all(&d);
-    d.join("claude-limits.json")
+    crate::data_dir().join("claude-limits.json")
 }
+
+/// A használati válasz korlátai: kulcs, felirat, és hogy 0%-nál is látszik-e. A két fő korlát
+/// mindig, a modellenkéntiek csak akkor, ha használtad őket (a claude.ai válaszában is ezek vannak).
+pub(crate) const LIMITS: [(&str, &str, bool); 4] = [
+    ("five_hour", "5 órás", true),
+    ("seven_day", "Heti", true),
+    ("seven_day_opus", "Heti · Opus", false),
+    ("seven_day_sonnet", "Heti · Sonnet", false),
+];
 
 /// A Claude Code állapotsorától kapott legutóbbi adatok, ha vannak.
 fn from_statusline(plan: &str) -> Option<Value> {
@@ -76,7 +78,7 @@ fn from_statusline(plan: &str) -> Option<Value> {
         let resets_ms = l["resets_at"].as_f64().map(|s| if s < 100_000_000_000.0 { s * 1000.0 } else { s } as i64);
         let resets_iso = l["resets_at"].as_str().map(str::to_string);
         // ha az ablak azóta lejárt, a régi érték már nem érvényes
-        let expired = resets_ms.map(|r| r <= now_ms()).unwrap_or(false);
+        let expired = resets_ms.map(|r| r <= crate::unix_ms() as i64).unwrap_or(false);
         limits.push(json!({
             "key": key,
             "label": label,
@@ -126,7 +128,7 @@ fn fetch_direct() -> Value {
     if exp > 0 && exp < 100_000_000_000 {
         exp *= 1000;
     }
-    if exp > 0 && exp < now_ms() + 30_000 {
+    if exp > 0 && exp < crate::unix_ms() as i64 + 30_000 {
         return status("expired", &plan, "");
     }
 
@@ -149,15 +151,8 @@ fn fetch_direct() -> Value {
         Err(_) => return status("error", &plan, "Nincs kapcsolat."),
     };
 
-    // A két fő korlát mindig látszik, a modellenkéntiek csak akkor, ha használtad őket.
-    let keys = [
-        ("five_hour", "5 órás", true),
-        ("seven_day", "Heti", true),
-        ("seven_day_opus", "Heti · Opus", false),
-        ("seven_day_sonnet", "Heti · Sonnet", false),
-    ];
     let mut limits = Vec::new();
-    for (key, label, always) in keys {
+    for (key, label, always) in LIMITS {
         let l = &body[key];
         if let Some(pct) = l["utilization"].as_f64()
             && (always || pct > 0.0)
@@ -173,7 +168,7 @@ fn fetch_direct() -> Value {
     if limits.is_empty() {
         return status("error", &plan, "A válaszban nincs használati adat.");
     }
-    json!({ "type": "usage", "status": "ok", "plan": plan, "limits": limits, "fetchedAt": now_ms() })
+    json!({ "type": "usage", "status": "ok", "plan": plan, "limits": limits, "fetchedAt": crate::unix_ms() })
 }
 
 /// Háttérszál: rendszeresen lekérdez, és az eredményt átadja. A `wake` csatornán

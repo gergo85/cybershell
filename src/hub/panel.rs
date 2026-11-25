@@ -11,6 +11,22 @@ use std::time::{Duration, Instant};
 use windows::Win32::System::Diagnostics::Debug::MessageBeep;
 use windows::Win32::UI::WindowsAndMessaging::MB_ICONEXCLAMATION;
 
+/// Egy rendszeresen frissülő panel-adat (akkumulátor, hangerő, Háttérprogramok, Codex,
+/// Perifériák): a felületnek legutóbb küldött üzenet (üres: még nincs; újratöltés után ezt
+/// küldjük vissza), a következő frissítés ideje, és hogy épp fut-e a háttérszálas lekérdezés
+/// (a fő szálon mért adatoknál mindig hamis).
+pub(crate) struct Feed {
+    pub(crate) sent: String,
+    pub(crate) next: Instant,
+    pub(crate) busy: bool,
+}
+
+impl Feed {
+    pub(crate) fn new(first: Instant) -> Self {
+        Feed { sent: String::new(), next: first, busy: false }
+    }
+}
+
 impl Hub {
     /// A panel moduljainak üzenetei. Igazat ad, ha az üzenet ide tartozott.
     pub(crate) fn on_panel_ipc(&mut self, idx: usize, kind: &str, msg: &serde_json::Value) -> bool {
@@ -148,9 +164,9 @@ impl Hub {
             None => json!({ "type": "volume", "ok": false }),
         };
         let s = payload.to_string();
-        if force || s != self.last_volume {
-            self.last_volume = s;
-            self.eval(self.info_edge(), &payload);
+        if force || s != self.volume_feed.sent {
+            self.volume_feed.sent = s;
+            self.eval_info(&payload);
         }
     }
 
@@ -162,9 +178,9 @@ impl Hub {
             None => json!({ "type": "power", "laptop": false }),
         };
         let s = payload.to_string();
-        if force || s != self.last_power {
-            self.last_power = s;
-            self.eval(self.info_edge(), &payload);
+        if force || s != self.power_feed.sent {
+            self.power_feed.sent = s;
+            self.eval_info(&payload);
         }
     }
 
@@ -172,10 +188,7 @@ impl Hub {
         if self.last_media.as_deref() == Some(payload.as_str()) {
             return;
         }
-        let info = self.info_edge();
-        for b in self.bars.iter().filter(|b| b.edge == info) {
-            push(&b.webview, &payload);
-        }
+        self.eval_info(&payload);
         self.last_media = Some(payload);
     }
 
@@ -190,7 +203,13 @@ impl Hub {
             "open" => {
                 self.settings_dismiss();
                 if !wintrack::shell_open("spotify:", "", "", false) {
-                    let t = self.tr("A Spotify nincs telepítve.", "Spotify isn't installed.", "Spotify nie jest zainstalowany.");
+                    let t = self.tr(
+                        "A Spotify nincs telepítve.",
+                        "Spotify isn't installed.",
+                        "Spotify nie jest zainstalowany.",
+                        "Spotify ist nicht installiert.",
+                        "Spotify no está instalado.",
+                    );
                     self.toast(&t);
                 }
                 return;
@@ -202,15 +221,33 @@ impl Hub {
         }
     }
 
-    /// A háttérben futó programok (értesítési terület) a panelnek, ha a modul látszik: név,
-    /// ikon (a Windows által megjegyzett kép, ha nincs, a program saját ikonja) és útvonal.
-    /// Elöl a Windows tálcájára kitűzöttek, utánuk név szerint. Csak változáskor küldjük.
+    /// A háttérben futó programok (értesítési terület) frissítése, ha a modul látszik. A
+    /// felsorolás (registry és folyamatlista) háttérszálon fut, az eredményt az `on_tray` küldi
+    /// el. `force`: a legutóbbi listát azonnal újra elküldjük (pl. a panel újratöltése után).
     pub(crate) fn send_tray(&mut self, force: bool) {
         if !self.cfg.sections.shows("tray") {
-            self.last_tray.clear();
+            self.tray_feed.sent.clear();
             return;
         }
-        let mut items: Vec<(bool, String, serde_json::Value)> = tray::list()
+        if force && !self.tray_feed.sent.is_empty() {
+            self.eval_info(&self.tray_feed.sent);
+        }
+        if self.tray_feed.busy {
+            return;
+        }
+        self.tray_feed.busy = true;
+        std::thread::spawn(|| send(UserEvent::Tray(tray::list())));
+    }
+
+    /// A háttérprogramok a panelnek: név, ikon (a Windows által megjegyzett kép, ha nincs, a
+    /// program saját ikonja) és útvonal. Elöl a Windows tálcájára kitűzöttek, utánuk név szerint.
+    /// Csak változáskor küldjük.
+    pub(crate) fn on_tray(&mut self, list: Vec<tray::TrayApp>) {
+        self.tray_feed.busy = false;
+        if !self.cfg.sections.shows("tray") {
+            return;
+        }
+        let mut items: Vec<(bool, String, serde_json::Value)> = list
             .into_iter()
             .map(|a| {
                 let name = self.program_name(&a.path);
@@ -225,9 +262,9 @@ impl Hub {
         items.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
         let payload = json!({ "type": "tray", "apps": items.into_iter().map(|(_, _, v)| v).collect::<Vec<_>>() });
         let s = payload.to_string();
-        if force || s != self.last_tray {
-            self.last_tray = s;
-            self.eval(self.info_edge(), &payload);
+        if s != self.tray_feed.sent {
+            self.eval_info(&s);
+            self.tray_feed.sent = s;
         }
     }
 
@@ -250,7 +287,13 @@ impl Hub {
             .map_or_else(|| path.to_string(), |a| format!(r"shell:AppsFolder\{}", a.id));
         if !wintrack::shell_open(&target, "", "", false) {
             log(format!("háttérprogram nem nyílt meg: {target}"));
-            let t = self.tr("A program nem nyitható meg.", "The program could not be opened.", "Nie można otworzyć programu.");
+            let t = self.tr(
+                "A program nem nyitható meg.",
+                "The program could not be opened.",
+                "Nie można otworzyć programu.",
+                "Das Programm konnte nicht geöffnet werden.",
+                "No se pudo abrir el programa.",
+            );
             self.toast(&t);
         }
     }
@@ -262,18 +305,15 @@ impl Hub {
 
     /// A rendszerfigyelő mérése (load vagy net üzenet) a panelnek.
     pub(crate) fn on_monitor(&mut self, payload: &str) {
-        let info = self.info_edge();
-        for b in self.bars.iter().filter(|b| b.edge == info) {
-            push(&b.webview, payload);
-        }
+        self.eval_info(&payload);
     }
 
     /// A Bluetooth-eszközök töltöttségének lekérdezése háttérszálon (az eszközkezelő lassú is lehet).
     pub(crate) fn periph_poll(&mut self) {
-        if self.periph_busy {
+        if self.periph_feed.busy {
             return;
         }
-        self.periph_busy = true;
+        self.periph_feed.busy = true;
         std::thread::spawn(|| {
             let devices: Vec<serde_json::Value> =
                 periph::list().into_iter().map(|(name, pct)| json!({ "name": name, "pct": pct })).collect();
@@ -283,25 +323,32 @@ impl Hub {
 
     /// A Perifériák modul adata a panelnek (csak változáskor).
     pub(crate) fn on_periph(&mut self, payload: String) {
-        self.periph_busy = false;
-        if payload == self.last_periph {
+        self.periph_feed.busy = false;
+        if payload == self.periph_feed.sent {
             return;
         }
         log(format!("perifériák: {payload}"));
-        let info = self.info_edge();
-        for b in self.bars.iter().filter(|b| b.edge == info) {
-            push(&b.webview, &payload);
-        }
-        self.last_periph = payload;
+        self.eval_info(&payload);
+        self.periph_feed.sent = payload;
     }
 
-    /// A Codex-használat újraolvasása és elküldése a panelnek (ha változott, vagy ha kérik).
+    /// A Codex-használat újraolvasása háttérszálon (a naplók végét olvassa, ez lassú lehet); az
+    /// eredményt az `on_codex` küldi el. `force`: akkor is elküldjük, ha nem változott.
     pub(crate) fn codex_send(&mut self, force: bool) {
-        self.next_codex = Instant::now() + Duration::from_secs(60);
-        let payload = codex::read().to_string();
-        if force || self.last_codex.as_deref() != Some(payload.as_str()) {
-            self.eval(self.info_edge(), &serde_json::from_str(&payload).unwrap_or_default());
-            self.last_codex = Some(payload);
+        self.codex_feed.next = Instant::now() + Duration::from_secs(60);
+        if self.codex_feed.busy {
+            return;
+        }
+        self.codex_feed.busy = true;
+        std::thread::spawn(move || send(UserEvent::Codex(codex::read().to_string(), force)));
+    }
+
+    /// A Codex-használat a panelnek (ha változott, vagy ha kérték).
+    pub(crate) fn on_codex(&mut self, payload: String, force: bool) {
+        self.codex_feed.busy = false;
+        if force || self.codex_feed.sent != payload {
+            self.eval_info(&payload);
+            self.codex_feed.sent = payload;
         }
     }
 }

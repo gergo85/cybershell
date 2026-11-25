@@ -70,14 +70,13 @@ fn create_overlay() -> isize {
     }
 }
 
-unsafe extern "system" fn on_event(_h: HWINEVENTHOOK, event: u32, hwnd: HWND, id_object: i32, _child: i32, _thread: u32, _time: u32) {
+unsafe extern "system" fn on_event(_h: HWINEVENTHOOK, _event: u32, hwnd: HWND, id_object: i32, _child: i32, _thread: u32, _time: u32) {
     // csak a követett ablak saját (nem gyermekobjektum) eseményei
     if id_object != 0 {
         return;
     }
     let target = STATE.lock().map(|s| s.target).unwrap_or(0);
     if target != 0 && hwnd.0 as isize == target {
-        let _ = event;
         refresh();
     }
 }
@@ -90,8 +89,10 @@ fn hook() {
     }
 }
 
-/// Melyik ablak kapja a keretet (`None`: senki), és milyen színnel. Gyakran hívható: csak a
-/// változásnál nyúl az ablakhoz.
+/// Melyik ablak kapja a keretet (`None`: senki), és milyen színnel. Gyakran hívható (a fő
+/// ciklus minden körében): újrarajzolni csak méret- vagy színváltozáskor kell, a réteget
+/// viszont mindig visszateszi közvetlenül a követett ablak fölé (a z-sorrend változásáról
+/// nem jön esemény).
 pub fn set_target(target: Option<HWND>, color: (u8, u8, u8)) {
     {
         let Ok(mut s) = STATE.lock() else { return };
@@ -139,7 +140,7 @@ pub fn refresh() {
     let (w, h) = (rect.right - rect.left + 2 * g, rect.bottom - rect.top + 2 * g);
     let key = (w, h, s.color, inset);
     if s.drawn != Some(key) {
-        draw(ov, x, y, w, h, if inset { 0 } else { GLOW }, s.color);
+        draw(ov, x, y, w, h, g, s.color);
         s.drawn = Some(key);
     }
     // közvetlenül a követett ablak fölé (a fölötte lévő ablakok alá) kerül

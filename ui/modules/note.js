@@ -156,6 +156,24 @@
         noteSaved: 'Zapisano', noteChars: '{n} / 2000 znaków',
         sNoteHint: 'Notatka i lista zadań; przełącza się między nimi na kartach otwieranego edytora, a panel pokazuje ostatnio wybraną. Na panelu widać początek; zadania odhacza się jednym kliknięciem, każde inne kliknięcie otwiera większy edytor obok panelu. Zostaje po ponownym uruchomieniu (config.json: note).',
       },
+      de: {
+        secNote: '// NOTIZ', secTasks: '// AUFGABEN', secNotebook: '// NOTIZBUCH', sNote: 'Notizbuch', noteHint: 'Hier klicken, um eine Notiz zu schreiben…', noteOpen: 'Notizbuch öffnen',
+        noteTabNote: 'Notiz', noteTabTasks: 'Aufgaben', tasksHint: 'Hier klicken, um eine Aufgabe hinzuzufügen…', noteMore: '+{n}', noteProgress: '{d}/{n} FERTIG',
+        noteDone: 'Erledigt', noteUndo: 'Nicht erledigt', taskAdd: 'Neue Aufgabe…', taskAddBtn: 'Hinzufügen', taskDel: 'Löschen',
+        taskDrag: 'Zum Umsortieren ziehen', tasksClear: 'Erledigte Aufgaben löschen', tasksCount: '{d} / {n} erledigt', tasksEmpty: 'Noch keine Aufgaben. Tippe oben eine ein und drücke Enter.',
+        noteDemo: 'Wochenende: Akkus laden, Karten formatieren', tasksDemo: 'Akkus laden|Karten formatieren|Objektiv reinigen',
+        noteSaved: 'Gespeichert', noteChars: '{n} / 2000 Zeichen',
+        sNoteHint: 'Eine Notiz und eine Aufgabenliste; im Editor, der sich öffnet, wechselst du über die Tabs zwischen ihnen, und das Panel zeigt die zuletzt gewählte. Das Panel zeigt den Anfang; Aufgaben hakst du mit einem Klick ab, jeder andere Klick öffnet neben dem Panel einen größeren Editor. Bleibt nach einem Neustart erhalten (config.json: note).',
+      },
+      es: {
+        secNote: '// NOTA', secTasks: '// TAREAS', secNotebook: '// LIBRETA', sNote: 'Libreta', noteHint: 'Haz clic aquí para escribir una nota…', noteOpen: 'Abrir la libreta',
+        noteTabNote: 'Nota', noteTabTasks: 'Tareas', tasksHint: 'Haz clic aquí para añadir una tarea…', noteMore: '+{n}', noteProgress: '{d}/{n} HECHAS',
+        noteDone: 'Hecha', noteUndo: 'No hecha', taskAdd: 'Nueva tarea…', taskAddBtn: 'Añadir', taskDel: 'Eliminar',
+        taskDrag: 'Arrastra para reordenar', tasksClear: 'Borrar las tareas hechas', tasksCount: '{d} / {n} hechas', tasksEmpty: 'Aún no hay tareas. Escribe una arriba y pulsa Enter.',
+        noteDemo: 'Fin de semana: cargar baterías, formatear tarjetas', tasksDemo: 'Cargar baterías|Formatear tarjetas|Limpiar el objetivo',
+        noteSaved: 'Guardado', noteChars: '{n} / 2000 caracteres',
+        sNoteHint: 'Una nota y una lista de tareas; en las pestañas del editor que se abre puedes cambiar entre ellas, y el panel muestra la última elegida. El panel muestra el principio; las tareas se marcan con un clic y cualquier otro clic abre un editor más grande junto al panel. Se conserva tras reiniciar (config.json: note).',
+      },
     },
   });
 })();

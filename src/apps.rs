@@ -10,9 +10,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use windows::Win32::Foundation::{PROPERTYKEY, SIZE};
-use windows::Win32::Graphics::Gdi::{
-    BI_RGB, BITMAP, BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS, DeleteObject, GetDC, GetDIBits, GetObjectW, HBITMAP, HGDIOBJ, ReleaseDC,
-};
+use windows::Win32::Graphics::Gdi::{DeleteObject, HBITMAP, HGDIOBJ};
 use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx, CoTaskMemFree};
 use windows::Win32::UI::Shell::{
     BHID_EnumItems, FOLDERID_AppsFolder, FOLDERID_Recent, IEnumShellItems, IShellItem, IShellItem2, IShellItemImageFactory,
@@ -20,6 +18,8 @@ use windows::Win32::UI::Shell::{
     SIGDN_PARENTRELATIVEPARSING, SIIGBF_ICONONLY, SIIGBF_RESIZETOFIT,
 };
 use windows::core::{GUID, HSTRING, PWSTR};
+
+use crate::bitmap;
 
 /// Egy telepített program a Start menüben.
 #[derive(Clone, Debug)]
@@ -208,56 +208,13 @@ fn extract(id: &str) -> Option<Vec<u8>> {
 }
 
 /// A héjtól kapott (előszorzott alfájú) 32 bites kép PNG-ként.
-unsafe fn hbitmap_to_png(bmp: HBITMAP) -> Option<Vec<u8>> {
-    unsafe {
-        let mut bm = BITMAP::default();
-        GetObjectW(HGDIOBJ(bmp.0), std::mem::size_of::<BITMAP>() as i32, Some(&mut bm as *mut _ as *mut _));
-        let (w, h) = (bm.bmWidth, bm.bmHeight.abs());
-        if w <= 0 || h <= 0 || w > 512 || h > 512 {
-            return None;
-        }
-        let mut bi = BITMAPINFO {
-            bmiHeader: BITMAPINFOHEADER {
-                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-                biWidth: w,
-                biHeight: -h,
-                biPlanes: 1,
-                biBitCount: 32,
-                biCompression: BI_RGB.0,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let mut px = vec![0u8; (w * h * 4) as usize];
-        let dc = GetDC(None);
-        let lines = GetDIBits(dc, bmp, 0, h as u32, Some(px.as_mut_ptr() as *mut _), &mut bi, DIB_RGB_COLORS);
-        ReleaseDC(None, dc);
-        if lines == 0 {
-            return None;
-        }
-        let has_alpha = px.chunks(4).any(|p| p[3] != 0);
-        for p in px.chunks_mut(4) {
-            p.swap(0, 2); // BGRA → RGBA
-            if !has_alpha {
-                p[3] = 255;
-            } else if p[3] > 0 && p[3] < 255 {
-                // előszorzott alfa → egyenes alfa
-                let a = p[3] as u32;
-                for c in &mut p[..3] {
-                    *c = ((*c as u32 * 255 + a / 2) / a).min(255) as u8;
-                }
-            }
-        }
-        let mut out = Vec::new();
-        {
-            let mut enc = png::Encoder::new(&mut out, w as u32, h as u32);
-            enc.set_color(png::ColorType::Rgba);
-            enc.set_depth(png::BitDepth::Eight);
-            let mut wr = enc.write_header().ok()?;
-            wr.write_image_data(&px).ok()?;
-        }
-        Some(out)
+fn hbitmap_to_png(bmp: HBITMAP) -> Option<Vec<u8>> {
+    let (w, h) = bitmap::size(bmp);
+    let h = h.abs();
+    if w <= 0 || h <= 0 || w > 512 || h > 512 {
+        return None;
     }
+    bitmap::bgra_to_png(bitmap::pixels(bmp, w, h)?, w, h, true)
 }
 
 /// A Windows „Legutóbbi elemek” mappája.
@@ -308,25 +265,7 @@ pub fn recent_files(limit: usize) -> Vec<(String, String)> {
 
 /// Egy szöveges érték a HKLM alól (üres vagy hiányzó érték: None).
 fn hklm_string(key: &str, value: &str) -> Option<String> {
-    use windows::Win32::System::Registry::{HKEY_LOCAL_MACHINE, RRF_RT_REG_SZ, RegGetValueW};
-    let mut buf = [0u16; 520];
-    let mut len = (buf.len() * 2) as u32;
-    let r = unsafe {
-        RegGetValueW(
-            HKEY_LOCAL_MACHINE,
-            &HSTRING::from(key),
-            &HSTRING::from(value),
-            RRF_RT_REG_SZ,
-            None,
-            Some(buf.as_mut_ptr() as *mut _),
-            Some(&mut len),
-        )
-    };
-    if r.is_err() {
-        return None;
-    }
-    let n = (len as usize / 2).saturating_sub(1).min(buf.len());
-    Some(String::from_utf16_lossy(&buf[..n]).trim().to_string()).filter(|s| !s.is_empty())
+    crate::reg::get_string(windows::Win32::System::Registry::HKEY_LOCAL_MACHINE, key, value)
 }
 
 /// A bejelentkezett felhasználó egy adata a bejelentkező képernyő nyilvántartásából

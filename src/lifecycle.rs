@@ -130,7 +130,7 @@ pub(crate) fn prepare_config(base_dir: &Path, custom: Option<PathBuf>) -> (Confi
                 let _ = config::save(&cfg_path, &c);
             } else {
                 // a beolvashatatlan fájlt félretesszük, mielőtt egy későbbi mentés felülírná
-                let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+                let ts = crate::unix_secs();
                 let keep = cfg_path.with_file_name(format!("config.unreadable-{ts}.json"));
                 match std::fs::copy(&cfg_path, &keep) {
                     Ok(_) => log(format!("a beolvashatatlan config.json félretéve: {}", keep.display())),
@@ -175,7 +175,7 @@ pub(crate) fn prepare_config(base_dir: &Path, custom: Option<PathBuf>) -> (Confi
         // a COM itt még nem fut a fő szálon: a háttérkép-kezelőt külön szálon érjük el
         let (old, new) = (old_walls.clone(), wall_dir.clone());
         let moved = std::thread::spawn(move || {
-            let _com = crate::wmi::ComThread::init();
+            let _com = crate::com::ComThread::init();
             let p = moved_path(&crate::sys::current_wallpaper(), &old, &new)?;
             Some(crate::sys::set_wallpaper(&p).map(|()| p))
         })
@@ -316,7 +316,7 @@ pub(crate) fn statusline() {
     }
     let rl = &v["rate_limits"];
     if rl.is_object() {
-        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
+        let now = crate::unix_ms();
         let out = json!({ "five_hour": rl["five_hour"], "seven_day": rl["seven_day"], "writtenAt": now });
         let path = usage::limits_file();
         let tmp = path.with_extension("tmp");

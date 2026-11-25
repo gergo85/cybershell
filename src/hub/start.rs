@@ -1,14 +1,16 @@
 //! A saját Start menü és kereső: a telepített programok listája, megnyitás, parancsok.
 
 use crate::UserEvent;
-use crate::hub::Hub;
 use crate::hub::layout::popup_pos_margin;
+use crate::hub::{Hub, WindowWatch};
 use crate::log;
 use crate::send;
-use crate::web::percent_encode;
+use crate::web::PopupParts;
 use crate::web::push;
+use crate::web::{app_icon_url, percent_encode};
 use crate::{appbar, apps, clipboard, config, wintrack};
 use serde_json::json;
+use std::collections::HashSet;
 use std::path::Path;
 use std::time::{Duration, Instant};
 use tao::window::Window;
@@ -21,6 +23,8 @@ use wry::WebView;
 /// A saját Start menü és kereső ablaka. Két elrendezése van: "start" (az információs
 /// panel mellett, a Start gomb magasságában) és "search" (a munkaterület közepén felül).
 pub(crate) struct LaunchWin {
+    /// Az ablak, amiben a felület fut: csak életben tartjuk (eldobásakor bezárulna).
+    #[expect(dead_code, reason = "csak az ablak élettartama miatt tároljuk")]
     pub(crate) window: Window,
     pub(crate) webview: WebView,
     pub(crate) hwnd: HWND,
@@ -40,11 +44,36 @@ pub(crate) const START_H: f64 = 780.0;
 pub(crate) const SEARCH_W: f64 = 720.0;
 pub(crate) const SEARCH_H: f64 = 680.0;
 
+impl LaunchWin {
+    pub(crate) fn new((window, webview, hwnd): PopupParts) -> Self {
+        LaunchWin {
+            window,
+            webview,
+            hwnd,
+            visible: false,
+            shown_at: Instant::now(),
+            focused: false,
+            hidden_at: None,
+            mode: "start",
+            prev: None,
+        }
+    }
+}
+
 impl Hub {
     pub(crate) fn launcher_eval(&self, payload: &serde_json::Value) {
         if let Some(l) = &self.launcher {
             push(&l.webview, payload);
         }
+    }
+
+    /// Rövid értesítés a Start menü (kereső) alján.
+    fn launcher_toast(&self, text: &str) {
+        self.launcher_eval(&json!({ "type": "launcher-toast", "text": text }));
+    }
+
+    pub(crate) fn launcher_visible(&self) -> bool {
+        self.launcher.as_ref().is_some_and(|l| l.visible)
     }
 
     /// A telepített programok újrafelsorolása háttérszálon (két percnél régebbi lista esetén,
@@ -83,7 +112,7 @@ impl Hub {
                     "id": a.id,
                     "name": a.name,
                     "target": a.target,
-                    "img": format!("/__appicon/{}", percent_encode(&a.id)),
+                    "img": app_icon_url(&a.id),
                     "exe": a.target.to_lowercase().ends_with(".exe"),
                     // a Windows része (eszköz, konzol, mappa), nem telepített program
                     "system": apps::is_system(&a.id, &a.target),
@@ -172,7 +201,7 @@ impl Hub {
         });
         let Some(idx) = idx else { return };
         let Some((bar_rect, bar_edge, bar_scale)) = self.bars.get(idx).map(|b| (b.rect, b.edge, b.scale)) else { return };
-        if self.settings.as_ref().is_some_and(|s| s.visible) {
+        if self.settings_visible() {
             self.settings_eval(&json!({ "type": "hide" }));
         }
         self.peek_hide();
@@ -246,6 +275,18 @@ impl Hub {
     }
 
     pub(crate) fn launcher_hide(&mut self, lost_focus: bool) {
+        self.launcher_close(lost_focus, !lost_focus);
+    }
+
+    /// Bezárás egy indítás után. A fókuszt nem adjuk vissza az előző ablaknak: azzal az épp
+    /// induló program ablaka mögé kerülne. Helyette az első új ablakát hozzuk előre, ha a Windows
+    /// mégis a többi mögött nyitná meg. `known`: az indítás előtt már meglévő ablakok.
+    fn launcher_hide_launched(&mut self, known: HashSet<isize>) {
+        self.launcher_close(false, false);
+        self.launch_watch = Some(WindowWatch::new(known, Duration::from_secs(8)));
+    }
+
+    fn launcher_close(&mut self, lost_focus: bool, refocus: bool) {
         let Some(l) = self.launcher.as_mut() else { return };
         if !l.visible {
             return;
@@ -257,8 +298,8 @@ impl Hub {
         }
         let hwnd = l.hwnd;
         self.launcher_eval(&json!({ "type": "launcher-hidden" }));
-        self.eval(self.info_edge(), &json!({ "type": "launcher-state", "open": false }));
-        if !lost_focus {
+        self.eval_info(&json!({ "type": "launcher-state", "open": false }));
+        if refocus {
             self.refocus_later(hwnd);
         }
     }
@@ -291,14 +332,25 @@ impl Hub {
             "clip-paste" | "clip-copy" => {
                 let id = msg["id"].as_u64().unwrap_or(0);
                 if !clipboard::copy(id) {
-                    let t =
-                        self.tr("Nem sikerült a vágólapra tenni", "Could not copy to the clipboard", "Nie udało się skopiować do schowka");
-                    self.launcher_eval(&json!({ "type": "launcher-toast", "text": t }));
+                    let t = self.tr(
+                        "Nem sikerült a vágólapra tenni",
+                        "Could not copy to the clipboard",
+                        "Nie udało się skopiować do schowka",
+                        "Kopieren in die Zwischenablage fehlgeschlagen",
+                        "No se pudo copiar al portapapeles",
+                    );
+                    self.launcher_toast(&t);
                     return;
                 }
                 if kind == "clip-copy" {
-                    let t = self.tr("Vágólapra másolva", "Copied to the clipboard", "Skopiowano do schowka");
-                    self.launcher_eval(&json!({ "type": "launcher-toast", "text": t }));
+                    let t = self.tr(
+                        "Vágólapra másolva",
+                        "Copied to the clipboard",
+                        "Skopiowano do schowka",
+                        "In die Zwischenablage kopiert",
+                        "Copiado al portapapeles",
+                    );
+                    self.launcher_toast(&t);
                     return;
                 }
                 let prev = self.launcher.as_ref().and_then(|l| l.prev);
@@ -314,8 +366,14 @@ impl Hub {
             }
             "recent-delete" => {
                 if !apps::remove_recent(&text("path")) {
-                    let t = self.tr("Nem sikerült levenni a listáról", "Could not remove it from the list", "Nie udało się usunąć z listy");
-                    self.launcher_eval(&json!({ "type": "launcher-toast", "text": t }));
+                    let t = self.tr(
+                        "Nem sikerült levenni a listáról",
+                        "Could not remove it from the list",
+                        "Nie udało się usunąć z listy",
+                        "Konnte nicht aus der Liste entfernt werden",
+                        "No se pudo quitar de la lista",
+                    );
+                    self.launcher_toast(&t);
                 }
                 self.send_launcher_data();
             }
@@ -338,15 +396,18 @@ impl Hub {
                 let id = text("id");
                 let Some(app) = self.start_apps.iter().find(|a| a.id == id).cloned().or_else(|| apps::find(&id)) else { return };
                 let admin = msg["admin"].as_bool().unwrap_or(false);
-                self.launcher_hide(false);
+                // előbb indul, aztán zárul a menü: amíg a menü az előtérben van, addig örökli
+                // az indított program az előtérbe kerülés jogát
+                let known = self.known_windows();
                 let ok = if admin && !app.target.is_empty() {
                     wintrack::shell_verb("runas", &app.target, "")
                 } else {
                     wintrack::shell_open(&format!("shell:AppsFolder\\{}", app.id), "", "", false)
                 };
+                self.launcher_hide_launched(known);
                 log(format!("Start menü: indítás – {} -> {}", app.name, if ok { "ok" } else { "HIBA" }));
                 if !ok && !admin {
-                    let t = self.tr("Nem indítható", "Cannot start", "Nie można uruchomić");
+                    let t = self.tr("Nem indítható", "Cannot start", "Nie można uruchomić", "Start nicht möglich", "No se puede iniciar");
                     self.toast(&format!("{t}: {}", app.name));
                 }
             }
@@ -356,8 +417,9 @@ impl Hub {
                     && !app.target.is_empty()
                 {
                     let target = app.target.clone();
-                    self.launcher_hide(false);
+                    let known = self.known_windows();
                     wintrack::shell_open("explorer.exe", &format!("/select,\"{target}\""), "", false);
+                    self.launcher_hide_launched(known);
                 }
             }
             // legutóbbi fájl, mappa, webcím vagy beállításoldal megnyitása
@@ -370,16 +432,20 @@ impl Hub {
                     || lower.starts_with("shell:")
                     || Path::new(&config::expand_env(&target)).exists();
                 if !allowed {
-                    let t = self.tr("Nem található", "Not found", "Nie znaleziono");
-                    self.launcher_eval(&json!({ "type": "launcher-toast", "text": format!("{t}: {target}") }));
+                    let t = self.tr("Nem található", "Not found", "Nie znaleziono", "Nicht gefunden", "No encontrado");
+                    self.launcher_toast(&format!("{t}: {target}"));
                     return;
                 }
                 let target = config::expand_env(&target);
-                self.launcher_hide(false);
-                if msg["reveal"].as_bool().unwrap_or(false) {
-                    wintrack::shell_open("explorer.exe", &format!("/select,\"{target}\""), "", false);
-                } else if !wintrack::shell_open(&target, "", "", false) {
-                    let t = self.tr("Nem nyitható meg", "Can't open", "Nie można otworzyć");
+                let known = self.known_windows();
+                let ok = if msg["reveal"].as_bool().unwrap_or(false) {
+                    wintrack::shell_open("explorer.exe", &format!("/select,\"{target}\""), "", false)
+                } else {
+                    wintrack::shell_open(&target, "", "", false)
+                };
+                self.launcher_hide_launched(known);
+                if !ok {
+                    let t = self.tr("Nem nyitható meg", "Can't open", "Nie można otworzyć", "Öffnen nicht möglich", "No se puede abrir");
                     self.toast(&format!("{t}: {target}"));
                 }
             }
@@ -402,13 +468,20 @@ impl Hub {
                     return;
                 }
                 let admin = msg["admin"].as_bool().unwrap_or(false);
+                let known = self.known_windows();
                 let ok = wintrack::shell_verb(if admin { "runas" } else { "open" }, &config::expand_env(&file), &config::expand_env(&args));
                 log(format!("Start menü: parancs – {file} -> {}", if ok { "ok" } else { "HIBA" }));
                 if ok {
-                    self.launcher_hide(false);
+                    self.launcher_hide_launched(known);
                 } else if !admin {
-                    let t = self.tr("A Windows nem találja", "Windows can't find", "Windows nie może znaleźć");
-                    self.launcher_eval(&json!({ "type": "launcher-toast", "text": format!("{t}: {file}") }));
+                    let t = self.tr(
+                        "A Windows nem találja",
+                        "Windows can't find",
+                        "Windows nie może znaleźć",
+                        "Windows kann es nicht finden",
+                        "Windows no lo encuentra",
+                    );
+                    self.launcher_toast(&format!("{t}: {file}"));
                 }
             }
             // webes keresés az alapértelmezett böngészőben
@@ -423,8 +496,9 @@ impl Hub {
                     config::StartMenu::default().web_search
                 };
                 let enc: String = percent_encode(q.trim()).replace('/', "%2F").replace(':', "%3A");
-                self.launcher_hide(false);
+                let known = self.known_windows();
                 wintrack::shell_open(&tpl.replace("{q}", &enc), "", "", false);
+                self.launcher_hide_launched(known);
             }
             "pin" | "unpin" => {
                 let id = text("id");
@@ -456,8 +530,14 @@ impl Hub {
                 let is_exe = app.target.to_lowercase().ends_with(".exe");
                 let path = if is_exe { app.target.clone() } else { format!("shell:AppsFolder\\{}", app.id) };
                 if self.cfg.apps.iter().any(|a| a.resolved_path().eq_ignore_ascii_case(&path)) {
-                    let t = self.tr("Már rajta van a sávon", "Already on the bar", "Już jest na pasku");
-                    self.launcher_eval(&json!({ "type": "launcher-toast", "text": format!("{t}: {}", app.name) }));
+                    let t = self.tr(
+                        "Már rajta van a sávon",
+                        "Already on the bar",
+                        "Już jest na pasku",
+                        "Schon in der Leiste",
+                        "Ya está en la barra",
+                    );
+                    self.launcher_toast(&format!("{t}: {}", app.name));
                     return;
                 }
                 self.cfg.apps.push(config::AppEntry {
@@ -471,7 +551,13 @@ impl Hub {
                 self.launcher_hide(false);
                 if self.save_config() {
                     self.reload();
-                    let t = self.tr("Hozzáadva a sávhoz", "Added to the bar", "Dodano do paska");
+                    let t = self.tr(
+                        "Hozzáadva a sávhoz",
+                        "Added to the bar",
+                        "Dodano do paska",
+                        "Zur Leiste hinzugefügt",
+                        "Añadido a la barra",
+                    );
                     self.toast(&format!("{t}: {}", app.name));
                 }
             }

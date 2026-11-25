@@ -78,6 +78,14 @@
         secLoad: '// OBCIĄŻENIE', sLoad: 'Obciążenie', sLoadHint: 'Procesor, pamięć, karta graficzna i jej temperatura',
         loadTip: 'Kliknij, aby otworzyć Menedżera zadań', ld_cpu: 'CPU', ld_mem: 'RAM', ld_gpu: 'GPU', ld_temp: 'GPU °C',
       },
+      de: {
+        secLoad: '// LAST', sLoad: 'Last', sLoadHint: 'Prozessor, Arbeitsspeicher, Grafikkarte und ihre Temperatur',
+        loadTip: 'Klicken für den Task-Manager', ld_cpu: 'CPU', ld_mem: 'RAM', ld_gpu: 'GPU', ld_temp: 'GPU °C',
+      },
+      es: {
+        secLoad: '// CARGA', sLoad: 'Carga', sLoadHint: 'Procesador, memoria, tarjeta gráfica y su temperatura',
+        loadTip: 'Haz clic para abrir el Administrador de tareas', ld_cpu: 'CPU', ld_mem: 'RAM', ld_gpu: 'GPU', ld_temp: 'GPU °C',
+      },
     },
   });
 })();

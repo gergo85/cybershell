@@ -5,14 +5,14 @@
   const q = new URLSearchParams(location.search);
   const part = q.get('part') || 'left';
   // melyik képernyőszélen van a panel (felcserélt paneleknél az ikonsáv is lehet jobbra)
-  const side = q.get('side') || (part === 'right' ? 'right' : part === 'top' || part === 'bottom' ? part : 'left');
+  const side = q.get('side') || (part === 'right' ? 'right' : 'left');
   // vízszintes sáv (fent vagy lent): a tartalom sorba rendeződik
   const horiz = side === 'top' || side === 'bottom';
   // nyelv: a szövegek az i18n.js-ben vannak
   const lang = (window.HUB_I18N || {})[q.get('lang')] ? q.get('lang') : 'hu';
   document.documentElement.lang = lang;
   // a nyelvhez tartozó területi beállítás (dátumok, számok) és tizedesjel
-  const locale = { hu: 'hu-HU', en: 'en-GB', pl: 'pl-PL' }[lang] || 'hu-HU';
+  const locale = { hu: 'hu-HU', en: 'en-GB', pl: 'pl-PL', de: 'de-DE', es: 'es-ES' }[lang] || 'hu-HU';
   const decimal = (v) => (lang === 'en' ? String(v) : String(v).replace('.', ','));
   const T = (key, vars) => {
     let s = (window.HUB_I18N[lang] || {})[key] ?? window.HUB_I18N.hu[key] ?? key;
@@ -69,10 +69,11 @@
   };
 
   // ── dátum és idő (a beállítások Funkciók fülén): a dátum formátuma és a 12 vagy 24 órás óra ──
-  // "auto": a nyelv szerint (magyarul 2026. 11. 20., angolul 2026-11-20, lengyelül 20.11.2026)
+  // "auto": a nyelv szerint (magyarul 2026. 11. 20., angolul 2026-11-20, lengyelül, németül és
+  // spanyolul 20.11.2026)
   const DATE_FORMATS = ['auto', 'ymd', 'iso', 'dmy', 'mdy'];
   const dt = { format: DATE_FORMATS.includes(q.get('df')) ? q.get('df') : 'auto', h12: q.get('h12') === '1' };
-  const dateFormat = (f = dt.format) => (f === 'auto' ? { hu: 'ymd', pl: 'dmy' }[lang] || 'iso' : f);
+  const dateFormat = (f = dt.format) => (f === 'auto' ? { hu: 'ymd', pl: 'dmy', de: 'dmy', es: 'dmy' }[lang] || 'iso' : f);
   // a dátum két sorban (a Dátum modulhoz): [felső, alsó]
   const dateLines = (d, f) => {
     const y = String(d.getFullYear()), m = pad(d.getMonth() + 1), n = pad(d.getDate());
@@ -147,8 +148,8 @@
     }
     return geo;
   };
-  const wmo = (code) => window.HUB_WMO[code] || ['Ismeretlen', 'Unknown', 'overcast', 'Nieznane'];
-  const wmoText = (code) => wmo(code)[{ en: 1, pl: 3 }[lang] || 0];
+  const wmo = (code) => window.HUB_WMO[code] || ['Ismeretlen', 'Unknown', 'overcast', 'Nieznane', 'Unbekannt', 'Desconocido'];
+  const wmoText = (code) => wmo(code)[{ en: 1, pl: 3, de: 4, es: 5 }[lang] || 0];
   const wmoIcon = (code, isDay) => {
     const icon = wmo(code)[2];
     if (!isDay && icon === 'sun') return 'moon';
@@ -184,5 +185,9 @@
     modules, defineModule,
     // a felületépítők (parts/*.js) ide jegyzik be magukat
     parts: {},
+    // az oldalpanel nézetei (parts/fly-*.js), a parts/flyout.js rakja össze őket
+    flyViews: [],
+    // a beállítások külön fájlban lévő fülei (parts/settings-*.js), a parts/settings.js rakja össze őket
+    settingsPanes: [],
   };
 })();

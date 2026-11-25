@@ -134,6 +134,16 @@
         muLaunchHint: 'Uruchom Spotify', muOpen: 'Otwórz Spotify', muPrev: 'Poprzedni', muNext: 'Następny', muPlay: 'Odtwórz', muPause: 'Pauza',
         muNothing: 'Nic nie gra', muShuffle: 'Losowa kolejność', muOn: 'wł.', muOff: 'wył.',
       },
+      de: {
+        secMusic: '// MUSIK', sMusic: 'Musik (Spotify)', sMusicHint: 'Funktioniert mit der Spotify-Desktop-App.',
+        muLaunchHint: 'Spotify starten', muOpen: 'Spotify öffnen', muPrev: 'Zurück', muNext: 'Weiter', muPlay: 'Wiedergabe', muPause: 'Pause',
+        muNothing: 'Keine Wiedergabe', muShuffle: 'Zufallswiedergabe', muOn: 'an', muOff: 'aus',
+      },
+      es: {
+        secMusic: '// MÚSICA', sMusic: 'Música (Spotify)', sMusicHint: 'Funciona con la app de escritorio de Spotify.',
+        muLaunchHint: 'Iniciar Spotify', muOpen: 'Abrir Spotify', muPrev: 'Anterior', muNext: 'Siguiente', muPlay: 'Reproducir', muPause: 'Pausa',
+        muNothing: 'No se reproduce nada', muShuffle: 'Aleatorio', muOn: 'sí', muOff: 'no',
+      },
     },
   });
 })();

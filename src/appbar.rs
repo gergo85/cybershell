@@ -132,7 +132,7 @@ pub fn work_area() -> RECT {
     r
 }
 
-/// Egy képernyő: teljes terület, munkaterület, elsődleges-e, DPI.
+/// Egy képernyő: teljes terület, elsődleges-e, DPI.
 #[derive(Clone, Copy, Debug)]
 pub struct Monitor {
     pub rect: RECT,
@@ -298,11 +298,7 @@ pub fn taskbar_reserved() -> Option<(Edge, RECT)> {
 
 pub fn hide_taskbar() {
     set_taskbar_state(taskbar_state() | ABS_AUTOHIDE);
-    for tb in all_taskbars() {
-        unsafe {
-            let _ = ShowWindow(tb, SW_HIDE);
-        }
-    }
+    rehide_taskbar();
 }
 
 /// Valamelyik képernyő tálcája látható-e.
@@ -324,6 +320,7 @@ pub fn show_taskbar() {
     }
 }
 
+/// Minden képernyő tálcájának elrejtése (az automatikus elrejtés állapotához nem nyúl).
 pub fn rehide_taskbar() {
     for tb in all_taskbars() {
         unsafe {

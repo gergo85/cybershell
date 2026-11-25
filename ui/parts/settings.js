@@ -4,20 +4,10 @@
   // ───────────── beállítások (a munkaterületen, animálva, fülekre bontva) ─────────────
   // Bal oldalt a fülek sávja (Programok, Panelek, Megjelenés, Funkciók, Rendszer), alatta a
   // gép terhelése és a készítő; jobbra az aktív fül kártyái. Minden változás azonnal életbe lép,
-  // kivéve az ikonlistát, amit a Mentés gomb ment el.
+  // kivéve az ikonlistát, amit a Mentés gomb ment el. A Programok és a Rendszer fül külön fájlban van
+  // (parts/settings-programs.js, parts/settings-system.js).
   function buildSettings() {
     root.className = 'settings';
-    // az ikonválasztó mátrixa (a program saját ikonja után), témák szerint csoportosítva
-    const ICON_CHOICES = [
-      'browser', 'globe', 'link', 'code', 'terminal', 'bug', 'robot', 'database', 'folder', 'archive', 'panels', 'grid', 'list', 'layers',
-      'file', 'doc', 'sheet', 'text', 'notes', 'book', 'news', 'bookmark', 'clipboard', 'calc', 'pie', 'trend', 'translate',
-      'mail', 'inbox', 'send', 'chat', 'bell', 'calendar', 'clock', 'timer', 'music', 'headphones', 'mic', 'podcast', 'video', 'film',
-      'photo', 'camera', 'design', 'palette', 'brush', 'pen', 'scissors', 'enhance', 'picker', 'snip', 'cube', 'game', 'dice', 'trophy',
-      'crown', 'ghost', 'smile', 'rocket', 'spark', 'star', 'heart', 'fire', 'bolt', 'bulb', 'leaf', 'coffee', 'gift', 'cart', 'tag',
-      'coin', 'wallet', 'bank', 'briefcase', 'school', 'bar', 'map', 'place', 'pin', 'flag', 'compass', 'target', 'home', 'car', 'plane',
-      'anchor', 'planet', 'cloud', 'download', 'server', 'pc', 'laptop', 'monitor', 'phone', 'keyboard', 'mouse', 'chip', 'gpu', 'ram',
-      'disk', 'board', 'plug', 'network', 'wifi', 'bluetooth', 'printer', 'qr', 'shield', 'lock', 'key', 'eye', 'box', 'user', 'fitness',
-      'settings', 'wrench', 'search', 'hash', 'start', 'github', 'sun', 'moon', 'app'];
     const TABS = [
       { id: 'programs', icon: 'app' },
       { id: 'panels', icon: 'panels' },
@@ -25,10 +15,8 @@
       { id: 'features', icon: 'spark' },
       { id: 'system', icon: 'pc' },
     ];
-    // a választható nyelvek, a nevük szerint ábécérendben
-    const LANGS = [['en', 'English'], ['hu', 'Magyar'], ['pl', 'Polski']].sort((a, b) => a[1].localeCompare(b[1]));
     const tabKey = (id) => `tab${id[0].toUpperCase()}${id.slice(1)}`;
-    const sw = (on) => ({ hu: ['KI', 'BE'], pl: ['WYŁ', 'WŁ'] }[lang] || ['OFF', 'ON'])[on ? 1 : 0];
+    const sw = (on) => ({ hu: ['KI', 'BE'], pl: ['WYŁ', 'WŁ'], de: ['AUS', 'EIN'], es: ['NO', 'SÍ'] }[lang] || ['OFF', 'ON'])[on ? 1 : 0];
     // egy be/ki kapcsoló: data-bool = az adat útvonala (és a programnak küldött kulcs)
     const toggle = (path, icon, label, hint, extra = '') =>
       `<button class="sbtn toggle" data-bool="${path}"${hint ? ` title="${esc(hint)}"` : ''}${extra}>${svg(icon)}<span>${label}</span><b class="switch">–</b></button>`;
@@ -42,6 +30,14 @@
       ddg: 'https://duckduckgo.com/?q={q}',
     };
     const COLOR_KEYS = ['main', 'alt', 'hot', 'bg', 'text'];
+    // A külön fájlban lévő fülek (parts/settings-*.js: Programok, Rendszer) a
+    // window.HUB.settingsPanes listába jegyzik be magukat: { id, html(h), setup(ctx) → horgok }.
+    // A HTML-jük a fülek sorrendjében a helyére kerül, a horgokat a lenti paneHooks gyűjti.
+    const PANES = window.HUB.settingsPanes;
+    const paneHtml = (id) => {
+      const p = PANES.find((x) => x.id === id);
+      return p ? p.html({ toggle }) : '';
+    };
 
     root.innerHTML = `
       <div class="set-wrap">
@@ -69,7 +65,7 @@
             </div>
             <section class="rail-credit">
               <div class="credit-by"><span>${T('madeBy')}</span><b>${T('author')}</b></div>
-              <div class="credit-by credit-ver"><span>${T('version')}</span><b id="appVer">v2.2</b></div>
+              <div class="credit-by credit-ver"><span>${T('version')}</span><b id="appVer">v2.3</b></div>
               <div class="credit-btns">
                 <button class="sbtn mini" data-cmd="store" title="${T('storeHint')}">${svg('store')}<span>Microsoft Store</span></button>
                 <button class="sbtn mini" data-cmd="github">${svg('github')}<span>GitHub</span></button>
@@ -78,23 +74,8 @@
           </nav>
 
           <div class="set-stage" id="stage">
-            <!-- 01 PROGRAMOK -->
-            <section class="set-pane" data-pane="programs" role="tabpanel">
-              <main class="set-card set-main">
-                <h2>${T('icons')}</h2>
-                <div class="ed-head"><span>${T('colIcon')}</span><span>${T('colName')}</span><span>${T('colProgram')}</span><span>${T('colColor')}</span><span>${T('colAuto')}</span><span></span></div>
-                <div class="ed-list" id="edList"></div>
-                <div class="ed-add">
-                  <button class="sbtn" id="edBrowse">${svg('plus')}<span>${T('addProgram')}</span></button>
-                  <div class="ed-chips" id="edRunning" title="${esc(T('runningTitle').replace(/^\/\/\s*/, ''))}"></div>
-                  <footer class="ed-foot">
-                    <span class="ed-dirty" id="edDirty"></span>
-                    <button class="sbtn" id="edCancel">${svg('close')}<span>${T('discard')}</span></button>
-                    <button class="sbtn primary" id="edSave">${svg('check')}<span>${T('save')}</span></button>
-                  </footer>
-                </div>
-              </main>
-            </section>
+            <!-- 01 PROGRAMOK (parts/settings-programs.js) -->
+            ${paneHtml('programs')}
 
             <!-- 02 PANELEK -->
             <section class="set-pane pane-panels" data-pane="panels" role="tabpanel">
@@ -178,6 +159,8 @@
                   </div>
                   ${toggle('windowsSync.darkMode', 'moon', T('syncMode'), T('syncModeHint'))}
                   ${toggle('windowsSync.terminal', 'terminal', T('syncTerminal'), T('syncTerminalHint'))}
+                  <button class="sbtn toggle" data-toggle="desktopMenu" title="${T('deskMenuHint')}">${svg('menu')}<span>${T('deskMenu')}</span><b class="switch">–</b></button>
+                  <button class="sbtn toggle" data-toggle="desktopIconMenu" title="${T('deskIconMenuHint')}">${svg('file')}<span>${T('deskIconMenu')}</span><b class="switch">–</b></button>
                 </div>
               </section>
               <section class="set-card wall">
@@ -258,47 +241,8 @@
               </div>
             </section>
 
-            <!-- 05 RENDSZER -->
-            <section class="set-pane pane-system" data-pane="system" role="tabpanel">
-              <section class="set-card c-general">
-                <h2>${T('generalCard')}</h2>
-                <div class="set-grid two">
-                  <button class="sbtn toggle" data-toggle="autostart">${svg('power')}<span>${T('startWithWindows')}</span><b class="switch">–</b></button>
-                  ${toggle('tooltips', 'help', T('tooltips'), T('tooltipsHint'))}
-                  <div class="lang-row wide">${svg('globe')}<span>${T('language')}</span>
-                    <div class="seg" id="langSeg">${LANGS.map(([k, n]) => `<button data-lang="${k}">${n}</button>`).join('')}</div>
-                  </div>
-                </div>
-              </section>
-              <section class="set-card c-config">
-                <h2>${T('configCard')}</h2>
-                <div class="set-grid two">
-                  <button class="sbtn" data-cmd="config">${svg('notes')}<span>${T('configFile')}</span></button>
-                  <button class="sbtn" data-cmd="reload" title="${T('reloadHint')}">${svg('reload')}<span>${T('reload')}</span></button>
-                  <button class="sbtn danger" id="resetAll" title="${T('resetAllHint')}">${svg('reload')}<span>${T('resetAll')}</span></button>
-                  <button class="sbtn danger" data-cmd="exit">${svg('close')}<span>${T('exit')}</span></button>
-                </div>
-              </section>
-              <section class="set-card c-hw">
-                <h2>${T('hwCard')}</h2>
-                <div class="hw-list" id="hwList"><div class="ed-none">${T('hwLoading')}</div></div>
-              </section>
-              <section class="set-card load">
-                <h2>${T('systemLoad')}</h2>
-                <div class="load-pair">
-                  <div class="meter" id="cpuMeter">
-                    <div class="meter-head"><span>${T('cpu')}</span><b id="cpuVal">--<small>%</small></b></div>
-                    <svg class="spark" viewBox="0 0 120 40" preserveAspectRatio="none"><path class="spark-area" id="cpuArea"/><path class="spark-line" id="cpuLine"/></svg>
-                    <div class="meter-sub"><span id="cpuCores">&nbsp;</span><span id="cpuAvg">&nbsp;</span></div>
-                  </div>
-                  <div class="meter mem" id="memMeter">
-                    <div class="meter-head"><span>${T('memory')}</span><b id="memVal">--<small>%</small></b></div>
-                    <svg class="spark" viewBox="0 0 120 40" preserveAspectRatio="none"><path class="spark-area" id="memArea"/><path class="spark-line" id="memLine"/></svg>
-                    <div class="meter-sub"><span id="memSub">&nbsp;</span><span id="memFree">&nbsp;</span></div>
-                  </div>
-                </div>
-              </section>
-            </section>
+            <!-- 05 RENDSZER (parts/settings-system.js) -->
+            ${paneHtml('system')}
           </div>
         </div>
       </div>
@@ -306,8 +250,6 @@
 
     let data = null;      // a programtól kapott legutóbbi állapot
     const sortableLater = []; // a húzható listák (a sortable a lenti definíció után kapcsolódik be)
-    let draft = [];       // a szerkesztett ikonlista
-    let original = '[]';
     // a panel moduljai (modules/*.js): a ki- és bekapcsolható, rendezhető modulok
     const MODULES = window.HUB.modules.filter((m) => m.listed !== false);
     const moduleOf = (id) => MODULES.find((m) => m.id === id);
@@ -482,22 +424,6 @@
         if (!demo) post({ type: 'close' });
         else show();
       }, 230);
-    };
-
-    const editable = (a) => ({
-      id: a.id, name: a.name, path: a.path, args: a.args || '', icon: a.rawIcon != null ? a.rawIcon : (a.icon || ''),
-      color: a.color || '', img: a.img || '', exeImg: a.exeImg || (a.icon === 'exe' ? a.img : '') || '', canExeIcon: !!a.canExeIcon,
-      available: a.available !== false, hint: a.hint || '', autostart: !!a.autostart,
-    });
-    const strip = (a) => ({ id: a.id, name: a.name, path: a.path, args: a.args, icon: a.icon, color: a.color, autostart: a.autostart });
-    const dirty = () => JSON.stringify(draft.map(strip)) !== original;
-
-    const iconPreview = (a) => {
-      if (a.icon === 'exe' && a.img) return `<img src="${esc(a.img)}" alt="">`;
-      if (a.icon && window.HUB_ICONS[a.icon]) return svg(a.icon);
-      const hay = `${a.name} ${a.path}`.toLowerCase();
-      const hit = (window.HUB_GUESS || []).find(([re]) => re.test(hay));
-      return svg(hit ? hit[1] : 'app');
     };
 
     const setSwitch = (b, on) => {
@@ -858,91 +784,9 @@
       }));
     }
 
-    // ── rendszerkomponensek (a program háttérben kérdezi le, az első megnyitáskor) ──
-    const renderHardware = () => {
-      const hw = data.hardware;
-      if (!hw) return;
-      const join = (...xs) => xs.filter(Boolean).join(' · ');
-      const row = (icon, label, value, subs = [], extra = '', cls = '') => `
-        <div class="hw-row${cls}">${svg(icon)}<span class="hw-label">${label}</span>
-          <div class="hw-val"><b>${esc(value || '—')}</b>${extra}${subs.filter(Boolean).map((x) => `<small>${esc(x)}</small>`).join('')}</div></div>`;
-      const num = (v, d = 1) => Number(v).toFixed(d).replace(/\.0+$/, '').replace('.', T('gbSep'));
-      // alaplap
-      const b = typeof hw.board === 'object' && hw.board ? hw.board : { name: hw.board };
-      const boardSub = join(b.bios && `BIOS ${b.bios}${b.biosDate ? ` (${b.biosDate})` : ''}`);
-      // processzor
-      const c = hw.cpu || {};
-      const cpuSub = c.cores ? T('hwCores', { c: c.cores, t: c.threads || c.cores, g: c.mhz ? num(c.mhz / 1000) : '?' }) : '';
-      // memória szövegesen: azonos moduloknál „4 × 8 GB”, eltérőknél csoportonként
-      // („2 × 8 GB + 1 × 4 GB”), alatta csoportonként a gyártó, a típusszám és a sebesség
-      const mem = hw.mem || {};
-      const mods = mem.modules || [];
-      const groups = [];
-      for (const m of mods) {
-        const key = [m.size, m.type, m.speed, m.maker, m.part].join('|');
-        const g = groups.find((x) => x.key === key);
-        if (g) g.n++; else groups.push({ key, n: 1, m });
-      }
-      const speeds = new Set(mods.map((m) => m.speed));
-      const empty = Math.max(0, (mem.slots || 0) - mods.length);
-      const sizes = groups.map((g) => `${g.n} × ${g.m.size}`).join(' + ');
-      const memMain = join(mem.total, sizes, mem.type || (mods.length ? T('hwMixedType') : ''), mem.speed ? `${mem.speed} MT/s` : '');
-      const memSubs = groups.map((g) => join(groups.length > 1 ? `${g.n} × ${g.m.size}` : '', g.m.maker, g.m.part,
-        speeds.size > 1 && g.m.speed ? `${g.m.speed} MT/s` : ''));
-      if (empty) memSubs.push(T('hwEmptySlots', { n: empty }));
-      // videókártya
-      const gpus = hw.gpus || [];
-      const gpuRow = (g, i) => row('gpu', i ? '' : T('hwGpu'), g.name, [join(
-        join(g.vram, g.memType).replace(' · ', ' '),
-        g.bus && `${g.bus} bit`,
-        g.gbps && `${num(g.gbps)} Gbps`)]);
-      // háttértárak: meghajtónként a típus, a méret és a rajta lévő meghajtók szabad helye
-      const disks = hw.disks || [];
-      const lvl = (p) => (p >= 90 ? ' hot' : p >= 75 ? ' warn' : '');
-      const diskRows = disks.flatMap((d) => {
-        const vols = d.volumes && d.volumes.length ? d.volumes : [null];
-        return vols.map((v, i) => `
-          <span class="hd-name"${i ? '' : ` title="${esc(d.name)}"`}>${i ? '' : esc(d.name)}</span>
-          <span>${i ? '' : esc(d.bus || '—')}</span><span>${i ? '' : esc(d.media || '—')}</span><span class="hd-num">${i ? '' : esc(d.size)}</span>
-          <span class="hd-vol">${v ? esc(v.letter) : '—'}${v && v.label ? ` <em>${esc(v.label)}</em>` : ''}</span>
-          <span class="hd-num">${v ? `${esc(v.free)} / ${esc(v.total)}` : ''}</span>
-          <span class="hd-use${v && typeof v.pct === 'number' ? lvl(v.pct) : ''}">${v && typeof v.pct === 'number' ? `<i><b style="width:${v.pct}%"></b></i><em>${v.pct}%</em>` : ''}</span>`);
-      }).join('');
-      const diskTable = disks.length ? `<div class="hd-table">
-          <span class="hd-h">${T('hdName')}</span><span class="hd-h">${T('hdBus')}</span><span class="hd-h">${T('hdType')}</span><span class="hd-h hd-num">${T('hdSize')}</span>
-          <span class="hd-h">${T('hdVol')}</span><span class="hd-h hd-num">${T('hdFree')}</span><span class="hd-h">${T('hdUse')}</span>${diskRows}</div>` : '';
-      $('hwList').innerHTML =
-        row('board', T('hwBoard'), b.name, [boardSub]) +
-        row('chip', T('hwCpu'), c.name, [cpuSub]) +
-        row('ram', T('hwMem'), memMain, memSubs) +
-        (gpus.length ? gpus.map(gpuRow).join('') : row('gpu', T('hwGpu'), '')) +
-        (disks.length ? `<div class="hw-row wide">${svg('disk')}<span class="hw-label">${T('hwStorage')}</span>${diskTable}</div>` : '');
-    };
-
-    // Minden alaphelyzetbe: második kattintásra
-    let resetAllArm = 0;
-    const disarmResetAll = () => {
-      clearTimeout(resetAllArm);
-      resetAllArm = 0;
-      $('resetAll').classList.remove('armed');
-      $('resetAll').querySelector('span').textContent = T('resetAll');
-    };
-    $('resetAll').addEventListener('click', () => {
-      if (!resetAllArm) {
-        $('resetAll').classList.add('armed');
-        $('resetAll').querySelector('span').textContent = T('resetAllSure');
-        resetAllArm = setTimeout(disarmResetAll, 4000);
-        return;
-      }
-      disarmResetAll();
-      if (demo) return toast('Demo: reset all');
-      post({ type: 'cmd', name: 'reset-all' });
-    });
-
     const renderToggles = () => {
       for (const b of root.querySelectorAll('[data-toggle]')) setSwitch(b, !!data[b.dataset.toggle]);
       for (const b of root.querySelectorAll('[data-bool]')) setSwitch(b, !!get(b.dataset.bool));
-      for (const b of $('langSeg').children) b.classList.toggle('on', b.dataset.lang === (data.language || lang));
       for (const b of $('labelSeg').children) b.classList.toggle('on', (b.dataset.labels === 'show') === (data.iconLabels !== false));
       for (const b of $('themeSeg').children) b.classList.toggle('on', b.dataset.appearance === (data.appearance || 'dark'));
       for (const b of $('nbSeg').children) b.classList.toggle('on', b.dataset.nb === (data.neonBorder || 'off'));
@@ -981,13 +825,13 @@
       }).join('');
       renderOrder();
       renderView();
-      renderHardware();
       $('sizesReset').disabled = sizesDefault();
       renderRanges();
       renderPreview();
       renderPalettes();
       renderCalendars();
       renderEngine();
+      for (const p of paneHooks) if (p.render) p.render(data);
       for (const c of MODULE_CARDS) if (c.hooks.render) c.hooks.render(data);
     };
 
@@ -1087,91 +931,24 @@
       if (!demo) post({ type: 'sections', sections: data.sections });
     });
 
-    const renderRunning = () => {
-      const have = new Set(draft.map((a) => a.path.toLowerCase()));
-      const list = (data.running || []).filter((r) => !have.has(r.path.toLowerCase()));
-      $('edRunning').innerHTML = list.length
-        ? list.map((r, i) => `<button class="run-chip" data-run="${i}" title="${esc(T('runningTitle').replace(/^\/\/\s*/, ''))}"><img src="${esc(r.img)}" alt=""><span>${esc(r.name)}</span>${svg('plus')}</button>`).join('')
-        : `<span class="ed-none">${T('noRunning')}</span>`;
-      $('edRunning').dataset.list = JSON.stringify(list);
+    // a külön fájlban lévő fülek indítása (itt, mert a Programok fül is a sortable-t használja);
+    // a horgaik: load() új adatnál, render(data) a kirajzolásnál, message(msg), dirty() és
+    // discard() a mentetlen változásokhoz, demo() az előnézethez
+    // A fülsáv elemei, amelyeket a fülek frissítenek: a fül jelzése (pl. mentetlen változás) és a
+    // terhelés kis kijelzője a fülsáv alján (`which`: 'cpu' vagy 'mem', `level`: '', 'warn', 'hot').
+    const setBadge = (tabId, on, title = '') => {
+      const b = $(`badge-${tabId}`);
+      b.classList.toggle('on', on);
+      b.title = title;
     };
-
-    const renderList = () => {
-      $('edList').innerHTML = draft.map((a, i) => {
-        const color = /^#[0-9a-f]{6}$/i.test(a.color) ? a.color : '#8a8f9c';
-        return `
-          <div class="ed-item" data-i="${i}">
-          <span class="grip" title="${T('dragHint')}">${svg('grip')}</span>
-          <div class="ed-row${a.available ? '' : ' missing'}" data-i="${i}">
-            <button class="ed-icon ed-pick" data-act="pick" title="${T('pickIcon')}: ${pickLabel(a)}"${a.color ? ` style="--app:${esc(a.color)}"` : ''}>${iconPreview(a)}</button>
-            <input class="ed-name" data-field="name" value="${esc(a.name)}" maxlength="24" spellcheck="false">
-            <div class="ed-path">${esc(a.path)}${a.available ? '' : `<b>${T('notInstalled')}</b>`}</div>
-            <input class="ed-color" type="color" data-field="color" value="${color}">
-            <button class="ib auto${a.autostart ? ' on' : ''}" data-act="auto">${svg('power')}</button>
-            <button class="ib danger" data-act="del">${svg('trash')}</button>
-          </div>
-          </div>`;
-      }).join('') || `<div class="ed-none">${T('noIcons')}</div>`;
-      renderRunning();
-      updateDirty();
+    const railLoad = (which, pct, level) => {
+      const el = $(which === 'mem' ? 'rlMem' : 'rlCpu');
+      el.querySelector('b').style.width = `${pct.toFixed(1)}%`;
+      el.querySelector('em').textContent = `${Math.round(pct)}%`;
+      el.className = `rl ${which === 'mem' ? 'mem ' : ''}${level}`;
     };
-
-    // ── ikonválasztó: az ikonra kattintva nyíló mátrix, az első elem a program saját ikonja (ha nincs neki: automatikus) ──
-    const pickLabel = (a) => T(a.icon === 'exe' ? 'programIcon' : !a.icon ? 'automatic' : window.HUB_ICONS[a.icon] ? 'builtinIcon' : 'imageIcon');
-    const icoPop = document.createElement('div');
-    icoPop.className = 'ico-pop';
-    icoPop.hidden = true;
-    root.appendChild(icoPop);
-    let picking = -1;
-    const closePicker = () => {
-      icoPop.hidden = true;
-      picking = -1;
-      for (const b of $('edList').querySelectorAll('.ed-pick.open')) b.classList.remove('open');
-    };
-    const openPicker = (i, btn) => {
-      if (picking === i) return closePicker();
-      closePicker();
-      const a = draft[i];
-      const first = a.canExeIcon
-        ? { v: 'exe', html: a.exeImg ? `<img src="${esc(a.exeImg)}" alt="">` : svg('app'), title: T('programIcon') }
-        : { v: '', html: iconPreview({ ...a, icon: '' }), title: T('automatic') };
-      const cells = [first, ...ICON_CHOICES.map((n) => ({ v: n, html: svg(n), title: n }))];
-      icoPop.innerHTML = `<div class="ico-head">${esc(a.name)}</div><div class="ico-grid" style="--app:${esc(a.color || 'var(--c-main)')}">${cells.map((c, k) =>
-        `<button class="ico-cell${k === 0 ? ' own' : ''}${a.icon === c.v ? ' on' : ''}" data-icon="${c.v}" title="${esc(c.title)}">${c.html}</button>`).join('')}</div>`;
-      icoPop.hidden = false;
-      picking = i;
-      btn.classList.add('open');
-      // az ikon alá (ha ott nem fér el, fölé), a képernyőn belül
-      const r = btn.getBoundingClientRect(), w = icoPop.offsetWidth, h = icoPop.offsetHeight;
-      const left = Math.max(8, Math.min(r.left, innerWidth - w - 8));
-      const top = r.bottom + 6 + h <= innerHeight - 8 ? r.bottom + 6 : Math.max(8, r.top - 6 - h);
-      Object.assign(icoPop.style, { left: `${left}px`, top: `${top}px` });
-    };
-    icoPop.addEventListener('click', (e) => {
-      const c = e.target.closest('[data-icon]');
-      if (!c || picking < 0) return;
-      const a = draft[picking];
-      a.icon = c.dataset.icon;
-      if (a.icon === 'exe') a.img = a.exeImg;
-      closePicker();
-      renderList();
-    });
-    document.addEventListener('pointerdown', (e) => {
-      if (!icoPop.hidden && !icoPop.contains(e.target) && !e.target.closest('.ed-pick')) closePicker();
-    }, true);
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !icoPop.hidden) { e.stopPropagation(); closePicker(); } }, true);
-    window.addEventListener('resize', closePicker);
-    $('edList').addEventListener('scroll', closePicker);
-
-    const updateDirty = () => {
-      const d = dirty();
-      $('edDirty').textContent = d ? T('unsaved') : '';
-      $('edSave').disabled = !d;
-      $('edCancel').disabled = !d;
-      // a Programok fülön jelzés, ha mentetlen változás van
-      $('badge-programs').classList.toggle('on', d);
-      $('badge-programs').title = d ? T('unsaved') : '';
-    };
+    const paneHooks = PANES.map((p) => p.setup({ root, data: () => data, toast, sortable, setBadge, railLoad }) || {});
+    const unsaved = () => paneHooks.some((p) => p.dirty && p.dirty());
 
     // háttérképek: kattintásra a program beállítja a Windows háttérképének
     const normPath = (p) => String(p || '').replace(/\//g, '\\').toLowerCase();
@@ -1355,97 +1132,12 @@
       renderFeatures();
       renderDateTime();
       renderWalls();
-      // ha épp szerkesztesz, a listádat nem írjuk felül
-      if (!dirty() || !draft.length) {
-        draft = (msg.apps || []).map(editable);
-        original = JSON.stringify(draft.map(strip));
-        renderList();
-      } else {
-        renderRunning();
-      }
+      for (const p of paneHooks) if (p.load) p.load();
       if (firstLoad) {
         firstLoad = false;
         selectTab(store.get(TAB_STORE) || 'programs', { instant: true });
       }
     };
-
-    // lista szerkesztése
-    $('edList').addEventListener('click', (e) => {
-      const row = e.target.closest('.ed-row');
-      if (!row) return;
-      const i = Number(row.dataset.i);
-      const b = e.target.closest('button');
-      if (!b) return;
-      const act = b.dataset.act;
-      if (act === 'pick') return openPicker(i, b);
-      if (act === 'del') draft.splice(i, 1);
-      if (act === 'auto') {
-        const a = draft[i];
-        a.autostart = !a.autostart;
-        toast(a.autostart && !data.autostart ? T('autoHint') : T(a.autostart ? 'autoOn' : 'autoOff', { n: a.name }));
-      }
-      renderList();
-    });
-    // Ikonok: a sorrend a vázlatban változik, a Mentés gombbal lép életbe
-    sortable($('edList'), '.ed-item', (from, to) => {
-      draft.splice(to, 0, ...draft.splice(from, 1));
-      renderList();
-    });
-    $('edList').addEventListener('input', (e) => {
-      const row = e.target.closest('.ed-row');
-      if (!row || !e.target.dataset.field) return;
-      const a = draft[Number(row.dataset.i)];
-      a[e.target.dataset.field] = e.target.value;
-      if (e.target.dataset.field !== 'name') {
-        const ic = row.querySelector('.ed-icon');
-        ic.innerHTML = iconPreview(a);
-        if (a.color) ic.style.setProperty('--app', a.color);
-      }
-      updateDirty();
-    });
-    // a nevet ne lehessen üresre törölni
-    $('edList').addEventListener('change', (e) => {
-      if (e.target.dataset.field === 'name' && !e.target.value.trim()) {
-        const a = draft[Number(e.target.closest('.ed-row').dataset.i)];
-        a.name = T('untitled');
-        e.target.value = a.name;
-        toast(T('emptyName'));
-        updateDirty();
-      }
-    });
-
-    const addApp = (app) => {
-      if (draft.some((a) => a.path.toLowerCase() === app.path.toLowerCase())) return toast(T('alreadyListed'));
-      draft.push({
-        id: null, name: app.name || 'Program', path: app.path, args: app.args || '', icon: app.icon || '',
-        color: '', img: app.img || '', exeImg: app.img || '', canExeIcon: !!app.canExeIcon, available: true, hint: '', autostart: false,
-      });
-      renderList();
-      const rows = $('edList').querySelectorAll('.ed-item');
-      if (rows.length) rows[rows.length - 1].scrollIntoView({ block: 'nearest' });
-    };
-    $('edRunning').addEventListener('click', (e) => {
-      const b = e.target.closest('[data-run]');
-      if (!b) return;
-      const list = JSON.parse($('edRunning').dataset.list || '[]');
-      const r = list[Number(b.dataset.run)];
-      if (r) addApp({ name: r.name, path: r.path, icon: 'exe', img: r.img, canExeIcon: true });
-    });
-    $('edBrowse').addEventListener('click', () => {
-      if (demo) return addApp({ name: 'Notepad', path: 'C:\\Windows\\notepad.exe', icon: '', canExeIcon: true });
-      post({ type: 'browse' });
-    });
-    $('edSave').addEventListener('click', () => {
-      if (draft.find((a) => !a.name.trim())) return toast(T('needName'));
-      if (!demo) post({ type: 'save-apps', apps: draft.map(strip) });
-      original = JSON.stringify(draft.map(strip));
-      updateDirty();
-    });
-    $('edCancel').addEventListener('click', () => {
-      draft = (data.apps || []).map(editable);
-      original = JSON.stringify(draft.map(strip));
-      renderList();
-    });
 
     // rendszergombok, kapcsolók, szegmensek (minden fülön, kivéve az ikonlistát és a saját
     // kezelővel rendelkező kártyákat)
@@ -1455,11 +1147,6 @@
       if (b.dataset.cmd) {
         if (demo) return toast(`Demo: ${b.dataset.cmd}`);
         return post({ type: 'cmd', name: b.dataset.cmd });
-      }
-      if (b.dataset.lang) {
-        if (b.dataset.lang === (data.language || lang)) return;
-        if (demo) { location.search = `?part=settings&lang=${b.dataset.lang}`; return; }
-        return post({ type: 'language', lang: b.dataset.lang });
       }
       if (b.dataset.toggle === 'autostart') {
         if (demo) { data.autostart = !data.autostart; return renderToggles(); }
@@ -1472,6 +1159,14 @@
       if (b.dataset.toggle === 'clipboard') {
         if (demo) { data.clipboard = !data.clipboard; return renderToggles(); }
         return post({ type: 'clipboard', on: !data.clipboard });
+      }
+      if (b.dataset.toggle === 'desktopMenu') {
+        if (demo) { data.desktopMenu = !data.desktopMenu; return renderToggles(); }
+        return post({ type: 'deskmenu', on: !data.desktopMenu });
+      }
+      if (b.dataset.toggle === 'desktopIconMenu') {
+        if (demo) { data.desktopIconMenu = !data.desktopIconMenu; return renderToggles(); }
+        return post({ type: 'deskiconmenu', on: !data.desktopIconMenu });
       }
       if (b.dataset.bool) {
         const v = !get(b.dataset.bool);
@@ -1534,7 +1229,7 @@
     // bezárás: mentetlen változásnál előbb figyelmeztet (és a Programok fülre vált)
     let closeArmed = false;
     const close = () => {
-      if (dirty() && !closeArmed) {
+      if (unsaved() && !closeArmed) {
         closeArmed = true;
         selectTab('programs');
         $('setCloseText').textContent = T('discardQ');
@@ -1544,11 +1239,8 @@
         return;
       }
       closeArmed = false;
-      if (dirty()) {
-        draft = (data.apps || []).map(editable);
-        original = JSON.stringify(draft.map(strip));
-        renderList();
-      }
+      // a második kattintás: a mentetlen változások elvesznek
+      for (const p of paneHooks) if (p.dirty && p.dirty() && p.discard) p.discard();
       $('setCloseText').textContent = T('close');
       $('setClose').classList.remove('armed');
       hide();
@@ -1566,70 +1258,21 @@
       if (e.key === 'Escape' && !e.target.closest('input, select')) close();
     });
 
-    // ── rendszerterhelés: az utolsó 60 másodperc görbéje (és kicsiben a fülsáv alján) ──
-    const HIST = 60;
-    const cpuHist = [];
-    const memHist = [];
-    const gb = (b) => (b / 1073741824).toFixed(1).replace('.', T('gbSep'));
-    const sparkPaths = (hist) => {
-      if (!hist.length) return ['', ''];
-      const step = 120 / (HIST - 1);
-      const x0 = 120 - (hist.length - 1) * step;
-      const pts = hist.map((v, i) => `${(x0 + i * step).toFixed(2)},${(39 - (v / 100) * 37).toFixed(2)}`);
-      const line = `M${pts.join(' L')}`;
-      return [line, `${line} L120,40 L${x0.toFixed(2)},40 Z`];
-    };
-    const level = (v) => (v >= 85 ? 'hot' : v >= 60 ? 'warn' : '');
-    const mini = (id, v) => {
-      const el = $(id);
-      el.querySelector('b').style.width = `${v.toFixed(1)}%`;
-      el.querySelector('em').textContent = `${Math.round(v)}%`;
-      el.className = `rl ${id === 'rlMem' ? 'mem ' : ''}${level(v)}`;
-    };
-    const showSys = (s) => {
-      if (typeof s.cpu === 'number') {
-        cpuHist.push(s.cpu);
-        if (cpuHist.length > HIST) cpuHist.shift();
-        const [line, area] = sparkPaths(cpuHist);
-        $('cpuLine').setAttribute('d', line);
-        $('cpuArea').setAttribute('d', area);
-        $('cpuVal').innerHTML = `${Math.round(s.cpu)}<small>%</small>`;
-        $('cpuMeter').className = `meter ${level(s.cpu)}`;
-        const avg = cpuHist.reduce((a, b) => a + b, 0) / cpuHist.length;
-        $('cpuAvg').textContent = T('avg1m', { v: Math.round(avg) });
-        mini('rlCpu', s.cpu);
-      }
-      if (s.cores) $('cpuCores').textContent = T('threads', { n: s.cores });
-      if (s.memTotal) {
-        const pct = (s.memUsed / s.memTotal) * 100;
-        memHist.push(pct);
-        if (memHist.length > HIST) memHist.shift();
-        const [line, area] = sparkPaths(memHist);
-        $('memLine').setAttribute('d', line);
-        $('memArea').setAttribute('d', area);
-        $('memVal').innerHTML = `${Math.round(pct)}<small>%</small>`;
-        $('memMeter').className = `meter mem ${level(pct)}`;
-        $('memSub').textContent = `${gb(s.memUsed)} / ${gb(s.memTotal)} GB`;
-        $('memFree').textContent = T('free', { v: gb(s.memTotal - s.memUsed) });
-        mini('rlMem', pct);
-      }
-    };
-
     const h = (msg) => {
-      if (msg.type === 'sys') showSys(msg);
       if (msg.type === 'show') show(msg.instant);
       // a MENÜ gomb újabb megnyomása: ugyanúgy zár, mint a Bezárás gomb
       if (msg.type === 'hide') close();
       if (msg.type === 'settings') { if (msg.theme) setTheme(msg.theme); load(msg); }
-      if (msg.type === 'picked' && msg.app) addApp(msg.app);
       if (msg.type === 'toast') toast(msg.text);
+      // a fülek saját üzenetei (terhelés, a programválasztó eredménye)
+      for (const p of paneHooks) if (p.message) p.message(msg);
     };
     h.demo = () => {
       const C = ['#ff7139', '#ea4335', '#5b8def', '#d97757', '#22a6f2'];
       const q = new URLSearchParams(location.search);
       if (q.get('tab')) store.set(TAB_STORE, q.get('tab'));
       h({
-        type: 'settings', autostart: true, layout: { icons: 'left', info: 'right' }, winKey: true, clipboard: true, iconLabels: true, tooltips: true, laptop: true, periph: 3, language: lang, appearance: 'dark',
+        type: 'settings', autostart: true, layout: { icons: 'left', info: 'right' }, winKey: true, clipboard: true, desktopMenu: true, desktopIconMenu: true, iconLabels: true, tooltips: true, laptop: true, periph: 3, language: lang, appearance: 'dark',
         scheme: 'dark', monitors: 2, screen: { w: 1920, h: 1080 },
         bars: { icons: 86, info: 86, frame: { top: 10, bottom: 10, left: 10, right: 10 }, range: [56, 160], frameRange: [0, 40] },
         allMonitors: true, hideTaskbar: true, activity: { autoStart: false, sound: true },
@@ -1665,16 +1308,7 @@
         wallpaper: 'C:\\CyberShell\\wallpapers\\CyberShell_background_03.jpg',
       });
       show();
-      // demó terhelés: véletlen bolyongás
-      let c = 22, m = 58;
-      const tot = 32 * 1073741824;
-      const step = () => {
-        c = Math.max(3, Math.min(97, c + (Math.random() - 0.48) * 14));
-        m = Math.max(40, Math.min(80, m + (Math.random() - 0.5) * 2));
-        showSys({ cpu: c, memUsed: (m / 100) * tot, memTotal: tot, cores: 16 });
-      };
-      for (let i = 0; i < HIST; i++) step();
-      setInterval(step, 1000);
+      for (const p of paneHooks) if (p.demo) p.demo();
     };
     return h;
   }

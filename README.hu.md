@@ -28,7 +28,7 @@ A CyberShell neonfényes cyberpunk HUD-dá alakítja a Windows asztalát. Az egy
 ## Gyors indítás
 
 1. Tedd a `CyberShell.exe`-t egy mappába, és indítsd el. Első induláskor létrehozza a `%LOCALAPPDATA%\CyberShell` mappában a `config.json`-t és a `wallpapers` mappát.
-2. Jobb alul a **// MENÜ** gombbal állíthatod a témát, a nyelvet, a programokat és a paneleket.
+2. Jobb alul a **// MENÜ** gombbal állíthatod a témát, a nyelvet (magyar, angol, lengyel, német, spanyol), a programokat és a paneleket.
 3. A `Ctrl+Alt+Q`-val lépsz ki, és minden visszaáll.
 
 Nincs még `CyberShell.exe`? [Fordítsd le forrásból](docs/hu/development.md#fordítás-forrásból). Először csak belenéznél? A `preview.html` böngészőben megnyitva demóadatokkal mutatja a teljes képernyőt (lásd: [A forráskód felépítése](docs/hu/development.md#a-forráskód-felépítése)).

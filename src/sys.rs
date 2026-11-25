@@ -12,7 +12,7 @@ use windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume;
 use windows::Win32::Storage::FileSystem::{SearchPathW, WIN32_FIND_DATAW};
 use windows::Win32::System::Com::{CLSCTX_ALL, CLSCTX_INPROC_SERVER, CoCreateInstance, CoTaskMemFree, IPersistFile, STGM_READ};
 use windows::Win32::System::Power::SetSuspendState;
-use windows::Win32::System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_DWORD, RegGetValueW};
+use windows::Win32::System::Registry::HKEY_CURRENT_USER;
 use windows::Win32::System::Shutdown::{EWX_LOGOFF, ExitWindowsEx, LockWorkStation, SHTDN_REASON_FLAG_PLANNED};
 use windows::Win32::System::SystemInformation::GetTickCount;
 use windows::Win32::UI::Shell::Common::COMDLG_FILTERSPEC;
@@ -24,6 +24,7 @@ use windows::Win32::UI::WindowsAndMessaging::{SPI_GETDESKWALLPAPER, SYSTEM_PARAM
 use windows::core::{HSTRING, Interface, PCWSTR, w};
 
 use crate::config::AppEntry;
+use crate::reg;
 
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
@@ -41,6 +42,13 @@ pub fn cpu_times() -> Option<(u64, u64)> {
     unsafe { GetSystemTimes(Some(&mut idle), Some(&mut kernel), Some(&mut user)).ok()? };
     // a kernelidő az üresjáratot is tartalmazza
     Some((ft(idle), ft(kernel) + ft(user)))
+}
+
+/// A processzor terhelése (0–100 %) két `cpu_times` mérés között; `None`, ha nincs előző mérés,
+/// vagy közben nem telt idő.
+pub fn cpu_percent(prev: Option<(u64, u64)>, now: Option<(u64, u64)>) -> Option<f64> {
+    let ((pi, pt), (ni, nt)) = (prev?, now?);
+    (nt > pt).then(|| ((1.0 - ni.saturating_sub(pi) as f64 / (nt - pt) as f64) * 100.0).clamp(0.0, 100.0))
 }
 
 /// Memória: (használt bájt, összes bájt).
@@ -82,7 +90,7 @@ pub fn set_geo(lat: f64, lon: f64) -> bool {
 /// sem), helyi idő szerint 19 és 7 óra között számít éjszakának.
 pub fn is_night(fallback: Option<(f64, f64)>) -> bool {
     let geo = GEO.lock().ok().and_then(|g| *g).or(fallback);
-    let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    let secs = crate::unix_secs();
     let Some((lat, lon)) = geo else {
         let t = unsafe { windows::Win32::System::SystemInformation::GetLocalTime() };
         return t.wHour >= 19 || t.wHour < 7;
@@ -186,21 +194,13 @@ pub fn app_available(app: &AppEntry) -> bool {
 /// Egy exe telepített helye a Windows „App Paths” nyilvántartásából (a telepítők ide írják be,
 /// hogy a Futtatás ablak és a Start menü név szerint megtalálja).
 fn app_paths(exe: &str) -> Option<String> {
-    use windows::Win32::System::Registry::{HKEY_LOCAL_MACHINE, RRF_RT_REG_SZ};
-    let key = HSTRING::from(format!(r"Software\Microsoft\Windows\CurrentVersion\App Paths\{exe}"));
-    for root in [HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE] {
-        let mut buf = [0u16; 1024];
-        let mut size = (buf.len() * 2) as u32;
-        let r = unsafe { RegGetValueW(root, &key, None, RRF_RT_REG_SZ, None, Some(buf.as_mut_ptr() as *mut _), Some(&mut size)) };
-        if r.is_ok() {
-            let n = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
-            let p = String::from_utf16_lossy(&buf[..n]).trim_matches('"').to_string();
-            if Path::new(&p).is_file() {
-                return Some(p);
-            }
-        }
-    }
-    None
+    use windows::Win32::System::Registry::HKEY_LOCAL_MACHINE;
+    let key = format!(r"Software\Microsoft\Windows\CurrentVersion\App Paths\{exe}");
+    [HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE]
+        .into_iter()
+        .filter_map(|root| reg::get_string(root, &key, ""))
+        .map(|p| p.trim_matches('"').to_string())
+        .find(|p| Path::new(p).is_file())
 }
 
 /// Egy (ezen a gépen) nem található program megkeresése, ha máshova telepítették: más
@@ -247,21 +247,7 @@ pub fn locate_app(app: &AppEntry, start: &[crate::apps::StartApp]) -> Option<Str
 }
 
 fn steam_installed(id: &str) -> bool {
-    let key = HSTRING::from(format!("Software\\Valve\\Steam\\Apps\\{id}"));
-    let mut val: u32 = 0;
-    let mut size = 4u32;
-    let r = unsafe {
-        RegGetValueW(
-            HKEY_CURRENT_USER,
-            &key,
-            w!("Installed"),
-            RRF_RT_REG_DWORD,
-            None,
-            Some(&mut val as *mut u32 as *mut _),
-            Some(&mut size),
-        )
-    };
-    r.is_ok() && val == 1
+    reg::get_dword(HKEY_CURRENT_USER, &format!(r"Software\Valve\Steam\Apps\{id}"), "Installed") == Some(1)
 }
 
 /// A programválasztóval kiválasztott program.
@@ -446,11 +432,15 @@ impl Volume {
     }
 }
 
-/// A Windows felületének nyelve: magyar esetén "hu", lengyel esetén "pl", minden más esetben "en".
+/// A Windows felületének nyelve: magyar esetén "hu", lengyel esetén "pl", német esetén "de",
+/// spanyol esetén "es", minden más esetben "en".
 pub fn system_language() -> &'static str {
     let id = unsafe { GetUserDefaultUILanguage() };
-    // az elsődleges nyelv az alsó 10 bit: LANG_HUNGARIAN = 0x0E, LANG_POLISH = 0x15
+    // az elsődleges nyelv az alsó 10 bit: LANG_GERMAN = 0x07, LANG_SPANISH = 0x0A,
+    // LANG_HUNGARIAN = 0x0E, LANG_POLISH = 0x15 (a német és a spanyol minden országváltozata)
     match id & 0x3ff {
+        0x07 => "de",
+        0x0a => "es",
         0x0e => "hu",
         0x15 => "pl",
         _ => "en",
@@ -460,14 +450,31 @@ pub fn system_language() -> &'static str {
 // ---- Internetkapcsolat ----
 
 /// Van-e internetkapcsolat (a Windows hálózatkezelője szerint, IPv4 vagy IPv6).
-/// `None`, ha nem kérdezhető le. A COM-ot a fő szál már elindította.
+/// `None`, ha nem kérdezhető le. A COM-ot a fő szál már elindította. A hálózatkezelőt a hívó
+/// szálon megtartjuk (3 mp-enként kérdezzük); ha egy lekérdezés hibát ad, legközelebb újat kérünk.
 pub fn internet_ok() -> Option<bool> {
+    use std::cell::RefCell;
+    use std::mem::ManuallyDrop;
     use windows::Win32::Networking::NetworkListManager::{
         INetworkListManager, NLM_CONNECTIVITY_IPV4_INTERNET, NLM_CONNECTIVITY_IPV6_INTERNET, NetworkListManager,
     };
-    unsafe {
-        let nlm: INetworkListManager = CoCreateInstance(&NetworkListManager, None, CLSCTX_ALL).ok()?;
-        let c = nlm.GetConnectivity().ok()?;
-        Some(c.0 & (NLM_CONNECTIVITY_IPV4_INTERNET.0 | NLM_CONNECTIVITY_IPV6_INTERNET.0) != 0)
+    // Kilépéskor nem engedjük el (ManuallyDrop): a fő szál változóit a Rust a folyamat lezárása
+    // közben szabadítja fel, amikor a többi szál már nem él, és a hálózatkezelő elengedése egy
+    // COM-hívásra örökre várna – a program nem lépne ki.
+    thread_local! {
+        static NLM: ManuallyDrop<RefCell<Option<INetworkListManager>>> = const { ManuallyDrop::new(RefCell::new(None)) };
     }
+    NLM.with(|cell| {
+        let mut nlm = cell.borrow_mut();
+        if nlm.is_none() {
+            *nlm = unsafe { CoCreateInstance(&NetworkListManager, None, CLSCTX_ALL) }.ok();
+        }
+        match unsafe { nlm.as_ref()?.GetConnectivity() } {
+            Ok(c) => Some(c.0 & (NLM_CONNECTIVITY_IPV4_INTERNET.0 | NLM_CONNECTIVITY_IPV6_INTERNET.0) != 0),
+            Err(_) => {
+                *nlm = None;
+                None
+            }
+        }
+    })
 }

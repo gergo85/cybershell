@@ -4,10 +4,11 @@
 //! előre kerül).
 
 use crate::hub::Hub;
-use crate::hub::health::{HEALTH_H, HEALTH_W};
+use crate::hub::health::show_banner;
 use crate::web::push;
-use crate::{appbar, log, sys, wintrack};
+use crate::{log, sys, wintrack};
 use serde_json::json;
+use std::time::Instant;
 use windows::Win32::UI::WindowsAndMessaging::{
     HWND_TOPMOST, SW_HIDE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SetWindowPos, ShowWindow,
 };
@@ -18,30 +19,49 @@ const OFFLINE_AFTER: u8 = 2;
 /// Ennyi egymást követő sikeres mérés után tűnik el a sáv (egy téves „van internet” jelzés miatt ne).
 const ONLINE_AFTER: u8 = 2;
 
+/// A kapcsolatfigyelés állapota.
+pub(crate) struct NetWatch {
+    /// Az egymást követő sikertelen, illetve sikeres mérések száma.
+    pub(crate) misses: u8,
+    pub(crate) oks: u8,
+    /// Épp nincs kapcsolat (a sáv látszik, ha nem zárták be).
+    pub(crate) offline: bool,
+    /// A sávot bezárták: a következő kapcsolatváltásig rejtve marad.
+    pub(crate) dismissed: bool,
+    /// A következő mérés ideje.
+    pub(crate) next_check: Instant,
+}
+
+impl NetWatch {
+    pub(crate) fn new(first: Instant) -> Self {
+        NetWatch { misses: 0, oks: 0, offline: false, dismissed: false, next_check: first }
+    }
+}
+
 impl Hub {
     /// Időzített mérés a fő ciklusból.
     pub(crate) fn net_check(&mut self) {
         let Some(ok) = sys::internet_ok() else { return };
         if ok {
-            self.net_misses = 0;
-            self.net_oks = self.net_oks.saturating_add(1);
-            if self.net_offline && self.net_oks >= ONLINE_AFTER {
-                self.net_offline = false;
-                self.net_dismissed = false;
+            self.net_watch.misses = 0;
+            self.net_watch.oks = self.net_watch.oks.saturating_add(1);
+            if self.net_watch.offline && self.net_watch.oks >= ONLINE_AFTER {
+                self.net_watch.offline = false;
+                self.net_watch.dismissed = false;
                 log("internetkapcsolat helyreállt");
                 self.net_hide();
-            } else if self.net_offline {
+            } else if self.net_watch.offline {
                 self.net_keep();
             }
             return;
         }
-        self.net_oks = 0;
-        self.net_misses = self.net_misses.saturating_add(1);
-        if self.net_misses >= OFFLINE_AFTER && !self.net_offline {
-            self.net_offline = true;
+        self.net_watch.oks = 0;
+        self.net_watch.misses = self.net_watch.misses.saturating_add(1);
+        if self.net_watch.misses >= OFFLINE_AFTER && !self.net_watch.offline {
+            self.net_watch.offline = true;
             log("internetkapcsolat megszakadt");
             self.net_show();
-        } else if self.net_offline {
+        } else if self.net_watch.offline {
             self.net_keep();
         }
     }
@@ -49,7 +69,7 @@ impl Hub {
     /// Amíg nincs kapcsolat és nem zárták be: a sáv látható és minden más fölött marad (ha
     /// közben valami eltakarta vagy elrejtette, visszajön), aktiválás és újraanimálás nélkül.
     fn net_keep(&mut self) {
-        if self.net_dismissed {
+        if self.net_watch.dismissed {
             return;
         }
         let Some(n) = self.net.as_mut() else { return };
@@ -61,22 +81,15 @@ impl Hub {
 
     /// A piros sáv megjelenítése (ha épp a szünet-sáv is látszik, alá kerül).
     pub(crate) fn net_show(&mut self) {
-        if self.net_dismissed {
+        if self.net_watch.dismissed {
             return;
         }
-        let work = appbar::work_area();
         let scale = self.scale.max(0.5);
         let theme = self.theme_json();
-        let below_health = self.health.as_ref().is_some_and(|h| h.visible);
+        let below_health = self.health_visible();
         let Some(n) = self.net.as_mut() else { return };
-        let w = ((HEALTH_W * scale).round() as i32).min(work.right - work.left - 24);
-        let h = (HEALTH_H * scale).round() as i32;
-        let left = work.left + (work.right - work.left - w) / 2;
-        let top = work.top + if below_health { h + (8.0 * scale) as i32 } else { 0 };
         n.visible = true;
-        unsafe {
-            let _ = SetWindowPos(n.hwnd, Some(HWND_TOPMOST), left, top, w, h, SWP_SHOWWINDOW | SWP_NOACTIVATE);
-        }
+        show_banner(n.hwnd, scale, below_health);
         push(&n.webview, json!({ "type": "net-show", "theme": theme }));
     }
 
@@ -101,7 +114,7 @@ impl Hub {
             }
             // a sáv elrejtése a következő kapcsolatváltásig
             "close" => {
-                self.net_dismissed = true;
+                self.net_watch.dismissed = true;
                 self.net_hide();
             }
             "log" => log(format!("[kapcsolat] {}", msg["text"].as_str().unwrap_or(""))),

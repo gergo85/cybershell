@@ -1,4 +1,5 @@
-//! Az információs panel melletti oldalpanel: részletes időjárás és naptár (iCal-naptárak).
+//! Az információs panel melletti oldalpanel: részletes időjárás, naptár és Események
+//! (iCal-naptárak), valamint a Notesz szerkesztője.
 
 use crate::UserEvent;
 use crate::hub::Hub;
@@ -6,6 +7,7 @@ use crate::hub::layout::is_vertical;
 use crate::hub::layout::popup_pos;
 use crate::log;
 use crate::send;
+use crate::web::PopupParts;
 use crate::web::push;
 use crate::{appbar, config, wintrack};
 use serde_json::json;
@@ -17,8 +19,10 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use wry::WebView;
 
-/// Részletes időjárás: az információs panel mellett kinyíló oldalpanel.
+/// Az információs panel mellett kinyíló oldalpanel (időjárás, naptár, Események, Notesz).
 pub(crate) struct FlyWin {
+    /// Az ablak, amiben a felület fut: csak életben tartjuk (eldobásakor bezárulna).
+    #[expect(dead_code, reason = "csak az ablak élettartama miatt tároljuk")]
     pub(crate) window: Window,
     pub(crate) webview: WebView,
     pub(crate) hwnd: HWND,
@@ -41,11 +45,46 @@ pub(crate) struct FlyWin {
 pub(crate) const FLY_W: f64 = 380.0;
 pub(crate) const FLY_H: f64 = 640.0;
 
+impl FlyWin {
+    pub(crate) fn new((window, webview, hwnd): PopupParts) -> Self {
+        FlyWin {
+            window,
+            webview,
+            hwnd,
+            visible: false,
+            shown_at: Instant::now(),
+            focused: false,
+            hidden_at: None,
+            kind: "weather",
+            bar: 0,
+            along: 0,
+        }
+    }
+}
+
+/// A csatolt naptárak letöltése: a legutóbbi eredmény (ideje és a naptárak JSON-ja),
+/// folyamatban van-e, és mikor frissítjük legközelebb az Események modulnak.
+pub(crate) struct CalendarCache {
+    pub(crate) cache: Option<(Instant, String)>,
+    pub(crate) busy: bool,
+    pub(crate) next: Instant,
+}
+
+impl CalendarCache {
+    pub(crate) fn new(first: Instant) -> Self {
+        CalendarCache { cache: None, busy: false, next: first }
+    }
+}
+
 impl Hub {
     pub(crate) fn fly_eval(&self, payload: &serde_json::Value) {
         if let Some(f) = &self.fly {
             push(&f.webview, payload);
         }
+    }
+
+    pub(crate) fn fly_visible(&self) -> bool {
+        self.fly.as_ref().is_some_and(|f| f.visible)
     }
 
     /// Az időjárásra vagy a dátumra kattintottak: a kérő panel mellett, a szekció magasságában
@@ -72,7 +111,7 @@ impl Hub {
             log(format!("oldalpanel ({kind}): a képernyő teljes képernyősnek jelölt, de a panelre kattintottak, megnyílik"));
         }
         // nyitott beállítások: azok kiúsznak, az oldalpanel pedig megnyílik
-        if self.settings.as_ref().is_some_and(|s| s.visible) {
+        if self.settings_visible() {
             self.settings_eval(&json!({ "type": "hide" }));
         }
         let scale = bar_scale.max(0.5);
@@ -125,7 +164,7 @@ impl Hub {
             let _ = ShowWindow(f.hwnd, SW_HIDE);
         }
         let hwnd = f.hwnd;
-        self.eval(self.info_edge(), &json!({ "type": "fly-state", "open": false }));
+        self.eval_info(&json!({ "type": "fly-state", "open": false }));
         if !lost_focus {
             self.refocus_later(hwnd);
         }
@@ -142,7 +181,7 @@ impl Hub {
 
     /// A naptárak letöltése háttérszálon (tíz percig a legutóbbit adjuk vissza).
     pub(crate) fn calendar_fetch(&mut self, force: bool) {
-        if let Some((at, data)) = &self.cal_cache
+        if let Some((at, data)) = &self.calendar.cache
             && !force
             && at.elapsed() < Duration::from_secs(10 * 60)
         {
@@ -151,14 +190,14 @@ impl Hub {
             return;
         }
         if self.cfg.calendar.feeds.is_empty() {
-            self.cal_cache = None;
+            self.calendar.cache = None;
             self.cal_broadcast(&json!({ "type": "cal-data", "feeds": [] }));
             return;
         }
-        if self.cal_busy {
+        if self.calendar.busy {
             return;
         }
-        self.cal_busy = true;
+        self.calendar.busy = true;
         let feeds: Vec<(String, String, String)> =
             self.cfg.calendar.feeds.iter().map(|f| (f.name.clone(), f.url.clone(), f.color.clone())).collect();
         std::thread::spawn(move || {
@@ -187,7 +226,7 @@ impl Hub {
     }
 
     pub(crate) fn on_calendar_data(&mut self, raw: String) {
-        self.cal_busy = false;
+        self.calendar.busy = false;
         let feeds: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
         let summary: Vec<String> = feeds
             .as_array()
@@ -202,7 +241,7 @@ impl Hub {
             })
             .collect();
         log(format!("naptár letöltve – {}", summary.join(", ")));
-        self.cal_cache = Some((Instant::now(), raw));
+        self.calendar.cache = Some((Instant::now(), raw));
         self.cal_broadcast(&json!({ "type": "cal-data", "feeds": feeds }));
     }
 
@@ -210,7 +249,7 @@ impl Hub {
     fn cal_broadcast(&self, payload: &serde_json::Value) {
         self.fly_eval(payload);
         if self.cfg.sections.shows("events") {
-            self.eval(self.info_edge(), payload);
+            self.eval_info(payload);
         }
     }
 
@@ -230,13 +269,17 @@ impl Hub {
         const COLORS: [&str; 6] = ["#00e1ff", "#f3e600", "#ff2a6d", "#7ee787", "#b26bff", "#ffb02e"];
         let name =
             msg["name"].as_str().map(str::trim).filter(|n| !n.is_empty()).map(|n| n.chars().take(40).collect()).unwrap_or_else(|| {
-                if url.contains("google.com") { "Google Naptár".to_string() } else { self.tr("Naptár", "Calendar", "Kalendarz") }
+                if url.contains("google.com") {
+                    "Google Naptár".to_string()
+                } else {
+                    self.tr("Naptár", "Calendar", "Kalendarz", "Kalender", "Calendario")
+                }
             });
         let color = COLORS[self.cfg.calendar.feeds.len() % COLORS.len()].to_string();
         log(format!("naptár csatolva: {name}"));
         self.cfg.calendar.feeds.push(config::CalendarFeed { name, url, color });
         self.save_config();
-        self.cal_cache = None;
+        self.calendar.cache = None;
         self.send_calendar_feeds();
         self.calendar_fetch(true);
         Ok(())
@@ -248,7 +291,7 @@ impl Hub {
             let f = self.cfg.calendar.feeds.remove(i);
             log(format!("naptár eltávolítva: {}", f.name));
             self.save_config();
-            self.cal_cache = None;
+            self.calendar.cache = None;
             self.send_calendar_feeds();
             self.calendar_fetch(true);
         }
@@ -266,7 +309,7 @@ impl Hub {
         }
         self.cfg.note = n;
         self.save_config();
-        self.eval(self.info_edge(), &json!({ "type": "note", "note": self.cfg.note }));
+        self.eval_info(&json!({ "type": "note", "note": self.cfg.note }));
         if !from_editor && self.fly.as_ref().is_some_and(|f| f.visible && f.kind == "note") {
             self.fly_eval(&json!({ "type": "note-sync", "note": self.cfg.note }));
         }

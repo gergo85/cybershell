@@ -139,6 +139,18 @@
         evNoFeedsShort: 'BRAK KALENDARZA', evOffline: 'NIEDOSTĘPNE',evNoFeeds: 'Brak połączonego kalendarza. Kalendarz Google możesz połączyć w kalendarzu sekcji Data.',
         evNone: 'Brak wydarzeń w najbliższym tygodniu.', evToday: 'DZIŚ', evTomorrow: 'JUTRO',
       },
+      de: {
+        secEvents: '// TERMINE', sEvents: 'Termine', evOpen: 'Termine der nächsten Woche',
+        sEventsHint: 'Die Zahl der Termine an jedem der nächsten 5 Tage (3 in der Kompaktansicht); ein Klick zeigt die Termine der nächsten Woche der Reihe nach. Braucht einen verbundenen Kalender (im Kalender des Datums verbinden).',
+        evNoFeedsShort: 'KEIN KALENDER', evOffline: 'NICHT VERFÜGBAR', evNoFeeds: 'Kein Kalender verbunden. Deinen Google Kalender kannst du im Kalender des Datum-Abschnitts verbinden.',
+        evNone: 'Keine Termine in der nächsten Woche.', evToday: 'HEUTE', evTomorrow: 'MORGEN',
+      },
+      es: {
+        secEvents: '// EVENTOS', sEvents: 'Eventos', evOpen: 'Eventos de la próxima semana',
+        sEventsHint: 'El número de eventos de cada uno de los próximos 5 días (3 en vista compacta); al hacer clic, los eventos de la próxima semana en orden. Requiere un calendario conectado (se conecta en el calendario de Fecha).',
+        evNoFeedsShort: 'SIN CALENDARIO', evOffline: 'NO DISPONIBLE', evNoFeeds: 'No hay ningún calendario conectado. Puedes conectar tu Google Calendar en el calendario de la sección Fecha.',
+        evNone: 'No hay eventos la próxima semana.', evToday: 'HOY', evTomorrow: 'MAÑANA',
+      },
     },
   });
 })();

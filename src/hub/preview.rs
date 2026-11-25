@@ -4,6 +4,7 @@ use crate::hub::Hub;
 use crate::hub::layout::is_vertical;
 use crate::hub::layout::popup_pos;
 use crate::log;
+use crate::web::PopupParts;
 use crate::web::push;
 use crate::{appbar, peek, wintrack};
 use serde_json::json;
@@ -18,6 +19,8 @@ use wry::WebView;
 /// Az ablakelőnézet: ha egy programnak több ablaka van, az ikonja mellett
 /// egymás mellett mutatja az ablakok élő kisképét.
 pub(crate) struct PeekWin {
+    /// Az ablak, amiben a felület fut: csak életben tartjuk (eldobásakor bezárulna).
+    #[expect(dead_code, reason = "csak az ablak élettartama miatt tároljuk")]
     pub(crate) window: Window,
     pub(crate) webview: WebView,
     pub(crate) hwnd: HWND,
@@ -39,6 +42,40 @@ pub(crate) struct PeekWin {
     pub(crate) asked_at: Option<Instant>,
     /// Az a program-ablak, amelyik épp a kártyája fölötti időzés miatt van előtérben.
     pub(crate) shown: Option<peek::Shown>,
+    /// Kis méretből előhozott ablakok, amelyeknek az animációit (a kicsinyítésük lefutása után)
+    /// vissza kell kapcsolni: (ablak, mikor).
+    pub(crate) fx_restore: Vec<(isize, Instant)>,
+}
+
+impl PeekWin {
+    pub(crate) fn new((window, webview, hwnd): PopupParts) -> Self {
+        PeekWin {
+            window,
+            webview,
+            hwnd,
+            visible: false,
+            thumbs: Vec::new(),
+            pending: Vec::new(),
+            hwnds: Vec::new(),
+            seq: 0,
+            target: serde_json::Value::Null,
+            hovered: false,
+            hide_at: None,
+            refresh_at: None,
+            asked_at: None,
+            shown: None,
+            fx_restore: Vec::new(),
+        }
+    }
+
+    /// Az elengedett ablak animációinak visszakapcsolása kicsit később: ha azonnal tennénk,
+    /// a kicsinyítése még animálva futhatna le.
+    fn release(&mut self, s: peek::Shown) {
+        if s.iconic {
+            self.fx_restore.retain(|(h, _)| *h != s.hwnd);
+            self.fx_restore.push((s.hwnd, Instant::now() + Duration::from_millis(600)));
+        }
+    }
 }
 
 impl Hub {
@@ -59,15 +96,52 @@ impl Hub {
 
     /// Az előnézet kártyája fölött időzve előtérbe hozott ablakot visszateszi a helyére.
     fn peek_unshow(&mut self) {
-        if let Some(s) = self.peek.as_mut().and_then(|pk| pk.shown.take()) {
+        let Some(pk) = self.peek.as_mut() else { return };
+        if let Some(s) = pk.shown.take() {
             peek::unraise(s);
+            pk.release(s);
         }
+    }
+
+    /// Az elengedett ablakok animációinak visszakapcsolása, ha eljött az ideje (az épp
+    /// előtérben lévőé majd az elengedése után).
+    pub(crate) fn peek_fx_tick(&mut self, now: Instant) {
+        let Some(pk) = self.peek.as_mut() else { return };
+        let shown = pk.shown.map(|s| s.hwnd);
+        pk.fx_restore.retain(|&(h, at)| {
+            if Some(h) == shown {
+                return false;
+            }
+            if now < at {
+                return true;
+            }
+            peek::set_transitions(HWND(h as *mut core::ffi::c_void), true);
+            false
+        });
     }
 
     pub(crate) fn peek_eval(&self, payload: &serde_json::Value) {
         if let Some(p) = &self.peek {
             push(&p.webview, payload);
         }
+    }
+
+    pub(crate) fn peek_visible(&self) -> bool {
+        self.peek.as_ref().is_some_and(|p| p.visible)
+    }
+
+    /// Látszik az előnézet, és az egérmutató fölötte van (a felület egéreseményeitől függetlenül).
+    pub(crate) fn peek_under_cursor(&self) -> bool {
+        use windows::Win32::Foundation::POINT;
+        use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, GetWindowRect};
+        let Some(pk) = self.peek.as_ref().filter(|p| p.visible) else { return false };
+        let (mut pt, mut r) = (POINT::default(), RECT::default());
+        unsafe {
+            if GetCursorPos(&mut pt).is_err() || GetWindowRect(pk.hwnd, &mut r).is_err() {
+                return false;
+            }
+        }
+        pt.x >= r.left && pt.x < r.right && pt.y >= r.top && pt.y < r.bottom
     }
 
     /// Az ikonsáv egy több ablakos program fölött időzik: elrendezzük a kisképeket,
@@ -77,7 +151,7 @@ impl Hub {
             return;
         }
         let Some((bar_rect, bar_edge, bar_scale, bar_mon)) = self.bars.get(idx).map(|b| (b.rect, b.edge, b.scale, b.mon)) else { return };
-        if self.fullscreen.contains(&bar_mon) || self.settings.as_ref().is_some_and(|s| s.visible) {
+        if self.fullscreen.contains(&bar_mon) || self.settings_visible() {
             self.peek_hide();
             return;
         }
@@ -191,7 +265,8 @@ impl Hub {
     }
 
     /// Jobb kattintás egy ikonon: kis menü a program ablakához (Teljes képernyőre – ha még
-    /// nincs úgy –, Ablak bezárása), az ablakelőnézet felugró ablakában, annak stílusában.
+    /// nincs úgy –, Új ablak nyitása, Ablak bezárása), az ablakelőnézet felugró ablakában, annak
+    /// stílusában.
     /// Csak akkor jelenik meg, ha a programnak pontosan egy ablaka van nyitva.
     pub(crate) fn app_menu(&mut self, idx: usize, msg: &serde_json::Value) {
         use windows::Win32::UI::WindowsAndMessaging::IsZoomed;
@@ -199,7 +274,7 @@ impl Hub {
             return;
         }
         let Some((bar_rect, bar_edge, bar_scale)) = self.bars.get(idx).map(|b| (b.rect, b.edge, b.scale)) else { return };
-        let (mine, _) = self.target_windows(msg);
+        let (mine, exe) = self.target_windows(msg);
         if mine.len() != 1 {
             self.peek_hide();
             return;
@@ -208,10 +283,16 @@ impl Hub {
         let zoomed = !win.iconic && unsafe { IsZoomed(win.hwnd).as_bool() };
         let mut items = Vec::new();
         if !zoomed {
-            items.push(json!({ "cmd": "max", "icon": "maximize", "label": self.tr("Teljes képernyőre", "Maximize", "Maksymalizuj") }));
+            items.push(json!({ "cmd": "max", "icon": "maximize", "label": self.tr("Teljes képernyőre", "Maximize", "Maksymalizuj", "Maximieren", "Maximizar") }));
+        }
+        // új példány: a kitűzött program a saját beállításaival indul, a nem kitűzött az exe-jéből
+        // (ha nem exe, pl. Store-app, nincs mit újra elindítani)
+        if msg["id"].is_u64() || exe.is_some() {
+            items
+                .push(json!({ "cmd": "new", "icon": "plus", "label": self.tr("Új ablak nyitása", "Open new window", "Otwórz nowe okno", "Neues Fenster öffnen", "Abrir ventana nueva") }));
         }
         items.push(
-            json!({ "cmd": "close", "icon": "close", "label": self.tr("Ablak bezárása", "Close window", "Zamknij okno"), "danger": true }),
+            json!({ "cmd": "close", "icon": "close", "label": self.tr("Ablak bezárása", "Close window", "Zamknij okno", "Fenster schließen", "Cerrar ventana"), "danger": true }),
         );
         let name = match msg["id"].as_u64() {
             Some(id) => self.cfg.apps.get(id as usize).map(|a| a.name.clone()).unwrap_or_default(),
@@ -236,7 +317,8 @@ impl Hub {
         pk.asked_at = Some(Instant::now());
         pk.pending.clear();
         pk.hwnds = vec![win.hwnd.0 as isize];
-        pk.target = json!({ "menu": true });
+        // a menü célja (az Új ablak nyitásához): kitűzött app sorszáma vagy futó program kulcsa
+        pk.target = json!({ "menu": true, "id": msg["id"], "key": msg["key"] });
         pk.hide_at = None;
         pk.refresh_at = None;
         let seq = pk.seq;
@@ -349,8 +431,10 @@ impl Hub {
             "peek-activate" => {
                 let Some(h) = self.peek.as_ref().and_then(|pk| known(pk, hwnd)) else { return };
                 // a kiválasztott ablak előtérben marad
-                if let Some(pk) = self.peek.as_mut() {
-                    pk.shown = None;
+                if let Some(pk) = self.peek.as_mut()
+                    && let Some(s) = pk.shown.take()
+                {
+                    pk.release(s);
                 }
                 self.peek_hide();
                 wintrack::activate(h);
@@ -389,9 +473,10 @@ impl Hub {
                 }
                 self.last_state.clear();
             }
-            // az ikon menüje: Teljes képernyőre, Ablak bezárása
+            // az ikon menüje: Teljes képernyőre, Új ablak nyitása, Ablak bezárása
             "menu-pick" => {
                 let Some(h) = self.peek.as_ref().and_then(|pk| known(pk, hwnd)) else { return };
+                let target = self.peek.as_ref().map(|pk| pk.target.clone()).unwrap_or_default();
                 self.peek_hide();
                 match msg["cmd"].as_str().unwrap_or("") {
                     "max" => {
@@ -399,6 +484,14 @@ impl Hub {
                         wintrack::maximize(h);
                         wintrack::activate(h);
                         self.last_fg = Some(h);
+                    }
+                    "new" => {
+                        log("ikonmenü: új ablak nyitása");
+                        if let Some(id) = target["id"].as_u64() {
+                            self.launch(id as usize, true);
+                        } else if target["key"].is_string() {
+                            self.launch_extra(&json!({ "key": target["key"], "newInstance": true }));
+                        }
                     }
                     "close" => {
                         log("ikonmenü: ablak bezárása");

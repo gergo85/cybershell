@@ -2,16 +2,18 @@
 
 use crate::GITHUB_URL;
 use crate::STORE_URL;
-use crate::hub::Hub;
 use crate::hub::extra_key;
+use crate::hub::{Hub, WindowWatch};
 use crate::log;
 use crate::version_label;
+use crate::web::PopupParts;
 use crate::web::nav_url;
-use crate::web::percent_encode;
 use crate::web::push;
 use crate::web::settings_url;
+use crate::web::{exe_icon_url, file_url};
 use crate::{appbar, autostart, clipboard, config, hardware, keyhook, sys, winsync, wintrack};
 use serde_json::json;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use tao::window::Window;
@@ -23,18 +25,27 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use wry::WebView;
 
-/// A CyberShell saját (az exe-be épített) háttérképe-e ez a fájlnév (a kis- és nagybetűtől
-/// függetlenül); az Alapállapot ezeket hagyja meg.
-fn builtin_wallpaper(name: &str) -> bool {
-    crate::embedded::WALLPAPERS.iter().any(|(n, _)| n.eq_ignore_ascii_case(name))
+/// A CyberShell saját (az exe-be épített) háttérképe-e ez a fájl (a fájlnév alapján, a kis- és
+/// nagybetűtől függetlenül); az Alapállapot ezeket hagyja meg.
+fn builtin_wallpaper(path: &Path) -> bool {
+    let name = path.file_name().map(|n| n.to_string_lossy()).unwrap_or_default();
+    crate::embedded::WALLPAPERS.iter().any(|(n, _)| n.eq_ignore_ascii_case(&name))
 }
 
 /// A teljes képernyős beállítások ablaka.
 pub(crate) struct SettingsWin {
+    /// Az ablak, amiben a felület fut: csak életben tartjuk (eldobásakor bezárulna).
+    #[expect(dead_code, reason = "csak az ablak élettartama miatt tároljuk")]
     pub(crate) window: Window,
     pub(crate) webview: WebView,
     pub(crate) hwnd: HWND,
     pub(crate) visible: bool,
+}
+
+impl SettingsWin {
+    pub(crate) fn new((window, webview, hwnd): PopupParts) -> Self {
+        SettingsWin { window, webview, hwnd, visible: false }
+    }
 }
 
 impl Hub {
@@ -42,6 +53,11 @@ impl Hub {
         if let Some(s) = &self.settings {
             push(&s.webview, payload);
         }
+    }
+
+    /// Rövid értesítés a beállítások alján.
+    pub(crate) fn settings_toast(&self, text: &str) {
+        self.settings_eval(&json!({ "type": "toast", "text": text }));
     }
 
     /// A beállításokhoz szükséges összes adat: kapcsolók, appok (telepítettséggel), futó programok.
@@ -137,7 +153,7 @@ impl Hub {
             "scheme": c.scheme,
             "themes": { "dark": c.theme, "light": c.theme_light, "defaultDark": config::Theme::default(), "defaultLight": config::Theme::light() },
         });
-        if self.hardware.is_none() && !self.hardware_busy {
+        if self.hardware.is_none() && !self.hardware_busy && Instant::now() >= self.hardware_retry {
             self.hardware_busy = true;
             std::thread::spawn(|| crate::send(crate::UserEvent::Hardware(hardware::query())));
         }
@@ -148,6 +164,8 @@ impl Hub {
             "layout": { "icons": self.cfg.icons_edge, "info": self.cfg.info_edge },
             "winKey": self.cfg.start_menu.win_key,
             "clipboard": self.cfg.start_menu.clipboard,
+            "desktopMenu": self.cfg.desktop_menu,
+            "desktopIconMenu": self.cfg.desktop_icon_menu,
             "appearance": self.cfg.appearance,
             "health": self.health_json(),
             "weather": { "city": self.cfg.weather.city, "unit": self.cfg.weather.unit, "wind": self.cfg.weather.wind },
@@ -157,7 +175,7 @@ impl Hub {
             "laptop": sys::battery().is_some(),
             // a csatlakoztatott, töltöttséget jelző Bluetooth-eszközök száma: a Perifériák modul
             // csak ekkor szerepel a Modulok listájában
-            "periph": serde_json::from_str::<serde_json::Value>(&self.last_periph)
+            "periph": serde_json::from_str::<serde_json::Value>(&self.periph_feed.sent)
                 .ok()
                 .and_then(|v| v["devices"].as_array().map(|a| a.len()))
                 .unwrap_or(0),
@@ -226,14 +244,7 @@ impl Hub {
     /// Processzor- és memóriaterhelés a beállítások kijelzőjének.
     pub(crate) fn send_sys(&mut self) {
         let now = sys::cpu_times();
-        let cpu = match (self.cpu_prev, now) {
-            (Some((pi, pt)), Some((ni, nt))) if nt > pt => {
-                let total = (nt - pt) as f64;
-                let idle = ni.saturating_sub(pi) as f64;
-                Some(((1.0 - idle / total) * 100.0).clamp(0.0, 100.0))
-            }
-            _ => None,
-        };
+        let cpu = sys::cpu_percent(self.cpu_prev, now);
         self.cpu_prev = now;
         let (used, total) = sys::memory().unwrap_or((0, 0));
         let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(0);
@@ -270,23 +281,25 @@ impl Hub {
 
     /// Programikonra kattintás után: a beállítások csak akkor úsznak ki, ha az előhozott ablak
     /// ugyanazon a képernyőn van (több monitornál a másik képernyőn nyíló program mellett nyitva
-    /// maradnak). Új indításnál (`hwnd` nincs) az első új ablakát figyeljük.
-    pub(crate) fn settings_dismiss_for(&mut self, hwnd: Option<HWND>, known: &[isize]) {
-        if !self.settings_visible() {
-            return;
+    /// maradnak).
+    pub(crate) fn settings_dismiss_for(&mut self, hwnd: HWND) {
+        if self.on_settings_monitor(hwnd) {
+            self.settings_dismiss();
         }
-        match hwnd {
-            Some(h) if self.on_settings_monitor(h) => self.settings_dismiss(),
-            Some(_) => {}
-            None => {
-                self.settings_watch = Some((known.iter().copied().collect(), Instant::now() + Duration::from_secs(20)));
-            }
+    }
+
+    /// Nyitott beállítások mellett indított program: az első új ablakát figyeljük, és csak akkor
+    /// úsznak ki a beállítások, ha az ugyanazon a képernyőn jelenik meg (lásd `Hub::poll`).
+    /// `known`: az indítás előtt már meglévő ablakok.
+    pub(crate) fn settings_dismiss_on_launch(&mut self, known: HashSet<isize>) {
+        if self.settings_visible() {
+            self.settings_watch = Some(WindowWatch::new(known, Duration::from_secs(20)));
         }
     }
 
     /// Ha nyitva vannak a beállítások, kiúsznak (pl. egy programikonra kattintottak).
     pub(crate) fn settings_dismiss(&mut self) {
-        if self.settings.as_ref().is_some_and(|s| s.visible) {
+        if self.settings_visible() {
             self.settings_eval(&json!({ "type": "hide" }));
         }
     }
@@ -300,7 +313,7 @@ impl Hub {
             hidden = s.visible.then_some(s.hwnd);
             s.visible = false;
         }
-        self.eval(self.info_edge(), &json!({ "type": "settings-open", "on": false }));
+        self.eval_info(&json!({ "type": "settings-open", "on": false }));
         if let Some(h) = hidden {
             self.refocus_later(h);
         }
@@ -348,7 +361,7 @@ impl Hub {
             "ready" => {
                 self.send_settings();
                 // nyelvváltás után a már látható felület animáció nélkül jelenik meg újra
-                if self.settings.as_ref().is_some_and(|s| s.visible) {
+                if self.settings_visible() {
                     self.settings_eval(&json!({ "type": "show", "instant": true }));
                 }
             }
@@ -358,6 +371,8 @@ impl Hub {
                 let lang = match msg["lang"].as_str() {
                     Some("en") => "en",
                     Some("pl") => "pl",
+                    Some("de") => "de",
+                    Some("es") => "es",
                     _ => "hu",
                 };
                 if self.cfg.language != lang || self.cfg.language_auto {
@@ -384,8 +399,10 @@ impl Hub {
                             "A config.json újraolvasva, a felületek újratöltve.",
                             "config.json re-read, all panels reloaded.",
                             "Ponownie wczytano config.json, panele przeładowane.",
+                            "config.json neu eingelesen, alle Panels neu geladen.",
+                            "config.json releído; todos los paneles recargados.",
                         );
-                        self.settings_eval(&json!({ "type": "toast", "text": t }));
+                        self.settings_toast(&t);
                     }
                 }
                 "config" => {
@@ -487,7 +504,7 @@ impl Hub {
                 if changed {
                     log(format!("időjárás: {}, °{}", self.cfg.weather.city, self.cfg.weather.unit.to_uppercase()));
                     self.save_config();
-                    self.eval(self.info_edge(), &json!({ "type": "weather", "weather": self.cfg.weather }));
+                    self.eval_info(&json!({ "type": "weather", "weather": self.cfg.weather }));
                 }
                 self.send_settings();
             }
@@ -501,7 +518,7 @@ impl Hub {
                     log(format!("valuták: {}", c.list.join(", ")));
                     self.cfg.currency = c;
                     self.save_config();
-                    self.eval(self.info_edge(), &json!({ "type": "currency", "currency": self.cfg.currency }));
+                    self.eval_info(&json!({ "type": "currency", "currency": self.cfg.currency }));
                 }
                 self.send_settings();
             }
@@ -516,6 +533,11 @@ impl Hub {
                 self.save_config();
                 self.send_settings();
                 self.send_clips();
+            }
+            "deskmenu" | "deskiconmenu" => {
+                self.set_desktop_menu(msg["type"] == "deskiconmenu", msg["on"].as_bool().unwrap_or(false));
+                self.save_config();
+                self.send_settings();
             }
             "winkey" => {
                 self.cfg.start_menu.win_key = msg["on"].as_bool().unwrap_or(false);
@@ -533,10 +555,10 @@ impl Hub {
                     self.cfg.sections = s;
                     self.configure_monitor();
                     // az újonnan bekapcsolt Perifériák és Események azonnal kapjon adatot
-                    self.next_periph = std::time::Instant::now();
-                    self.next_cal = std::time::Instant::now();
+                    self.periph_feed.next = Instant::now();
+                    self.calendar.next = Instant::now();
                     if self.save_config() {
-                        self.eval(self.info_edge(), &json!({ "type": "sections", "sections": self.cfg.sections }));
+                        self.eval_info(&json!({ "type": "sections", "sections": self.cfg.sections }));
                     }
                     self.send_tray(true);
                     self.send_recent(true);
@@ -549,17 +571,29 @@ impl Hub {
             }
             "cal-add" => {
                 let t = match self.calendar_add(&msg) {
-                    Ok(()) => self.tr("Naptár csatolva.", "Calendar connected.", "Kalendarz połączony."),
-                    Err("dup") => {
-                        self.tr("Ez a naptár már csatolva van.", "This calendar is already connected.", "Ten kalendarz jest już połączony.")
-                    }
+                    Ok(()) => self.tr(
+                        "Naptár csatolva.",
+                        "Calendar connected.",
+                        "Kalendarz połączony.",
+                        "Kalender verbunden.",
+                        "Calendario conectado.",
+                    ),
+                    Err("dup") => self.tr(
+                        "Ez a naptár már csatolva van.",
+                        "This calendar is already connected.",
+                        "Ten kalendarz jest już połączony.",
+                        "Dieser Kalender ist schon verbunden.",
+                        "Este calendario ya está conectado.",
+                    ),
                     Err(_) => self.tr(
                         "Ez nem iCal-cím. A Google Naptár „Titkos cím iCal formátumban” mezőjét másold be (https://…).",
                         "That is not an iCal address. Paste the “Secret address in iCal format” from Google Calendar (https://…).",
                         "To nie jest adres iCal. Wklej „Tajny adres w formacie iCal” z Kalendarza Google (https://…).",
+                        "Das ist keine iCal-Adresse. Füge die „Privatadresse im iCal-Format“ aus Google Kalender ein (https://…).",
+                        "Esa no es una dirección iCal. Pega la «Dirección secreta en formato iCal» de Google Calendar (https://…).",
                     ),
                 };
-                self.settings_eval(&json!({ "type": "toast", "text": t }));
+                self.settings_toast(&t);
                 self.send_settings();
             }
             "cal-remove" => {
@@ -576,7 +610,7 @@ impl Hub {
                         f.color = c.to_lowercase();
                     }
                     self.save_config();
-                    self.cal_cache = None;
+                    self.calendar.cache = None;
                     self.send_calendar_feeds();
                 }
                 self.send_settings();
@@ -592,7 +626,7 @@ impl Hub {
                 self.cfg.apps = apps;
                 if self.save_config() {
                     self.reload();
-                    let t = self.tr("Az ikonok elmentve.", "Icons saved.", "Ikony zapisane.");
+                    let t = self.tr("Az ikonok elmentve.", "Icons saved.", "Ikony zapisane.", "Symbole gespeichert.", "Iconos guardados.");
                     self.toast(&t);
                 }
                 self.send_settings();
@@ -608,7 +642,7 @@ impl Hub {
                             "path": p.path,
                             "args": p.args,
                             "icon": if is_exe { "exe" } else { "" },
-                            "img": if is_exe { format!("/__icon/{}", percent_encode(&p.path.replace('\\', "/"))) } else { String::new() },
+                            "img": if is_exe { exe_icon_url(&p.path) } else { String::new() },
                             "canExeIcon": is_exe,
                         }
                     }));
@@ -632,25 +666,21 @@ impl Hub {
             }
             // Alapállapot: a később felvett képek a Lomtárba kerülnek, a CyberShell saját képei maradnak
             "wall-reset" => {
-                let extra: Vec<PathBuf> = std::fs::read_dir(self.wallpaper_dir())
-                    .into_iter()
-                    .flatten()
-                    .flatten()
-                    .map(|e| e.path())
-                    .filter(|p| Self::is_wallpaper_file(p))
-                    .filter(|p| {
-                        let name = p.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
-                        !builtin_wallpaper(&name)
-                    })
-                    .collect();
+                let extra: Vec<PathBuf> = self.wallpaper_files().into_iter().filter(|p| !builtin_wallpaper(p)).collect();
                 let n = extra.len();
                 if n > 0 {
                     match sys::recycle(&extra) {
                         Ok(()) => log(format!("háttérképek alapállapotban: {n} kép a Lomtárba")),
                         Err(e) => {
                             log(format!("háttérképek törlése sikertelen: {e}"));
-                            let t = self.tr("A képek nem törölhetők", "Couldn't remove the images", "Nie można usunąć obrazów");
-                            self.settings_eval(&json!({ "type": "toast", "text": format!("{t}: {e}") }));
+                            let t = self.tr(
+                                "A képek nem törölhetők",
+                                "Couldn't remove the images",
+                                "Nie można usunąć obrazów",
+                                "Die Bilder konnten nicht entfernt werden",
+                                "No se pudieron quitar las imágenes",
+                            );
+                            self.settings_toast(&format!("{t}: {e}"));
                         }
                     }
                 }
@@ -746,8 +776,10 @@ impl Hub {
                         "A webes kereső címe https://-sel kezdődjön, és legyen benne {q}.",
                         "The web search address must start with https:// and contain {q}.",
                         "Adres wyszukiwarki musi zaczynać się od https:// i zawierać {q}.",
+                        "Die Adresse der Websuche muss mit https:// beginnen und {q} enthalten.",
+                        "La dirección de búsqueda web debe empezar por https:// y contener {q}.",
                     );
-                    self.settings_eval(&json!({ "type": "toast", "text": m }));
+                    self.settings_toast(&m);
                     return;
                 }
                 self.cfg.start_menu.web_search = t.to_string();
@@ -840,7 +872,10 @@ impl Hub {
                 self.hardware = Some(v);
                 self.send_settings();
             }
-            None => log("rendszerkomponensek: nem kérdezhetők le"),
+            None => {
+                log("rendszerkomponensek: nem kérdezhetők le (öt perc múlva újra megpróbáljuk)");
+                self.hardware_retry = Instant::now() + Duration::from_secs(5 * 60);
+            }
         }
     }
 
@@ -885,6 +920,8 @@ impl Hub {
             "Minden beállítás alaphelyzetben. A korábbi fájl: config.backup.json",
             "Everything is back to defaults. The previous file: config.backup.json",
             "Wszystkie ustawienia przywrócono do domyślnych. Poprzedni plik: config.backup.json",
+            "Alles ist auf Standard zurückgesetzt. Die vorherige Datei: config.backup.json",
+            "Todo ha vuelto a los valores predeterminados. El archivo anterior: config.backup.json",
         );
         self.toast(&t);
     }
@@ -912,7 +949,7 @@ impl Hub {
     }
 
     /// A háttérképmappa képei, név szerint rendezve.
-    pub(crate) fn wallpaper_list(&self) -> Vec<serde_json::Value> {
+    fn wallpaper_files(&self) -> Vec<PathBuf> {
         let mut files: Vec<PathBuf> = std::fs::read_dir(self.wallpaper_dir())
             .into_iter()
             .flatten()
@@ -922,14 +959,18 @@ impl Hub {
             .collect();
         files.sort();
         files
+    }
+
+    /// A háttérképmappa képei a beállítások felületének.
+    pub(crate) fn wallpaper_list(&self) -> Vec<serde_json::Value> {
+        self.wallpaper_files()
             .iter()
             .map(|p| {
                 let s = p.to_string_lossy().to_string();
-                let name = p.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
                 json!({
                     "path": s,
-                    "url": format!("/__file/{}", percent_encode(&s.replace('\\', "/"))),
-                    "builtin": builtin_wallpaper(&name),
+                    "url": file_url(&s),
+                    "builtin": builtin_wallpaper(p),
                 })
             })
             .collect()
@@ -957,7 +998,13 @@ impl Hub {
 
     pub(crate) fn apply_wallpaper(&mut self, path: &str) {
         if !Self::is_wallpaper_file(Path::new(path)) {
-            let t = self.tr("A kép nem található.", "Image not found.", "Nie znaleziono obrazu.");
+            let t = self.tr(
+                "A kép nem található.",
+                "Image not found.",
+                "Nie znaleziono obrazu.",
+                "Bild nicht gefunden.",
+                "No se encontró la imagen.",
+            );
             self.toast(&t);
             return;
         }
@@ -971,7 +1018,13 @@ impl Hub {
             }
             Err(e) => {
                 log(format!("háttérkép hiba: {e}"));
-                let t = self.tr("A háttérkép nem állítható be", "Couldn't set the wallpaper", "Nie można ustawić tapety");
+                let t = self.tr(
+                    "A háttérkép nem állítható be",
+                    "Couldn't set the wallpaper",
+                    "Nie można ustawić tapety",
+                    "Der Hintergrund konnte nicht festgelegt werden",
+                    "No se pudo poner el fondo",
+                );
                 self.toast(&format!("{t}: {e}"));
             }
         }

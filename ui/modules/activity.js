@@ -186,6 +186,14 @@
         secActivity: '// AKTYWNOŚĆ', sActivity: 'Aktywność', actLength: 'DŁUGOŚĆ (MIN)', actError: 'Wymagana liczba całkowita od 1 do 240.',
         actAlertTitle: 'RUSZ SIĘ!', actAlertText: 'Wstań, przeciągnij się, popatrz w dal.', actMoveAt: 'RUCH {t}', actPaused: 'WSTRZYMANO',
       },
+      de: {
+        secActivity: '// AKTIVITÄT', sActivity: 'Aktivität', actLength: 'DAUER (MIN)', actError: 'Gib eine ganze Zahl von 1 bis 240 ein.',
+        actAlertTitle: 'BEWEG DICH!', actAlertText: 'Steh auf, streck dich, schau in die Ferne.', actMoveAt: 'BEWEGEN UM {t}', actPaused: 'PAUSIERT',
+      },
+      es: {
+        secActivity: '// ACTIVIDAD', sActivity: 'Actividad', actLength: 'DURACIÓN (MIN)', actError: 'Escribe un número entero del 1 al 240.',
+        actAlertTitle: '¡MUÉVETE!', actAlertText: 'Levántate, estírate, mira a lo lejos.', actMoveAt: 'MOVERSE A LAS {t}', actPaused: 'EN PAUSA',
+      },
     },
   });
 })();

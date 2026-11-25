@@ -4,7 +4,7 @@
 
 Last updated: 17 November 2026
 
-CyberShell is a free Windows desktop shell and launcher developed by Szabó Gergő ("the developer"). This policy explains what data the app handles. In short: **CyberShell has no server of its own, does not collect personal data about you, and contains no analytics, telemetry or advertising.**
+CyberShell is a free Windows desktop shell and launcher developed by Gergő Szabó ("the developer"). This policy explains what data the app handles. In short: **CyberShell has no server of its own, does not collect personal data about you, and contains no analytics, telemetry or advertising.**
 
 ## Data stored on your computer
 
@@ -46,4 +46,4 @@ If this policy changes, the new version is published at this address with an upd
 
 ## Contact
 
-Szabó Gergő · <https://szabogergo.hu/> · Issues: <https://github.com/gergo85/cybershell/issues>
+Gergő Szabó · <https://szabogergo.hu/> · Issues: <https://github.com/gergo85/cybershell/issues>
